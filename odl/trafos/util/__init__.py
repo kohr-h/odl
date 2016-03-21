@@ -15,20 +15,14 @@
 # You should have received a copy of the GNU General Public License
 # along with ODL.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Utility functions for transformations."""
+"""Utility functions for the Fourier transform."""
 
 from __future__ import absolute_import
 
 
 __all__ = ()
 
-from . import util
-from . import backends
-from .backends.pyfftw_bindings import PYFFTW_AVAILABLE
-__all__ += (PYFFTW_AVAILABLE,)
 
-from .fourier import *
-__all__ += fourier.__all__
-
-from .wavelet import *
-__all__ += wavelet.__all__
+from . import fourier_utils
+from .fourier_utils import *
+__all__ += fourier_utils.__all__

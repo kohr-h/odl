@@ -30,9 +30,11 @@ import pytest
 
 # ODL imports
 import odl
-from odl.trafos.fourier import (
+from odl.trafos.fourier.util import (
     reciprocal, inverse_reciprocal, dft_preprocess_data, dft_postprocess_data,
-    pyfftw_call, _interp_kernel_ft,
+    _interp_kernel_ft)
+from odl.trafos.fourier.backends.pyfftw_bindings import pyfftw_call
+from odl.trafos.fourier import (
     DiscreteFourierTransform, DiscreteFourierTransformInverse,
     FourierTransform)
 from odl.util import (all_almost_equal, all_equal,
