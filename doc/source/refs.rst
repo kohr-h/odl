@@ -20,6 +20,9 @@ References
    simultaneous equations*. Mathematics of computation, 33 (1965),
    pp 577--593.
 
+.. [BS1991] Bailey, D H, and Swarztrauber, P N. *The fractional Fourier
+   transform and applications*. SIAM review, 33 (1991), pp 389--404.
+
 .. [BV2004] Boyd, S, and Vandenberghe, L. *Convex optimization*.
    Cambridge university press, 2004.
 
