@@ -23,6 +23,6 @@ from __future__ import absolute_import
 __all__ = ()
 
 
-from . import fourier_utils
-from .fourier_utils import *
-__all__ += fourier_utils.__all__
+from . import ft_utils
+from .ft_utils import *
+__all__ += ft_utils.__all__

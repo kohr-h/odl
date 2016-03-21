@@ -22,18 +22,16 @@ from __future__ import print_function, division, absolute_import
 from future import standard_library
 standard_library.install_aliases()
 
-# External module imports
 from itertools import product
 from math import pi
 import numpy as np
 import pytest
 
-# ODL imports
 import odl
-from odl.trafos.fourier.util import (
+from odl.trafos.fourier.backends import pyfftw_call
+from odl.trafos.util import (
     reciprocal, inverse_reciprocal, dft_preprocess_data, dft_postprocess_data,
     _interp_kernel_ft)
-from odl.trafos.fourier.backends.pyfftw_bindings import pyfftw_call
 from odl.trafos.fourier import (
     DiscreteFourierTransform, DiscreteFourierTransformInverse,
     FourierTransform)

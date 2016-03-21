@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with ODL.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Utility functions for Fourier transforms."""
+"""Utility functions for regular Fourier transforms."""
 
 # Imports for common Python 2/3 codebase
 from __future__ import print_function, division, absolute_import
