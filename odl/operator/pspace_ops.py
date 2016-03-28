@@ -40,27 +40,11 @@ class ProductSpaceOperator(Operator):
     """A "matrix of operators" on product spaces.
 
     This is intended for the case where an operator can be decomposed
-    as a linear combination of "sub-operators", e.g.
+    as a linear combination of "sub-operators", e.g.::
 
-        :math:`\\left(
-        \\begin{array}{ccc}
-        A & B & 0 \\\\
-        0 & C & 0 \\\\
-        0 & 0 & D
-        \end{array}\\right)
-        \\left(
-        \\begin{array}{c}
-        x \\\\
-        y \\\\
-        z
-        \end{array}\\right)
-        =
-        \\left(
-        \\begin{array}{c}
-        A(x) + B(y) \\\\
-        C(y) \\\\
-        D(z)
-        \end{array}\\right)`
+        |A B 0|   |x|   |A(x) + B(y)|
+        |0 C 0| * |y| = |C(y)       |
+        |0 0 D|   |z|   |D(z)       |
 
     Mathematically, a `ProductSpaceOperator` is an operator
 
