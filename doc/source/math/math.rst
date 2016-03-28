@@ -8,4 +8,5 @@ This section explains the mathematical concepts on which ODL is built.
     :maxdepth: 2
 
     discretization
+    productspaces
     trafos/index
