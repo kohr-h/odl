@@ -168,7 +168,7 @@ def chambolle_pock_solver(op, x, tau, sigma, proximal_primal, proximal_dual,
 
     # Partial object
     partial = kwargs.pop('partial', None)
-    if partial is not None and not callable(partial):
+    if not (partial is None or isinstance(partial, Partial)):
         raise TypeError('partial {} is not an instance of {}'
                         ''.format(op, Partial))
 
