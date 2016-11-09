@@ -440,7 +440,9 @@ class NearestInterpolation(FunctionSetMapping):
                 self.grid.coord_vectors,
                 x.asarray().reshape(self.grid.shape, order=self.order),
                 variant=self.variant,
-                input_type=input_type)
+                input_type=input_type,
+                min_pt=self.partition.min_pt,
+                max_pt=self.partition.max_pt)
 
             return interpolator(arg, out=out)
 
@@ -520,10 +522,13 @@ class LinearInterpolation(FunctionSetMapping):
             else:
                 input_type = 'array'
 
+            # TODO: padding
             interpolator = _LinearInterpolator(
                 self.grid.coord_vectors,
                 x.asarray().reshape(self.grid.shape, order=self.order),
-                input_type=input_type)
+                input_type=input_type,
+                min_pt=self.partition.min_pt,
+                max_pt=self.partition.max_pt)
 
             return interpolator(arg, out=out)
 
@@ -658,7 +663,9 @@ class PerAxisInterpolation(FunctionSetMapping):
                 self.grid.coord_vectors,
                 x.asarray().reshape(self.grid.shape, order=self.order),
                 schemes=self.schemes, nn_variants=self.nn_variants,
-                input_type=input_type)
+                input_type=input_type,
+                min_pt=self.partition.min_pt,
+                max_pt=self.partition.max_pt)
 
             return interpolator(arg, out=out)
 
@@ -705,15 +712,25 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
     implementations.
     """
 
-    def __init__(self, coord_vecs, values, input_type):
+    def __init__(self, coord_vecs, values, input_type, min_pt, max_pt,
+                 pad_mode=None, pad_const=None):
         """Initialize a new instance.
 
         coord_vecs : sequence of `numpy.ndarray`'s
-            Coordinate vectors defining the interpolation grid
+            Coordinate vectors defining the interpolation grid.
         values : `array-like`
-            Grid values to use for interpolation
+            Grid values to be used for interpolation.
         input_type : {'array', 'meshgrid'}
-            Type of expected input values in ``__call__``
+            Type of expected input values in ``__call__``.
+        min_pt, max_pt : `array-like`
+            Minimum and maximum points of the interpolation domain.
+            For points outside, values are padded, or an error is raised.
+        pad_mode : TODO
+            Bla
+            For the default ``None``, an error is raised for points outside
+            the domain.
+        pad_const : TODO
+            Bla
         """
         values = np.asarray(values)
         typ_ = str(input_type).lower()
@@ -737,6 +754,13 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
         self.coord_vecs = tuple(np.asarray(p) for p in coord_vecs)
         self.values = values
         self.input_type = input_type
+        # TODO: some input checking
+        self.min_pt = np.asarray(min_pt)
+        self.max_pt = np.asarray(max_pt)
+        assert len(self.min_pt) == len(self.max_pt)
+        assert np.all(self.min_pt <= self.max_pt)
+        self.pad_mode = pad_mode
+        self.pad_const = pad_const
 
     def __call__(self, x, out=None):
         """Do the interpolation.
@@ -787,22 +811,42 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
 
         Can be overridden by subclasses to improve efficiency.
         """
-        # find relevant edges between which xi are situated
+        # Indices of edges between which xi are situated
         index_vecs = []
-        # compute distance to lower edge in unity units
+        # Distances to lower edge in grid units
         norm_distances = []
 
         # iterate through dimensions
-        for xi, cvec in zip(x, self.coord_vecs):
-            idcs = np.searchsorted(cvec, xi) - 1
+        for xi, cvec, xmin, xmax in zip(x, self.coord_vecs,
+                                        self.min_pt, self.max_pt):
+            indcs = np.searchsorted(cvec, xi) - 1
 
-            idcs[idcs < 0] = 0
-            idcs[idcs > cvec.size - 2] = cvec.size - 2
-            index_vecs.append(idcs)
+            # Differentiate between inner and out-of-bounds (oob) parts
+            indcs_left_oob = indcs < 0
+            indcs_right_oob = indcs > cvec.size - 1
+            inner_indcs = indcs[~(indcs_left_oob | indcs_right_oob)]
 
-            norm_distances.append((xi - cvec[idcs]) /
-                                  (cvec[idcs + 1] - cvec[idcs]))
+            xi_left_oob = (xi < cvec[0])
+            xi_right_oob = (xi > cvec[-1])
+            xi_inner = xi[~(xi_left_oob | xi_right_oob)]
 
+            # Compute the normalized distances
+            ndists = np.empty_like(xi)
+            # Regular part
+            ndists[inner_indcs] = ((xi_inner - cvec[inner_indcs]) /
+                                   (cvec[inner_indcs + 1] - cvec[inner_indcs]))
+            # Left out-of-bounds, gives normalized dist <= 0
+            ndists[indcs_left_oob] = ((xi[xi_left_oob] - xmin) /
+                                      (cvec[0] - xmin))
+            # Right out-of-bounds, gives normalized dist >= 1
+            ndists[indcs_right_oob] = ((xi[xi_right_oob] - xmax) /
+                                       (xmax - cvec[-1]))
+
+            index_vecs.append(indcs)
+            norm_distances.append(ndists)
+
+        print(index_vecs)
+        print(norm_distances)
         return index_vecs, norm_distances
 
     def _evaluate(self, indices, norm_distances, out=None):
@@ -841,7 +885,29 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
             raise ValueError("variant '{}' not understood".format(variant_))
         self.variant = variant_
 
-    def _evaluate(self, indices, norm_distances, out=None):
+    # Override parent method for efficiency
+    def _find_indices(self, x):
+        """Find indices and distances of the given nodes.
+        """
+        # find relevant edges between which xi are situated
+        index_vecs = []
+        # compute distance to lower edge in unity units
+        norm_distances = []
+
+        # iterate through dimensions
+        for xi, cvec in zip(x, self.coord_vecs):
+            idcs = np.searchsorted(cvec, xi) - 1
+
+            idcs[idcs < 0] = 0
+            idcs[idcs > cvec.size - 1] = cvec.size - 1
+            index_vecs.append(idcs)
+
+            norm_distances.append((xi - cvec[idcs]) /
+                                  (cvec[idcs + 1] - cvec[idcs]))
+
+        return index_vecs, norm_distances
+
+    def _evaluate(self, indices, norm_distances, oob_indcs, out=None):
         """Evaluate nearest interpolation."""
         idx_res = []
         for i, yi in zip(indices, norm_distances):
@@ -889,6 +955,9 @@ def _compute_nearest_weights_edge(idcs, ndist, variant):
     edge[0][hi] = -1
     edge[1][lo] = 0
 
+    print('w_lo:', w_lo)
+    print('w_hi:', w_hi)
+    print('edge:', edge)
     return w_lo, w_hi, edge
 
 
@@ -917,6 +986,9 @@ def _compute_linear_weights_edge(idcs, ndist):
     edge[0][hi] = -1
     edge[1][lo] = 0
 
+    print('w_lo:', w_lo)
+    print('w_hi:', w_hi)
+    print('edge:', edge)
     return w_lo, w_hi, edge
 
 
