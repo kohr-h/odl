@@ -440,9 +440,7 @@ class NearestInterpolation(FunctionSetMapping):
                 self.grid.coord_vectors,
                 x.asarray().reshape(self.grid.shape, order=self.order),
                 variant=self.variant,
-                input_type=input_type,
-                min_pt=self.partition.min_pt,
-                max_pt=self.partition.max_pt)
+                input_type=input_type)
 
             return interpolator(arg, out=out)
 
@@ -731,6 +729,8 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
             the domain.
         pad_const : TODO
             Bla
+
+        TODO: add min/max_pt
         """
         values = np.asarray(values)
         typ_ = str(input_type).lower()
@@ -761,6 +761,11 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
         assert np.all(self.min_pt <= self.max_pt)
         self.pad_mode = pad_mode
         self.pad_const = pad_const
+
+        # Test hack
+        self.pad_mode = 'constant'
+        self.pad_const = 0
+        # End test hack
 
     def __call__(self, x, out=None):
         """Do the interpolation.
@@ -804,49 +809,105 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
                                  ''.format(out.dtype, self.values.dtype))
 
         indices, norm_distances = self._find_indices(x)
+        indcs, oob, ndists = self._test_indices(x)
+        self._test_padding_indices(indcs, oob, ndists)
         return self._evaluate(indices, norm_distances, out)
+
+    def _test_indices(self, x):
+
+        indices = []
+        normalized_dists = []
+        oob_indices = []
+        for xi, cvec, xmin, xmax in zip(x, self.coord_vecs,
+                                        self.min_pt, self.max_pt):
+            print('xi:', xi)
+            indcs = np.searchsorted(cvec, x)
+            print('indcs:', indcs)
+            ileft_oob = (indcs == 0)
+            iright_oob = (indcs == cvec.size)
+            ireg = (indcs > 0) & (indcs < cvec.size)
+            ireg_upper = indcs[ireg]
+            ireg_lower = ireg_upper - 1
+
+            print('ileft_oob:', ileft_oob)
+            print('iright_oob:', iright_oob)
+            print('ireg:', ireg)
+
+            dreg = ((x[~(ileft_oob | iright_oob)] - cvec[ireg_lower]) /
+                    (cvec[ireg_upper] - cvec[ireg_lower]))
+
+            print('dreg:', dreg)
+
+            if self.pad_mode == 'constant':
+                dleft_oob = (x[ileft_oob] - xmin) / (cvec[0] - xmin)
+                dright_oob = (x[iright_oob] - cvec[-1]) / (xmax - cvec[-1])
+            else:
+                dleft_oob = (x[ileft_oob] - cvec[0]) / (cvec[1] - cvec[0])
+                dright_oob = (x[iright_oob] - cvec[-1]) / (cvec[-1] - cvec[-2])
+
+            print('dleft_oob:', dleft_oob)
+            print('dright_oob', dright_oob)
+
+            indices.append((ireg, ileft_oob, iright_oob))
+            oob_indices.append((np.where(ileft_oob)[0],
+                                np.where(iright_oob)[0]))
+            normalized_dists.append((dreg, dleft_oob, dright_oob))
+
+        print('indices:', indices)
+        print('normalized_dists:', normalized_dists)
+        print('oob_indices:', oob_indices)
+        return indices, oob_indices, normalized_dists
+
+    def _test_padding_indices(self, indices, oob_indcs, norm_dists):
+
+        for indcs, oob, ndists in zip(indices, oob_indcs, norm_dists):
+            _, ileft_oob, iright_oob = indcs
+            _, dleft_oob, dright_oob = ndists
+            if self.pad_mode == 'constant':
+                ileft_pad = ileft_oob
+                wleft_pad = np.maximum(dleft_oob, 0)
+                iright_pad = iright_oob
+                wright_pad = np.minimum(dright_oob, 1)
+                # TODO: need also indices into the array (here 0 and n-1)
+                print('ileft_pad:', ileft_pad)
+                print('wleft_pad:', wleft_pad)
+                print('iright_pad:', iright_pad)
+                print('wright_pad:', wright_pad)
+            elif self.pad_mode == 'periodic':
+                pass
+            elif self.pad_mode == 'symmetric':
+                pass
+            elif self.pad_mode == 'reflect':
+                pass
+            elif self.pad_mode == 'order0':
+                pass
+            elif self.pad_mode == 'order1':
+                pass
+            else:
+                raise RuntimeError("invalid pad_mode '{}'"
+                                   "".format(self.pad_mode))
 
     def _find_indices(self, x):
         """Find indices and distances of the given nodes.
 
         Can be overridden by subclasses to improve efficiency.
         """
-        # Indices of edges between which xi are situated
+        # find relevant edges between which xi are situated
         index_vecs = []
-        # Distances to lower edge in grid units
+        # compute distance to lower edge in unity units
         norm_distances = []
 
         # iterate through dimensions
-        for xi, cvec, xmin, xmax in zip(x, self.coord_vecs,
-                                        self.min_pt, self.max_pt):
-            indcs = np.searchsorted(cvec, xi) - 1
+        for xi, cvec in zip(x, self.coord_vecs):
+            idcs = np.searchsorted(cvec, xi) - 1
 
-            # Differentiate between inner and out-of-bounds (oob) parts
-            indcs_left_oob = indcs < 0
-            indcs_right_oob = indcs > cvec.size - 1
-            inner_indcs = indcs[~(indcs_left_oob | indcs_right_oob)]
+            idcs[idcs < 0] = 0
+            idcs[idcs > cvec.size - 2] = cvec.size - 2
+            index_vecs.append(idcs)
 
-            xi_left_oob = (xi < cvec[0])
-            xi_right_oob = (xi > cvec[-1])
-            xi_inner = xi[~(xi_left_oob | xi_right_oob)]
+            norm_distances.append((xi - cvec[idcs]) /
+                                  (cvec[idcs + 1] - cvec[idcs]))
 
-            # Compute the normalized distances
-            ndists = np.empty_like(xi)
-            # Regular part
-            ndists[inner_indcs] = ((xi_inner - cvec[inner_indcs]) /
-                                   (cvec[inner_indcs + 1] - cvec[inner_indcs]))
-            # Left out-of-bounds, gives normalized dist <= 0
-            ndists[indcs_left_oob] = ((xi[xi_left_oob] - xmin) /
-                                      (cvec[0] - xmin))
-            # Right out-of-bounds, gives normalized dist >= 1
-            ndists[indcs_right_oob] = ((xi[xi_right_oob] - xmax) /
-                                       (xmax - cvec[-1]))
-
-            index_vecs.append(indcs)
-            norm_distances.append(ndists)
-
-        print(index_vecs)
-        print(norm_distances)
         return index_vecs, norm_distances
 
     def _evaluate(self, indices, norm_distances, out=None):
@@ -955,9 +1016,6 @@ def _compute_nearest_weights_edge(idcs, ndist, variant):
     edge[0][hi] = -1
     edge[1][lo] = 0
 
-    print('w_lo:', w_lo)
-    print('w_hi:', w_hi)
-    print('edge:', edge)
     return w_lo, w_hi, edge
 
 
@@ -986,9 +1044,6 @@ def _compute_linear_weights_edge(idcs, ndist):
     edge[0][hi] = -1
     edge[1][lo] = 0
 
-    print('w_lo:', w_lo)
-    print('w_hi:', w_hi)
-    print('edge:', edge)
     return w_lo, w_hi, edge
 
 
@@ -1024,7 +1079,8 @@ class _PerAxisInterpolator(_Interpolator):
     first dimension and linear in dimensions 2 and 3.
     """
 
-    def __init__(self, coord_vecs, values, input_type, schemes, nn_variants):
+    def __init__(self, coord_vecs, values, input_type, schemes, nn_variants,
+                 min_pt=None, max_pt=None):
         """Initialize a new instance.
 
         coord_vecs : sequence of `numpy.ndarray`'s
@@ -1040,8 +1096,10 @@ class _PerAxisInterpolator(_Interpolator):
             interpolation for which axis.
             This option has no effect for schemes other than nearest
             neighbor.
+
+        TODO: add min/max_pt
         """
-        super().__init__(coord_vecs, values, input_type)
+        super().__init__(coord_vecs, values, input_type, min_pt, max_pt)
         self.schemes = schemes
         self.nn_variants = nn_variants
 
@@ -1092,7 +1150,8 @@ class _LinearInterpolator(_PerAxisInterpolator):
     Convenience class.
     """
 
-    def __init__(self, coord_vecs, values, input_type):
+    def __init__(self, coord_vecs, values, input_type,
+                 min_pt=None, max_pt=None):
         """Initialize a new instance.
 
         coord_vecs : sequence of `numpy.ndarray`'s
@@ -1101,10 +1160,13 @@ class _LinearInterpolator(_PerAxisInterpolator):
             Grid values to use for interpolation
         input_type : {'array', 'meshgrid'}
             Type of expected input values in ``__call__``
+
+        TODO: add min/max_pt
         """
         super().__init__(coord_vecs, values, input_type,
                          schemes=['linear'] * len(coord_vecs),
-                         nn_variants=[None] * len(coord_vecs))
+                         nn_variants=[None] * len(coord_vecs),
+                         min_pt=min_pt, max_pt=max_pt)
 
 
 if __name__ == '__main__':
