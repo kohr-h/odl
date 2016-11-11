@@ -763,7 +763,7 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
         self.pad_const = pad_const
 
         # Test hack
-        self.pad_mode = 'constant'
+        self.pad_mode = 'periodic'
         self.pad_const = 0
         # End test hack
 
@@ -849,8 +849,7 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
             print('dright_oob', dright_oob)
 
             indices.append((ireg, ileft_oob, iright_oob))
-            oob_indices.append((np.where(ileft_oob)[0],
-                                np.where(iright_oob)[0]))
+            oob_indices.append((np.where(ileft_oob), np.where(iright_oob)))
             normalized_dists.append((dreg, dleft_oob, dright_oob))
 
         print('indices:', indices)
@@ -860,28 +859,45 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
 
     def _test_padding_indices(self, indices, oob_indcs, norm_dists):
 
-        for indcs, oob, ndists in zip(indices, oob_indcs, norm_dists):
+        cvecs = self.coord_vecs
+        for cvec, indcs, ndists in zip(cvecs, indices, norm_dists):
+            n = len(cvec)
             _, ileft_oob, iright_oob = indcs
             _, dleft_oob, dright_oob = ndists
+
             if self.pad_mode == 'constant':
-                ileft_pad = ileft_oob
                 wleft_pad = np.maximum(dleft_oob, 0)
-                iright_pad = iright_oob
                 wright_pad = np.minimum(dright_oob, 1)
-                # TODO: need also indices into the array (here 0 and n-1)
-                print('ileft_pad:', ileft_pad)
                 print('wleft_pad:', wleft_pad)
-                print('iright_pad:', iright_pad)
                 print('wright_pad:', wright_pad)
             elif self.pad_mode == 'periodic':
-                pass
+                dleft_floor = np.floor(dleft_oob).astype(int)
+                print('dleft_floor:', dleft_floor)
+                ileft_pad = np.mod(dleft_floor, n)
+                print('ileft_pad:', ileft_pad)
+                dright_ceil = np.ceil(dright_oob).astype(int)
+                print('dright_ceil:', dright_ceil)
+                iright_pad = np.mod(dright_ceil, n)
+                print('iright_pad:', iright_pad)
             elif self.pad_mode == 'symmetric':
-                pass
+                dleft_floor = np.floor(dleft_oob).astype(int)
+                print('dleft_floor:', dleft_floor)
+                ileft_pad = -dleft_floor
+                print('ileft_pad:', ileft_pad)
+                dright_floor = np.floor(dright_oob).astype(int)
+                print('dright_floor:', dright_floor)
+                iright_pad = n - 1 - dright_floor
+                print('iright_pad:', iright_pad)
             elif self.pad_mode == 'reflect':
-                pass
-            elif self.pad_mode == 'order0':
-                pass
-            elif self.pad_mode == 'order1':
+                dleft_floor = np.floor(dleft_oob).astype(int)
+                print('dleft_floor:', dleft_floor)
+                ileft_pad = -dleft_floor + 1
+                print('ileft_pad:', ileft_pad)
+                dright_ceil = np.ceil(dright_oob).astype(int)
+                print('dright_ceil:', dright_ceil)
+                iright_pad = n - 2 - dright_ceil
+                print('iright_pad:', iright_pad)
+            elif self.pad_mode in ('order0', 'order1'):
                 pass
             else:
                 raise RuntimeError("invalid pad_mode '{}'"
