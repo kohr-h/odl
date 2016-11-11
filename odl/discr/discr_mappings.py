@@ -810,7 +810,9 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
 
         indices, norm_distances = self._find_indices(x)
         indcs, oob, ndists = self._test_indices(x)
-        self._test_padding_indices(indcs, oob, ndists)
+        pad_indices, pad_weights = self._test_padding_indices(indcs, oob,
+                                                              ndists)
+        self._test_weights_edge()
         return self._evaluate(indices, norm_distances, out)
 
     def _test_indices(self, x):
@@ -859,8 +861,9 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
 
     def _test_padding_indices(self, indices, oob_indcs, norm_dists):
 
-        cvecs = self.coord_vecs
-        for cvec, indcs, ndists in zip(cvecs, indices, norm_dists):
+        pad_indices = []
+        pad_weights = []
+        for cvec, indcs, ndists in zip(self.coord_vecs, indices, norm_dists):
             n = len(cvec)
             _, ileft_oob, iright_oob = indcs
             _, dleft_oob, dright_oob = ndists
@@ -870,6 +873,7 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
                 wright_pad = np.minimum(dright_oob, 1)
                 print('wleft_pad:', wleft_pad)
                 print('wright_pad:', wright_pad)
+                pad_weights.append((wleft_pad, wright_pad))
             elif self.pad_mode == 'periodic':
                 dleft_floor = np.floor(dleft_oob).astype(int)
                 print('dleft_floor:', dleft_floor)
@@ -879,6 +883,12 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
                 print('dright_ceil:', dright_ceil)
                 iright_pad = np.mod(dright_ceil, n)
                 print('iright_pad:', iright_pad)
+                wleft_pad = np.remainder(dleft_oob, 1)
+                print('wleft_pad:', wleft_pad)
+                wright_pad = np.remainder(dright_oob, 1)
+                print('wright_pad:', wright_pad)
+                pad_weights.append((wleft_pad, wright_pad))
+                pad_indices.append((ileft_pad, iright_pad))
             elif self.pad_mode == 'symmetric':
                 dleft_floor = np.floor(dleft_oob).astype(int)
                 print('dleft_floor:', dleft_floor)
@@ -888,6 +898,12 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
                 print('dright_floor:', dright_floor)
                 iright_pad = n - 1 - dright_floor
                 print('iright_pad:', iright_pad)
+                wleft_pad = np.remainder(dleft_oob, 1)
+                print('wleft_pad:', wleft_pad)
+                wright_pad = np.remainder(dright_oob, 1)
+                print('wright_pad:', wright_pad)
+                pad_weights.append((wleft_pad, wright_pad))
+                pad_indices.append((ileft_pad, iright_pad))
             elif self.pad_mode == 'reflect':
                 dleft_floor = np.floor(dleft_oob).astype(int)
                 print('dleft_floor:', dleft_floor)
@@ -897,11 +913,54 @@ scipy.interpolate.RegularGridInterpolator.html>`_ class.
                 print('dright_ceil:', dright_ceil)
                 iright_pad = n - 2 - dright_ceil
                 print('iright_pad:', iright_pad)
-            elif self.pad_mode in ('order0', 'order1'):
+                wleft_pad = np.remainder(dleft_oob, 1)
+                print('wleft_pad:', wleft_pad)
+                wright_pad = np.remainder(dright_oob, 1)
+                print('wright_pad:', wright_pad)
+                pad_weights.append((wleft_pad, wright_pad))
+                pad_indices.append((ileft_pad, iright_pad))
+            elif self.pad_mode == 'order0':
                 pass
+            elif self.pad_mode == 'order1':
+                wleft_pad = np.remainder(dleft_oob, 1)
+                print('wleft_pad:', wleft_pad)
+                wright_pad = np.remainder(dright_oob, 1)
+                print('wright_pad:', wright_pad)
+                pad_weights.append((wleft_pad, wright_pad))
+                pad_indices.append((ileft_pad, iright_pad))
             else:
                 raise RuntimeError("invalid pad_mode '{}'"
                                    "".format(self.pad_mode))
+
+        return pad_indices, pad_weights
+
+    def _test_weights_edge(indices, weights):
+        """Helper for linear interpolation."""
+        # Get out-of-bounds indices from the norm_distances. Negative
+        # means "too low", larger than or equal to 1 means "too high"
+        lo = np.where(ndist < 0)
+        hi = np.where(ndist > 1)
+
+        # For "too low" nodes, the lower neighbor gets weight zero;
+        # "too high" gets 2 - yi (since yi >= 1)
+        w_lo = (1 - ndist)
+        w_lo[lo] = 0
+        w_lo[hi] += 1
+
+        # For "too high" nodes, the upper neighbor gets weight zero;
+        # "too low" gets 1 + yi (since yi < 0)
+        w_hi = np.copy(ndist)
+        w_hi[lo] += 1
+        w_hi[hi] = 0
+
+        # For upper/lower out-of-bounds nodes, we need to set the
+        # lower/upper neighbors to the last/first grid point
+        edge = [idcs, idcs + 1]
+        edge[0][hi] = -1
+        edge[1][lo] = 0
+
+        return w_lo, w_hi, edge
+
 
     def _find_indices(self, x):
         """Find indices and distances of the given nodes.
