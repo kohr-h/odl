@@ -739,21 +739,25 @@ class FourierTransformBase(Operator):
             Sign of the complex exponent. Default: '-'
         halfcomplex : bool, optional
             If ``True``, calculate only the negative frequency part
-            along the last axis for real input. If ``False``,
-            calculate the full complex FFT.
+            along the last axis for real input, which is more efficient
+            than computing a "full" transform. If ``False``, calculate
+            the full complex FFT.
             For complex ``domain``, it has no effect.
-            Default: ``True``
+            Default: ``False``
+
+        Other Parameters
+        ----------------
         shift : bool or sequence of bools, optional
             If ``True``, the reciprocal grid is shifted by half a stride in
             the negative direction. With a boolean sequence, this option
             is applied separately to each axis.
-            If a sequence is provided, it must have the same length as
-            ``axes`` if supplied. Note that this must be set to ``True``
-            in the halved axis in half-complex transforms.
-            Default: ``True``
-
-        Other Parameters
-        ----------------
+            The shifts can be used to steer whether the zero frequency
+            should be in the grid or not. This is the case (per axis) for
+            odd shape and ``shift=False`` or for even shape and
+            ``shift=True``.
+            By default, the shifts are chosen such that the zero frequency
+            is in the grid. **Note:** for ``halfcomplex=True``, this
+            default cannot be overridden for implementation reasons.
         tmp_r : `DiscreteLpElement` or `numpy.ndarray`
             Temporary for calculations in the real space (domain of
             this transform). It is shared with the inverse.
@@ -774,7 +778,7 @@ class FourierTransformBase(Operator):
             The default variant, one-to-one and unitary.
 
           - **R2C**: real-to-complex.
-            This variants adjoint and inverse may suffer
+            This variant's adjoint and inverse may suffer
             from information loss since the result is cast to real.
 
           - **R2HC**: real-to-halfcomplex.
@@ -793,6 +797,7 @@ class FourierTransformBase(Operator):
         if not isinstance(domain, DiscreteLp):
             raise TypeError('domain {!r} is not a `DiscreteLp` instance'
                             ''.format(domain))
+        # TODO: generalize
         if domain.impl != 'numpy':
             raise NotImplementedError(
                 'Only Numpy-based data spaces are supported, got {}'
@@ -815,9 +820,13 @@ class FourierTransformBase(Operator):
             else:
                 self.__halfcomplex = bool(kwargs.pop('halfcomplex', True))
 
-            self.__shifts = normalized_scalar_param_list(
-                kwargs.pop('shift', True), length=len(self.axes),
-                param_conv=bool)
+            shifts = kwargs.pop('shift', None)
+            if self.halfcomplex or shifts is None:
+                # Automatically select shifts so that 0 freq is contained
+                self.__shifts = tuple(n % 2 == 0 for n in domain.shape)
+            else:
+                self.__shifts = normalized_scalar_param_list(
+                    shifts, length=len(self.axes), param_conv=bool)
         else:
             raise NotImplementedError('irregular grids not yet supported')
 
@@ -829,13 +838,6 @@ class FourierTransformBase(Operator):
             raise ValueError("cannot combine sign '+' with a half-complex "
                              "transform")
         self.__sign = sign
-
-        # Need to filter out this situation since the pre-processing step
-        # casts to complex otherwise, and then no half-complex transform
-        # is possible.
-        if self.halfcomplex and not self.shifts[-1]:
-            raise ValueError('`shift` must be `True` in the halved (last) '
-                             'axis in half-complex transforms')
 
         if range is None:
             # self._halfcomplex and self._axes need to be set for this
@@ -849,6 +851,11 @@ class FourierTransformBase(Operator):
             super().__init__(domain, range, linear=True)
         self._fftw_plan = None
 
+        self._use_fftshift = all(
+            (n % 2 == 0 and shift) or (n % 2 != 0 and not shift)
+            for n, shift in zip(self.domain.shape, self.shifts))
+
+        # TODO: benchmark if we really need these guys
         # Storing temporaries directly as arrays
         tmp_r = kwargs.pop('tmp_r', None)
         tmp_f = kwargs.pop('tmp_f', None)
@@ -881,15 +888,16 @@ class FourierTransformBase(Operator):
         --------
         pyfftw_call : Call pyfftw backend directly
         """
-        # TODO: Implement zero padding
         if self.impl == 'numpy':
-            out[:] = self._call_numpy(x.asarray())
+            with writable_array(out) as arr:
+                arr[:] = self._call_numpy(x.asarray())
         else:
-            # 0-overhead assignment if asarray() does not copy
-            out[:] = self._call_pyfftw(x.asarray(), out.asarray(), **kwargs)
+            with writable_array(out) as arr:
+                arr[:] = self._call_pyfftw(x.asarray(), arr.asarray(),
+                                           **kwargs)
 
     def _call_numpy(self, x):
-        """Return ``self(x)`` for numpy back-end.
+        """Return ``self(x)`` for Numpy back-end.
 
         Parameters
         ----------
