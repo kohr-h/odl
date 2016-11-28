@@ -35,7 +35,8 @@ from odl.trafos.util import (
     dft_preprocess_data, dft_postprocess_data)
 from odl.util import (is_real_dtype, is_complex_floating_dtype,
                       dtype_repr, conj_exponent, complex_dtype,
-                      normalized_scalar_param_list, normalized_axes_tuple)
+                      normalized_scalar_param_list, normalized_axes_tuple,
+                      writable_array)
 
 
 __all__ = ('DiscreteFourierTransform', 'DiscreteFourierTransformInverse',
@@ -893,8 +894,7 @@ class FourierTransformBase(Operator):
                 arr[:] = self._call_numpy(x.asarray())
         else:
             with writable_array(out) as arr:
-                arr[:] = self._call_pyfftw(x.asarray(), arr.asarray(),
-                                           **kwargs)
+                arr[:] = self._call_pyfftw(x.asarray(), arr, **kwargs)
 
     def _call_numpy(self, x):
         """Return ``self(x)`` for Numpy back-end.

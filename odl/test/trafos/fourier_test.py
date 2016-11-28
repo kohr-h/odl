@@ -39,8 +39,10 @@ from odl.util import (all_almost_equal, never_skip, skip_if_no_pyfftw,
 # --- pytest fixtures --- #
 
 # Fixture for FFT implementations
-impl = simple_fixture('impl', [never_skip('numpy'),
-                               skip_if_no_pyfftw('pyfftw')])
+impl = simple_fixture(
+    name='impl',
+    params=[never_skip('numpy'), skip_if_no_pyfftw('pyfftw')],
+    fmt=" {name} = '{value.args[1]}' ")
 
 # Fixture for space exponents
 exponent = simple_fixture('p', [2.0, 1.0, float('inf'), 1.5])
@@ -59,7 +61,7 @@ fouriertrafo_params = ['1d real-halfcomplex, odd n, sign+',
                        '2d real-halfcomplex',
                        '2d real-complex',
                        '2d complex-complex']
-fouriertrafo_ids = [" ft='{}' ".format(m)
+fouriertrafo_ids = [" ft = '{}' ".format(m)
                     for m in fouriertrafo_params]
 
 
