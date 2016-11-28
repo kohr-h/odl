@@ -32,7 +32,7 @@ from odl.trafos.backends.pyfftw_bindings import (
     pyfftw_call, PYFFTW_AVAILABLE, _pyfftw_to_local)
 from odl.trafos.util import (
     reciprocal_grid, reciprocal_space,
-    dft_preprocess_data, dft_postprocess_data)
+    dft_preprocess_data, dft_postprocess_data, fftshift)
 from odl.util import (is_real_dtype, is_complex_floating_dtype,
                       dtype_repr, conj_exponent, complex_dtype,
                       normalized_scalar_param_list, normalized_axes_tuple,
@@ -1296,11 +1296,16 @@ class FourierTransform(FourierTransformBase):
             Result of the transform
         """
         # Pre-processing before calculating the DFT
+        # Only applied if we don't use fftshift instead
+        #
         # Note: since the FFT call is out-of-place, it does not matter if
         # preprocess produces real or complex output in the R2C variant.
         # There is no significant time difference between (full) R2C and
         # C2C DFT in Numpy.
-        preproc = self._preprocess(x)
+        if self._use_fftshift:
+            preproc = x
+        else:
+            preproc = self._preprocess(x)
 
         # The actual call to the FFT library, out-of-place unfortunately
         if self.halfcomplex:
@@ -1313,6 +1318,9 @@ class FourierTransform(FourierTransformBase):
                 # Numpy's FFT normalizes by 1 / prod(shape[axes]), we
                 # need to undo that
                 out *= np.prod(np.take(self.domain.shape, self.axes))
+
+        if self._use_fftshift:
+            out = fftshift(x, axes=self.axes, halfcomplex=self.halfcomplex)
 
         # Post-processing accounting for shift, scaling and interpolation
         self._postprocess(out, out=out)
