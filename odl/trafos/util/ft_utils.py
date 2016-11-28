@@ -38,7 +38,8 @@ from odl.util import (
 
 __all__ = ('reciprocal_grid', 'realspace_grid',
            'reciprocal_space',
-           'dft_preprocess_data', 'dft_postprocess_data')
+           'dft_preprocess_data', 'dft_postprocess_data',
+           'fftshift')
 
 
 def reciprocal_grid(grid, shift=True, axes=None, halfcomplex=False):
@@ -554,6 +555,113 @@ def dft_postprocess_data(arr, real_grid, recip_grid, shift, axes,
 
     fast_1d_tensor_mult(out, onedim_arrs, axes=axes, out=out)
     return out
+
+
+def _npy_fftshift(x, axes=None, reverse=False):
+    """Variant of `numpy.fft.helper.fftshift`.
+
+    Parameters
+    ----------
+    x : `array-like`
+        The array to be shifted.
+    axes : int or sequence of ints, optional
+        Shifting is performed in these axes. For ``None``, all
+        axes are shifted.
+    reverse : bool, optional
+        If ``True``, use reversed order in each axis. See Notes for
+        details.
+
+    Returns
+    -------
+    shifted : `numpy.ndarray`
+        The array shifted in ``axes``.
+
+    Notes
+    -----
+    Mathematically, we want this function to compute
+
+    .. math::
+        \\text{shift}(y)_j =
+        y_{(j - \\lfloor N/2 \\rfloor)\, \mathrm{mod}\, N}
+
+    for ``reverse=False`` and
+
+    .. math::
+        \\text{shift}(y)_j =
+        y_{(\\lfloor N/2 \\rfloor - j)\, \mathrm{mod}\, N}
+
+    for ``reverse=True``. The former is needed for regular frequency
+    shifting of full FFTs, while the latter is the correct operation
+    on the "full" axes of a half-complex FFT.
+    """
+    x = np.asarray(x)
+    ndim = len(x.shape)
+    if axes is None:
+        axes = list(range(ndim))
+    elif isinstance(axes, np.compat.integer_types):
+        axes = (axes,)
+    y = x
+    for k in axes:
+        n = x.shape[k]
+        indices = np.mod(np.arange(n) - n // 2, n)
+        if reverse:
+            indices = np.mod(n - indices, n)
+        y = np.take(y, indices, k)
+    return y
+
+
+def fftshift(arr, axes=None, halfcomplex=False):
+    """Shift the 0 frequency to the middle of the array.
+
+    The effective operation performed by this function is:
+
+    - ``halfcomplex=False``
+
+      In each axis flip "upper" and "lower" part::
+
+        fftshift(arr)[i] = arr[mod(i, shape[i] // 2)]
+
+    - ``halfcomplex=True``
+
+      In ``axes[:-1]`` the same as for ``halfcomplex=False``, in
+      ``axes[-1]``::
+
+        fftshift(arr) = arr.conj()[::1]
+
+    Parameters
+    ----------
+    arr : `array-like`
+        The array to be shifted.
+    axes : sequence of ints, optional
+        Perform the shift operation in these axes of ``arr``.
+        ``None`` means "all axes'.
+    halfcomplex : bool, optional
+        If ``True``, treat ``arr`` as the outcome of a half-complex
+        FFT. Otherwise, ``arr`` is considered as result of a full FFT.
+
+    Returns
+    -------
+    shifted : `numpy.ndarray`
+        Result of the shift operation.
+
+    See Also
+    --------
+    numpy.fft.helper.fftshift : Implementation
+    """
+    if not halfcomplex:
+        return _npy_fftshift(arr, axes=axes)
+
+    else:  # halfcomplex
+        arr = np.asarray(arr, dtype=np.result_type(arr, 1j))
+        if axes is None:
+            axes = list(range(arr.ndim))
+
+        arr = _npy_fftshift(arr, axes=axes[:-1], reverse=True)
+        reverse_slc = [slice(None)] * arr.ndim
+        reverse_slc[axes[-1]] = slice(None, None, -1)
+        arr = arr[tuple(reverse_slc)]
+        arr = np.conjugate(arr, out=arr)
+        return arr
 
 
 def reciprocal_space(space, axes=None, halfcomplex=False, shift=True,

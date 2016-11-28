@@ -28,46 +28,21 @@ import pytest
 
 import odl
 from odl.trafos.util.ft_utils import (
-    reciprocal_grid, realspace_grid, dft_preprocess_data)
+    reciprocal_grid, realspace_grid, dft_preprocess_data,
+    fftshift, _npy_fftshift)
 from odl.util import all_almost_equal, all_equal
+from odl.util.testutils import simple_fixture
 
 
 # --- pytest fixtures --- #
 
 
-true_or_false = [True, False]
-halfcx_ids = [' halfcomplex={} '.format(p) for p in true_or_false]
-
-
-@pytest.fixture(scope='module', ids=halfcx_ids, params=true_or_false)
-def halfcomplex(request):
-    return request.param
-
-
-shift_ids = [' shift={} '.format(p) for p in true_or_false]
-
-
-@pytest.fixture(scope='module', ids=shift_ids, params=true_or_false)
-def shift(request):
-    return request.param
-
-
-parity_params = ['even', 'odd']
-parity_ids = [" parity='{}' ".format(p) for p in parity_params]
-
-
-@pytest.fixture(scope='module', ids=parity_ids, params=parity_params)
-def parity(request):
-    return request.param
-
-
-sign_params = ['-', '+']
-sign_ids = [" sign='{}' ".format(p) for p in sign_params]
-
-
-@pytest.fixture(scope='module', ids=sign_ids, params=sign_params)
-def sign(request):
-    return request.param
+halfcomplex = simple_fixture('halfcomplex', params=[False, True])
+shift = simple_fixture('shift', params=[False, True])
+parity = simple_fixture('parity', params=['even', 'odd'])
+sign = simple_fixture('sign', params=['-', '+'])
+axes = simple_fixture('axes',
+                      params=[(1,), (2,), (0, 2), (1, 2), (-1, -2, -3), None])
 
 
 # --- reciprocal_grid --- #
@@ -336,6 +311,57 @@ def test_dft_preprocess_data_with_axes(sign):
     dft_preprocess_data(arr, shift=True, axes=axes, out=arr, sign=sign)
 
     assert all_almost_equal(arr.ravel(), correct_arr)
+
+
+# --- fftshift --- #
+
+
+def test_fftshift_1d(halfcomplex, parity):
+    """Check if FFT shifting works the same as the Numpy function in 1D."""
+
+    length = 10 if parity == 'even' else 11
+    arr_in = np.arange(length, dtype=float)
+    dft = np.fft.fft(arr_in)
+    if halfcomplex:
+        # Check against the result of shifting a full FFT first and then
+        # taking the half-complex part of that
+        true_shifted = _npy_fftshift(dft)[:length // 2 + 1]
+        fftshift_input = dft[:length // 2 + 1]
+    else:
+        true_shifted = _npy_fftshift(dft)
+        fftshift_input = dft
+
+    shifted = fftshift(fftshift_input, halfcomplex=halfcomplex)
+    assert all_almost_equal(shifted, true_shifted)
+
+
+def test_fftshift_3d(halfcomplex, axes):
+    """Check if FFT shifting works the same as the Numpy function in 3D."""
+
+    if axes is None:
+        axes = (0, 1, 2)
+    shape = (2, 3, 4)
+    length = np.prod(shape, dtype=int)
+    arr_in = np.arange(length, dtype=float).reshape(shape)
+    dft = np.fft.fftn(arr_in, axes=axes)
+    if halfcomplex:
+        # Check against the result of shifting a full FFT first and then
+        # taking the half-complex part of that
+
+        # Reduced length in the last axis in `axes`
+        slc = [slice(None)] * len(shape)
+        slc[axes[-1]] = slice(shape[axes[-1]] // 2 + 1)
+        true_shifted = _npy_fftshift(dft, axes=axes)[slc]
+        fftshift_input = dft[slc]
+    else:
+        true_shifted = _npy_fftshift(dft, axes=axes)
+        fftshift_input = dft
+
+    shifted = fftshift(fftshift_input, axes=axes, halfcomplex=halfcomplex)
+    print(shifted)
+    print('---------------------------------')
+    print(true_shifted)
+    assert all_almost_equal(shifted, true_shifted)
 
 
 if __name__ == '__main__':
