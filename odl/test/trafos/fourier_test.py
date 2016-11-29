@@ -52,11 +52,12 @@ exponent = simple_fixture('p', [2.0, 1.0, float('inf'), 1.5])
 sign = simple_fixture('sign', ['-', '+'])
 
 
-fouriertrafo_params = ['1d real-halfcomplex, odd n, sign+',
-                       '1d real-halfcomplex, odd n, sign-',
+fouriertrafo_params = ['1d real-halfcomplex, odd n',
                        '1d real-halfcomplex, even n',
                        '1d real-complex, odd n',
                        '1d real-complex, even n',
+                       '1d real-complex, odd n, sign +',
+                       '1d real-complex, even n, sign +',
                        '1d complex-complex odd n',
                        '1d complex-complex even n',
                        '2d real-halfcomplex',
@@ -68,44 +69,60 @@ fouriertrafo_ids = [" ft = '{}' ".format(m)
 
 @pytest.fixture(scope='module',
                 params=fouriertrafo_params, ids=fouriertrafo_ids)
-def fouriertrafo(request, impl):
+def fourier_setup(request, impl):
     name = request.param
 
-    if name == '1d real-halfcomplex, odd n, sign+':
-        discr = odl.uniform_discr(-2, 2, 11, impl='numpy', dtype='float32')
-        return FourierTransform(discr, sign='+', impl=impl, halfcomplex=True)
-    elif name == '1d real-halfcomplex, odd n, sign-':
-        discr = odl.uniform_discr(-2, 2, 13, impl='numpy', dtype='float64')
-        return FourierTransform(discr, sign='-', impl=impl, halfcomplex=True)
+    if name == '1d real-halfcomplex, odd n':
+        discr = odl.uniform_discr(-2, 2, 11, impl='numpy', dtype='float64')
+        halfcomplex = True
+        ft = FourierTransform(discr, sign='-', impl=impl, halfcomplex=True)
     elif name == '1d real-halfcomplex, even n':
         discr = odl.uniform_discr(-2, 2, 20, impl='numpy', dtype='float32')
-        return FourierTransform(discr, impl=impl, halfcomplex=True)
+        halfcomplex = True
+        ft = FourierTransform(discr, impl=impl, halfcomplex=True)
     elif name == '1d real-complex, odd n':
         discr = odl.uniform_discr(-2, 2, 15, impl='numpy', dtype='float32')
-        return FourierTransform(discr, impl=impl, halfcomplex=False)
+        halfcomplex = False
+        ft = FourierTransform(discr, impl=impl, halfcomplex=False)
     elif name == '1d real-complex, even n':
         discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='float64')
-        return FourierTransform(discr, impl=impl, halfcomplex=False)
+        halfcomplex = False
+        ft = FourierTransform(discr, impl=impl, halfcomplex=False)
+    elif name == '1d real-complex, odd n, sign +':
+        discr = odl.uniform_discr(-2, 2, 15, impl='numpy', dtype='float32')
+        halfcomplex = False
+        ft = FourierTransform(discr, impl=impl, sign='+', halfcomplex=False)
+    elif name == '1d real-complex, even n, sign +':
+        discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='float64')
+        halfcomplex = False
+        ft = FourierTransform(discr, impl=impl, sign='+', halfcomplex=False)
     elif name == '1d complex-complex odd n':
         discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='complex64')
-        return FourierTransform(discr, impl=impl)
+        halfcomplex = False
+        ft = FourierTransform(discr, impl=impl)
     elif name == '1d complex-complex even n':
-        discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='complex32')
-        return FourierTransform(discr, impl=impl)
+        discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='complex128')
+        halfcomplex = False
+        ft = FourierTransform(discr, impl=impl)
     elif name == '2d real-halfcomplex':
         discr = odl.uniform_discr([-2, -3], [0, 4], [6, 5], impl='numpy',
                                   dtype='float32')
-        return FourierTransform(discr, impl=impl, halfcomplex=True)
+        halfcomplex = True
+        ft = FourierTransform(discr, impl=impl, halfcomplex=True)
     elif name == '2d real-complex':
         discr = odl.uniform_discr([0, -20], [0.3, -16], [11, 11], impl='numpy',
                                   dtype='float32')
-        return FourierTransform(discr, impl=impl, halfcomplex=False)
+        halfcomplex = False
+        ft = FourierTransform(discr, impl=impl, halfcomplex=False)
     elif name == '2d complex-complex':
         discr = odl.uniform_discr([-2, -2], [2, 2], [20, 4], impl='numpy',
-                                  dtype='complex32')
-        return FourierTransform(discr, impl=impl)
+                                  dtype='complex64')
+        halfcomplex = False
+        ft = FourierTransform(discr, impl=impl)
     else:
         assert False
+
+    return ft, halfcomplex
 
 
 # --- helper functions --- #
@@ -401,48 +418,31 @@ def test_dft_init_plan(impl):
 # ---- FourierTransform ---- #
 
 
-def test_fourier_trafo_range(exponent, floating_dtype):
+def test_fourier_trafo_range(fourier_setup):
     # Check if the range is initialized correctly. Encompasses the init test
 
-    # Testing R2C for real dtype, else C2C
+    ft, halfcomplex = fourier_setup
+    default_shifts = tuple(n % 2 == 0 for n in ft.domain.shape)
+    assert ft.shifts == default_shifts
+    true_grid = reciprocal_grid(ft.domain.grid, halfcomplex=halfcomplex,
+                                shift=default_shifts)
+    assert ft.range.grid == true_grid
 
-    # 1D
-    shape = 10
-    space_discr = odl.uniform_discr(0, 1, shape, exponent=exponent,
-                                    impl='numpy', dtype=floating_dtype)
-
-    dft = FourierTransform(space_discr, halfcomplex=True, shift=True)
-    assert dft.range.field == odl.ComplexNumbers()
-    halfcomplex = True if is_real_dtype(floating_dtype) else False
-    assert dft.range.grid == reciprocal_grid(dft.domain.grid,
-                                             halfcomplex=halfcomplex,
-                                             shift=True)
-    assert dft.range.exponent == conj_exponent(exponent)
-
-    # 3D
-    shape = (3, 4, 5)
-    space_discr = odl.uniform_discr([0] * 3, [1] * 3, shape, exponent=exponent,
-                                    impl='numpy', dtype=floating_dtype)
-
-    dft = FourierTransform(space_discr, halfcomplex=True, shift=True)
-    assert dft.range.field == odl.ComplexNumbers()
-    halfcomplex = True if is_real_dtype(floating_dtype) else False
-    assert dft.range.grid == reciprocal_grid(dft.domain.grid,
-                                             halfcomplex=halfcomplex,
-                                             shift=True)
-    assert dft.range.exponent == conj_exponent(exponent)
-
-    # shift must be True in the last axis
     if halfcomplex:
+        # Can only use default shifts for halfcomplex
+        bad_shifts = tuple(not shift for shift in default_shifts)
         with pytest.raises(ValueError):
-            FourierTransform(space_discr, shift=(True, True, False))
-
-    if exponent != 2.0:
-        with pytest.raises(NotImplementedError):
-            dft.adjoint
+            FourierTransform(ft.domain, halfcomplex=True, shift=bad_shifts)
+    else:
+        opposite_shifts = tuple(not shift for shift in default_shifts)
+        new_ft = FourierTransform(ft.domain, halfcomplex=False,
+                                  shift=opposite_shifts)
+        true_grid = reciprocal_grid(ft.domain.grid, halfcomplex=False,
+                                    shift=opposite_shifts)
+        assert new_ft.range.grid == true_grid
 
     with pytest.raises(TypeError):
-        FourierTransform(dft.domain.partition)
+        FourierTransform(ft.domain.partition)
 
 
 def test_fourier_trafo_init_plan(impl, floating_dtype):
@@ -464,7 +464,6 @@ def test_fourier_trafo_init_plan(impl, floating_dtype):
             ft.clear_fftw_plan()
     else:
         ft.init_fftw_plan()
-
         # Make sure plan can be used
         ft._fftw_plan(ft.domain.element().asarray(),
                       ft.range.element().asarray())
@@ -503,434 +502,436 @@ def test_fourier_trafo_init_plan(impl, floating_dtype):
         assert ft._fftw_plan is None
 
 
-def test_fourier_trafo_create_temp():
-
-    shape = 10
-    space_discr = odl.uniform_discr(0, 1, shape, dtype='complex64')
-
-    ft = FourierTransform(space_discr)
-    ft.create_temporaries()
-    assert ft._tmp_r is not None
-    assert ft._tmp_f is not None
-
-    ift = ft.inverse
-    assert ift._tmp_r is not None
-    assert ift._tmp_f is not None
-
-    ft.clear_temporaries()
-    assert ft._tmp_r is None
-    assert ft._tmp_f is None
-
-
-def test_fourier_trafo_call(impl, floating_dtype):
-    # Test if all variants can be called without error
-
-    # Not supported, skip
-    if floating_dtype == np.dtype('float16') and impl == 'pyfftw':
-        return
-
-    shape = 10
-    halfcomplex, _ = _params_from_dtype(floating_dtype)
-    space_discr = odl.uniform_discr(0, 1, shape, dtype=floating_dtype)
-
-    ft = FourierTransform(space_discr, impl=impl, halfcomplex=halfcomplex)
-    ift = ft.inverse
-
-    one = space_discr.one()
-    assert np.allclose(ift(ft(one)), one)
-
-    # With temporaries
-    ft.create_temporaries()
-    ift = ft.inverse  # shares temporaries
-    one = space_discr.one()
-    assert np.allclose(ift(ft(one)), one)
-
-
-def test_fourier_trafo_charfun_1d():
-    # Characteristic function of [0, 1], its Fourier transform is
-    # given by exp(-1j * y / 2) * sinc(y/2)
-    def char_interval(x):
-        return (x >= 0) & (x <= 1)
-
-    def char_interval_ft(x):
-        return np.exp(-1j * x / 2) * sinc(x / 2) / np.sqrt(2 * np.pi)
-
-    # Base version
-    discr = odl.uniform_discr(-2, 2, 40, impl='numpy')
-    dft_base = FourierTransform(discr)
-
-    # Complex version, should be as good
-    discr = odl.uniform_discr(-2, 2, 40, impl='numpy', dtype='complex64')
-    dft_complex = FourierTransform(discr)
-
-    # Without shift
-    discr = odl.uniform_discr(-2, 2, 40, impl='numpy', dtype='complex64')
-    dft_complex_shift = FourierTransform(discr, shift=False)
-
-    for dft in [dft_base, dft_complex, dft_complex_shift]:
-        func_true_ft = dft.range.element(char_interval_ft)
-        func_dft = dft(char_interval)
-        assert (func_dft - func_true_ft).norm() < 5e-6
-
-
-def test_fourier_trafo_scaling(fouriertrafo):
-    # Test if the FT scales correctly
-
-    if fouriertrafo.domain.is_rn or fouriertrafo.range.is_rn:
-        scales = [2, -1, 0]
-        phantom = odl.phantom.cuboid(fouriertrafo.domain)
-    else:
-        scales = [2, 1j, -2.5j, 1 - 4j]
-        phantom = (1 + 0.5j) * odl.phantom.cuboid(fouriertrafo.domain)
-
-    for op in [fouriertrafo,
-               fouriertrafo.inverse, fouriertrafo.inverse.adjoint,
-               fouriertrafo.adjoint, fouriertrafo.adjoint.inverse]:
-        for factor in scales:
-            func_true_ft = factor * op(phantom)
-            func_dft = op(factor * phantom)
-            assert (func_dft - func_true_ft).norm() < 1e-6
-
-
-def test_fourier_trafo_sign(impl):
-    # Test if the FT sign behaves as expected, i.e. that the FT with sign
-    # '+' and '-' have same real parts and opposite imaginary parts.
-
-    def char_interval(x):
-        return (x >= 0) & (x <= 1)
-
-    discr = odl.uniform_discr(-2, 2, 40, impl='numpy', dtype='complex64')
-    ft_minus = FourierTransform(discr, sign='-', impl=impl)
-    ft_plus = FourierTransform(discr, sign='+', impl=impl)
-
-    func_ft_minus = ft_minus(char_interval)
-    func_ft_plus = ft_plus(char_interval)
-    assert np.allclose(func_ft_minus.real, func_ft_plus.real)
-    assert np.allclose(func_ft_minus.imag, -func_ft_plus.imag)
-    assert np.allclose(ft_minus.inverse.inverse(char_interval),
-                       ft_minus(char_interval))
-    assert np.allclose(ft_plus.inverse.inverse(char_interval),
-                       ft_plus(char_interval))
-
-    discr = odl.uniform_discr(-2, 2, 40, impl='numpy', dtype='float32')
-    with pytest.raises(ValueError):
-        FourierTransform(discr, sign='+', impl=impl, halfcomplex=True)
-    with pytest.raises(ValueError):
-        FourierTransform(discr, sign=-1, impl=impl)
-
-
-def _test_inverse(op):
-    # Verify inverse of op
-    phantom = odl.phantom.cuboid(op.domain)
-    result = op.inverse(op(phantom))
-    assert all_almost_equal(result, phantom)
-
-
-def test_inverse(fouriertrafo):
-    """Test if the inverse really is the inverse."""
-    _test_inverse(fouriertrafo)
-
-
-def test_adjoint_inverse(fouriertrafo):
-    """Test if the inverse of the adjoint really is the inverse."""
-    _test_inverse(fouriertrafo.adjoint)
-
-
-def _test_adjoint(op):
-    # Verify adjoint of op
-    if ((op.domain.is_rn and op.range.is_rn) or
-            (op.domain.is_cn and op.range.is_cn)):
-        # If both match, the usual adjoint definition should hold.
-        x = odl.phantom.cuboid(op.domain)
-        y = odl.phantom.cuboid(op.range)
-
-        Axy = op(x).inner(y)
-        xAty = x.inner(op.adjoint(y))
-
-        assert Axy.real == pytest.approx(xAty.real, rel=1e-2, abs=1e-4)
-        assert Axy.imag == pytest.approx(xAty.imag, rel=1e-2, abs=1e-4)
-    elif op.domain.is_rn and op.range.is_cn:
-        # If domain is real, but range complex only satisfies right adjoint
-        x = odl.phantom.cuboid(op.domain)
-        y = odl.phantom.cuboid(op.domain)
-
-        AtAxy = op.adjoint(op(x)).inner(y)
-        AxAy = op(x).inner(op(y))
-
-        assert AtAxy.real == pytest.approx(AxAy.real, rel=1e-2, abs=1e-4)
-        assert AtAxy.imag == pytest.approx(0, abs=1e-4)
-    elif op.domain.is_cn and op.range.is_rn:
-        # If domain is complex, but range real only satisfies left adjoint
-        x = odl.phantom.cuboid(op.range)
-        y = odl.phantom.cuboid(op.range)
-
-        AtAxy = op(op.adjoint(x)).inner(y)
-        AtxAty = op.adjoint(x).inner(op.adjoint(y))
-
-        assert AtAxy.real == pytest.approx(AtxAty.real, rel=1e-2, abs=1e-4)
-        assert AtAxy.imag == pytest.approx(0, abs=1e-4)
-    else:
-        assert False  # should not happen
-
-
-def test_adjoint(fouriertrafo):
-    """Test adjoint of operator satisfies the definition."""
-    _test_adjoint(fouriertrafo)
-
-
-def test_inverse_adjoint(fouriertrafo):
-    """Test adjoint of the inverse operator satisfies the definition."""
-    _test_adjoint(fouriertrafo.inverse)
-
-
-def test_fourier_trafo_hat_1d():
-    # Hat function as used in linear interpolation. It is not so
-    # well discretized by nearest neighbor interpolation, so a larger
-    # error is to be expected.
-    def hat_func(x):
-        out = np.where(x < 0, 1 + x, 1 - x)
-        out[x < -1] = 0
-        out[x > 1] = 0
-        return out
-
-    def hat_func_ft(x):
-        return sinc(x / 2) ** 2 / np.sqrt(2 * np.pi)
-
-    # Using a single-precision implementation, should be as good
-    # With linear interpolation in the discretization, should be better?
-    for interp in ['nearest', 'linear']:
-        discr = odl.uniform_discr(-2, 2, 101, impl='numpy', dtype='float32',
-                                  interp=interp)
-        dft = FourierTransform(discr)
-        func_true_ft = dft.range.element(hat_func_ft)
-        func_dft = dft(hat_func)
-        assert (func_dft - func_true_ft).norm() < 0.001
-
-
-def test_fourier_trafo_complex_sum():
-    # Sum of characteristic function and hat function, both with
-    # known FT's.
-    def hat_func(x):
-        out = 1 - np.abs(x)
-        out[x < -1] = 0
-        out[x > 1] = 0
-        return out
-
-    def hat_func_ft(x):
-        return sinc(x / 2) ** 2 / np.sqrt(2 * np.pi)
-
-    def char_interval(x):
-        return (x >= 0) & (x <= 1)
-
-    def char_interval_ft(x):
-        return np.exp(-1j * x / 2) * sinc(x / 2) / np.sqrt(2 * np.pi)
-
-    discr = odl.uniform_discr(-2, 2, 200, impl='numpy', dtype='complex128')
-    dft = FourierTransform(discr, shift=False)
-
-    func = discr.element(hat_func) + 1j * discr.element(char_interval)
-    func_true_ft = (dft.range.element(hat_func_ft) +
-                    1j * dft.range.element(char_interval_ft))
-    func_dft = dft(func)
-    assert (func_dft - func_true_ft).norm() < 0.001
-
-
-def test_fourier_trafo_gaussian_1d():
-    # Gaussian function, will be mapped to itself. Truncation error is
-    # relatively large, though, we need a large support.
-    def gaussian(x):
-        return np.exp(-x ** 2 / 2)
-
-    discr = odl.uniform_discr(-10, 10, 201, impl='numpy')
-    dft = FourierTransform(discr)
-    func_true_ft = dft.range.element(gaussian)
-    func_dft = dft(gaussian)
-    assert (func_dft - func_true_ft).norm() < 0.001
-
-
-def test_fourier_trafo_freq_shifted_charfun_1d():
-    # Frequency-shifted characteristic function: mult. with
-    # exp(-1j * b * x) corresponds to shifting the FT by b.
-    def fshift_char_interval(x):
-        return np.exp(-1j * x * np.pi) * ((x >= -0.5) & (x <= 0.5))
-
-    def fshift_char_interval_ft(x):
-        return sinc((x + np.pi) / 2) / np.sqrt(2 * np.pi)
-
-    # Number of points is very important here (aliasing)
-    discr = odl.uniform_discr(-2, 2, 400, impl='numpy',
-                              dtype='complex64')
-    dft = FourierTransform(discr)
-    func_true_ft = dft.range.element(fshift_char_interval_ft)
-    func_dft = dft(fshift_char_interval)
-    assert (func_dft - func_true_ft).norm() < 0.001
-
-
-def test_dft_with_known_pairs_2d():
-
-    # Frequency-shifted product of characteristic functions
-    def fshift_char_rect(x):
-        # Characteristic function of the cuboid
-        # [-1, 1] x [1, 2]
-        return (x[0] >= -1) & (x[0] <= 1) & (x[1] >= 1) & (x[1] <= 2)
-
-    def fshift_char_rect_ft(x):
-        # FT is a product of shifted and frequency-shifted sinc functions
-        # 1st comp.: 2 * sinc(y)
-        # 2nd comp.: exp(-1j * y * 3/2) * sinc(y/2)
-        # Overall factor: (2 * pi)^(-1)
-        return (2 * sinc(x[0]) *
-                np.exp(-1j * x[1] * 3 / 2) * sinc(x[1] / 2) /
-                (2 * np.pi))
-
-    discr = odl.uniform_discr([-2] * 2, [2] * 2, (100, 400), impl='numpy',
-                              dtype='complex64')
-    dft = FourierTransform(discr)
-    func_true_ft = dft.range.element(fshift_char_rect_ft)
-    func_dft = dft(fshift_char_rect)
-    assert (func_dft - func_true_ft).norm() < 0.001
-
-
-def test_fourier_trafo_completely():
-    # Complete explicit test of all FT components on two small examples
-
-    # Discretization with 4 points
-    discr = odl.uniform_discr(-2, 2, 4, dtype='complex')
-    # Interval boundaries -2, -1, 0, 1, 2
-    assert np.allclose(discr.partition.cell_boundary_vecs[0],
-                       [-2, -1, 0, 1, 2])
-    # Grid points -1.5, -0.5, 0.5, 1.5
-    assert np.allclose(discr.grid.coord_vectors[0],
-                       [-1.5, -0.5, 0.5, 1.5])
-
-    # First test function, symmetric. Can be represented exactly in the
-    # discretization.
-    def f(x):
-        return (x >= -1) & (x <= 1)
-
-    def fhat(x):
-        return np.sqrt(2 / np.pi) * sinc(x)
-
-    # Discretize f, check values
-    f_discr = discr.element(f)
-    assert np.allclose(f_discr, [0, 1, 1, 0])
-
-    # "s" = shifted, "n" = not shifted
-
-    # Reciprocal grids
-    recip_s = reciprocal_grid(discr.grid, shift=True)
-    recip_n = reciprocal_grid(discr.grid, shift=False)
-    assert np.allclose(recip_s.coord_vectors[0],
-                       np.linspace(-np.pi, np.pi / 2, 4))
-    assert np.allclose(recip_n.coord_vectors[0],
-                       np.linspace(-3 * np.pi / 4, 3 * np.pi / 4, 4))
-
-    # Range
-    range_part_s = odl.uniform_partition_fromgrid(recip_s)
-    range_s = odl.uniform_discr_frompartition(range_part_s, dtype='complex')
-    range_part_n = odl.uniform_partition_fromgrid(recip_n)
-    range_n = odl.uniform_discr_frompartition(range_part_n, dtype='complex')
-
-    # Pre-processing
-    preproc_s = [1, -1, 1, -1]
-    preproc_n = [np.exp(1j * 3 / 4 * np.pi * k) for k in range(4)]
-
-    fpre_s = dft_preprocess_data(f_discr, shift=True)
-    fpre_n = dft_preprocess_data(f_discr, shift=False)
-    assert np.allclose(fpre_s, f_discr * discr.element(preproc_s))
-    assert np.allclose(fpre_n, f_discr * discr.element(preproc_n))
-
-    # FFT step, replicating the _call_numpy method
-    fft_s = np.fft.fftn(fpre_s, s=discr.shape, axes=[0])
-    fft_n = np.fft.fftn(fpre_n, s=discr.shape, axes=[0])
-    assert np.allclose(fft_s, [0, -1 + 1j, 2, -1 - 1j])
-    assert np.allclose(
-        fft_n, [np.exp(1j * np.pi * (3 - 2 * k) / 4) +
-                np.exp(1j * np.pi * (3 - 2 * k) / 2)
-                for k in range(4)])
-
-    # Interpolation kernel FT
-    interp_s = np.sinc(np.linspace(-1 / 2, 1 / 4, 4)) / np.sqrt(2 * np.pi)
-    interp_n = np.sinc(np.linspace(-3 / 8, 3 / 8, 4)) / np.sqrt(2 * np.pi)
-    assert np.allclose(interp_s,
-                       _interp_kernel_ft(np.linspace(-1 / 2, 1 / 4, 4),
-                                         interp='nearest'))
-    assert np.allclose(interp_n,
-                       _interp_kernel_ft(np.linspace(-3 / 8, 3 / 8, 4),
-                                         interp='nearest'))
-
-    # Post-processing
-    postproc_s = np.exp(1j * np.pi * np.linspace(-3 / 2, 3 / 4, 4))
-    postproc_n = np.exp(1j * np.pi * np.linspace(-9 / 8, 9 / 8, 4))
-
-    fpost_s = dft_postprocess_data(
-        range_s.element(fft_s), real_grid=discr.grid, recip_grid=recip_s,
-        shift=[True], axes=(0,), interp='nearest')
-    fpost_n = dft_postprocess_data(
-        range_n.element(fft_n), real_grid=discr.grid, recip_grid=recip_n,
-        shift=[False], axes=(0,), interp='nearest')
-
-    assert np.allclose(fpost_s, fft_s * postproc_s * interp_s)
-    assert np.allclose(fpost_n, fft_n * postproc_n * interp_n)
-
-    # Comparing to the known result sqrt(2/pi) * sinc(x)
-    assert np.allclose(fpost_s, fhat(recip_s.coord_vectors[0]))
-    assert np.allclose(fpost_n, fhat(recip_n.coord_vectors[0]))
-
-    # Doing the exact same with direct application of the FT operator
-    ft_op_s = FourierTransform(discr, shift=True)
-    ft_op_n = FourierTransform(discr, shift=False)
-    assert ft_op_s.range.grid == recip_s
-    assert ft_op_n.range.grid == recip_n
-
-    ft_f_s = ft_op_s(f)
-    ft_f_n = ft_op_n(f)
-    assert np.allclose(ft_f_s, fhat(recip_s.coord_vectors[0]))
-    assert np.allclose(ft_f_n, fhat(recip_n.coord_vectors[0]))
-
-    # Second test function, asymmetric. Can also be represented exactly in the
-    # discretization.
-    def f(x):
-        return (x >= 0) & (x <= 1)
-
-    def fhat(x):
-        return np.exp(-1j * x / 2) * sinc(x / 2) / np.sqrt(2 * np.pi)
-
-    # Discretize f, check values
-    f_discr = discr.element(f)
-    assert np.allclose(f_discr, [0, 0, 1, 0])
-
-    # Pre-processing
-    fpre_s = dft_preprocess_data(f_discr, shift=True)
-    fpre_n = dft_preprocess_data(f_discr, shift=False)
-    assert np.allclose(fpre_s, [0, 0, 1, 0])
-    assert np.allclose(fpre_n, [0, 0, -1j, 0])
-
-    # FFT step
-    fft_s = np.fft.fftn(fpre_s, s=discr.shape, axes=[0])
-    fft_n = np.fft.fftn(fpre_n, s=discr.shape, axes=[0])
-    assert np.allclose(fft_s, [1, -1, 1, -1])
-    assert np.allclose(fft_n, [-1j, 1j, -1j, 1j])
-
-    fpost_s = dft_postprocess_data(
-        range_s.element(fft_s), real_grid=discr.grid, recip_grid=recip_s,
-        shift=[True], axes=(0,), interp='nearest')
-    fpost_n = dft_postprocess_data(
-        range_n.element(fft_n), real_grid=discr.grid, recip_grid=recip_n,
-        shift=[False], axes=(0,), interp='nearest')
-
-    assert np.allclose(fpost_s, fft_s * postproc_s * interp_s)
-    assert np.allclose(fpost_n, fft_n * postproc_n * interp_n)
-
-    # Comparing to the known result exp(-1j*x/2) * sinc(x/2) / sqrt(2*pi)
-    assert np.allclose(fpost_s, fhat(recip_s.coord_vectors[0]))
-    assert np.allclose(fpost_n, fhat(recip_n.coord_vectors[0]))
-
-    # Doing the exact same with direct application of the FT operator
-    ft_f_s = ft_op_s(f)
-    ft_f_n = ft_op_n(f)
-    assert np.allclose(ft_f_s, fhat(recip_s.coord_vectors[0]))
-    assert np.allclose(ft_f_n, fhat(recip_n.coord_vectors[0]))
-
+#==============================================================================
+# def test_fourier_trafo_create_temp():
+#
+#     shape = 10
+#     space_discr = odl.uniform_discr(0, 1, shape, dtype='complex64')
+#
+#     ft = FourierTransform(space_discr)
+#     ft.create_temporaries()
+#     assert ft._tmp_r is not None
+#     assert ft._tmp_f is not None
+#
+#     ift = ft.inverse
+#     assert ift._tmp_r is not None
+#     assert ift._tmp_f is not None
+#
+#     ft.clear_temporaries()
+#     assert ft._tmp_r is None
+#     assert ft._tmp_f is None
+#
+#
+# def test_fourier_trafo_call(impl, floating_dtype):
+#     # Test if all variants can be called without error
+#
+#     # Not supported, skip
+#     if floating_dtype == np.dtype('float16') and impl == 'pyfftw':
+#         return
+#
+#     shape = 10
+#     halfcomplex, _ = _params_from_dtype(floating_dtype)
+#     space_discr = odl.uniform_discr(0, 1, shape, dtype=floating_dtype)
+#
+#     ft = FourierTransform(space_discr, impl=impl, halfcomplex=halfcomplex)
+#     ift = ft.inverse
+#
+#     one = space_discr.one()
+#     assert np.allclose(ift(ft(one)), one)
+#
+#     # With temporaries
+#     ft.create_temporaries()
+#     ift = ft.inverse  # shares temporaries
+#     one = space_discr.one()
+#     assert np.allclose(ift(ft(one)), one)
+#
+#
+# def test_fourier_trafo_charfun_1d():
+#     # Characteristic function of [0, 1], its Fourier transform is
+#     # given by exp(-1j * y / 2) * sinc(y/2)
+#     def char_interval(x):
+#         return (x >= 0) & (x <= 1)
+#
+#     def char_interval_ft(x):
+#         return np.exp(-1j * x / 2) * sinc(x / 2) / np.sqrt(2 * np.pi)
+#
+#     # Base version
+#     discr = odl.uniform_discr(-2, 2, 40, impl='numpy')
+#     dft_base = FourierTransform(discr)
+#
+#     # Complex version, should be as good
+#     discr = odl.uniform_discr(-2, 2, 40, impl='numpy', dtype='complex64')
+#     dft_complex = FourierTransform(discr)
+#
+#     # Without shift
+#     discr = odl.uniform_discr(-2, 2, 40, impl='numpy', dtype='complex64')
+#     dft_complex_shift = FourierTransform(discr, shift=False)
+#
+#     for dft in [dft_base, dft_complex, dft_complex_shift]:
+#         func_true_ft = dft.range.element(char_interval_ft)
+#         func_dft = dft(char_interval)
+#         assert (func_dft - func_true_ft).norm() < 5e-6
+#
+#
+# def test_fourier_trafo_scaling(fouriertrafo):
+#     # Test if the FT scales correctly
+#
+#     if fouriertrafo.domain.is_rn or fouriertrafo.range.is_rn:
+#         scales = [2, -1, 0]
+#         phantom = odl.phantom.cuboid(fouriertrafo.domain)
+#     else:
+#         scales = [2, 1j, -2.5j, 1 - 4j]
+#         phantom = (1 + 0.5j) * odl.phantom.cuboid(fouriertrafo.domain)
+#
+#     for op in [fouriertrafo,
+#                fouriertrafo.inverse, fouriertrafo.inverse.adjoint,
+#                fouriertrafo.adjoint, fouriertrafo.adjoint.inverse]:
+#         for factor in scales:
+#             func_true_ft = factor * op(phantom)
+#             func_dft = op(factor * phantom)
+#             assert (func_dft - func_true_ft).norm() < 1e-6
+#
+#
+# def test_fourier_trafo_sign(impl):
+#     # Test if the FT sign behaves as expected, i.e. that the FT with sign
+#     # '+' and '-' have same real parts and opposite imaginary parts.
+#
+#     def char_interval(x):
+#         return (x >= 0) & (x <= 1)
+#
+#     discr = odl.uniform_discr(-2, 2, 40, impl='numpy', dtype='complex64')
+#     ft_minus = FourierTransform(discr, sign='-', impl=impl)
+#     ft_plus = FourierTransform(discr, sign='+', impl=impl)
+#
+#     func_ft_minus = ft_minus(char_interval)
+#     func_ft_plus = ft_plus(char_interval)
+#     assert np.allclose(func_ft_minus.real, func_ft_plus.real)
+#     assert np.allclose(func_ft_minus.imag, -func_ft_plus.imag)
+#     assert np.allclose(ft_minus.inverse.inverse(char_interval),
+#                        ft_minus(char_interval))
+#     assert np.allclose(ft_plus.inverse.inverse(char_interval),
+#                        ft_plus(char_interval))
+#
+#     discr = odl.uniform_discr(-2, 2, 40, impl='numpy', dtype='float32')
+#     with pytest.raises(ValueError):
+#         FourierTransform(discr, sign='+', impl=impl, halfcomplex=True)
+#     with pytest.raises(ValueError):
+#         FourierTransform(discr, sign=-1, impl=impl)
+#
+#
+# def _test_inverse(op):
+#     # Verify inverse of op
+#     phantom = odl.phantom.cuboid(op.domain)
+#     result = op.inverse(op(phantom))
+#     assert all_almost_equal(result, phantom)
+#
+#
+# def test_inverse(fouriertrafo):
+#     """Test if the inverse really is the inverse."""
+#     _test_inverse(fouriertrafo)
+#
+#
+# def test_adjoint_inverse(fouriertrafo):
+#     """Test if the inverse of the adjoint really is the inverse."""
+#     _test_inverse(fouriertrafo.adjoint)
+#
+#
+# def _test_adjoint(op):
+#     # Verify adjoint of op
+#     if ((op.domain.is_rn and op.range.is_rn) or
+#             (op.domain.is_cn and op.range.is_cn)):
+#         # If both match, the usual adjoint definition should hold.
+#         x = odl.phantom.cuboid(op.domain)
+#         y = odl.phantom.cuboid(op.range)
+#
+#         Axy = op(x).inner(y)
+#         xAty = x.inner(op.adjoint(y))
+#
+#         assert Axy.real == pytest.approx(xAty.real, rel=1e-2, abs=1e-4)
+#         assert Axy.imag == pytest.approx(xAty.imag, rel=1e-2, abs=1e-4)
+#     elif op.domain.is_rn and op.range.is_cn:
+#         # If domain is real, but range complex only satisfies right adjoint
+#         x = odl.phantom.cuboid(op.domain)
+#         y = odl.phantom.cuboid(op.domain)
+#
+#         AtAxy = op.adjoint(op(x)).inner(y)
+#         AxAy = op(x).inner(op(y))
+#
+#         assert AtAxy.real == pytest.approx(AxAy.real, rel=1e-2, abs=1e-4)
+#         assert AtAxy.imag == pytest.approx(0, abs=1e-4)
+#     elif op.domain.is_cn and op.range.is_rn:
+#         # If domain is complex, but range real only satisfies left adjoint
+#         x = odl.phantom.cuboid(op.range)
+#         y = odl.phantom.cuboid(op.range)
+#
+#         AtAxy = op(op.adjoint(x)).inner(y)
+#         AtxAty = op.adjoint(x).inner(op.adjoint(y))
+#
+#         assert AtAxy.real == pytest.approx(AtxAty.real, rel=1e-2, abs=1e-4)
+#         assert AtAxy.imag == pytest.approx(0, abs=1e-4)
+#     else:
+#         assert False  # should not happen
+#
+#
+# def test_adjoint(fouriertrafo):
+#     """Test adjoint of operator satisfies the definition."""
+#     _test_adjoint(fouriertrafo)
+#
+#
+# def test_inverse_adjoint(fouriertrafo):
+#     """Test adjoint of the inverse operator satisfies the definition."""
+#     _test_adjoint(fouriertrafo.inverse)
+#
+#
+# def test_fourier_trafo_hat_1d():
+#     # Hat function as used in linear interpolation. It is not so
+#     # well discretized by nearest neighbor interpolation, so a larger
+#     # error is to be expected.
+#     def hat_func(x):
+#         out = np.where(x < 0, 1 + x, 1 - x)
+#         out[x < -1] = 0
+#         out[x > 1] = 0
+#         return out
+#
+#     def hat_func_ft(x):
+#         return sinc(x / 2) ** 2 / np.sqrt(2 * np.pi)
+#
+#     # Using a single-precision implementation, should be as good
+#     # With linear interpolation in the discretization, should be better?
+#     for interp in ['nearest', 'linear']:
+#         discr = odl.uniform_discr(-2, 2, 101, impl='numpy', dtype='float32',
+#                                   interp=interp)
+#         dft = FourierTransform(discr)
+#         func_true_ft = dft.range.element(hat_func_ft)
+#         func_dft = dft(hat_func)
+#         assert (func_dft - func_true_ft).norm() < 0.001
+#
+#
+# def test_fourier_trafo_complex_sum():
+#     # Sum of characteristic function and hat function, both with
+#     # known FT's.
+#     def hat_func(x):
+#         out = 1 - np.abs(x)
+#         out[x < -1] = 0
+#         out[x > 1] = 0
+#         return out
+#
+#     def hat_func_ft(x):
+#         return sinc(x / 2) ** 2 / np.sqrt(2 * np.pi)
+#
+#     def char_interval(x):
+#         return (x >= 0) & (x <= 1)
+#
+#     def char_interval_ft(x):
+#         return np.exp(-1j * x / 2) * sinc(x / 2) / np.sqrt(2 * np.pi)
+#
+#     discr = odl.uniform_discr(-2, 2, 200, impl='numpy', dtype='complex128')
+#     dft = FourierTransform(discr, shift=False)
+#
+#     func = discr.element(hat_func) + 1j * discr.element(char_interval)
+#     func_true_ft = (dft.range.element(hat_func_ft) +
+#                     1j * dft.range.element(char_interval_ft))
+#     func_dft = dft(func)
+#     assert (func_dft - func_true_ft).norm() < 0.001
+#
+#
+# def test_fourier_trafo_gaussian_1d():
+#     # Gaussian function, will be mapped to itself. Truncation error is
+#     # relatively large, though, we need a large support.
+#     def gaussian(x):
+#         return np.exp(-x ** 2 / 2)
+#
+#     discr = odl.uniform_discr(-10, 10, 201, impl='numpy')
+#     dft = FourierTransform(discr)
+#     func_true_ft = dft.range.element(gaussian)
+#     func_dft = dft(gaussian)
+#     assert (func_dft - func_true_ft).norm() < 0.001
+#
+#
+# def test_fourier_trafo_freq_shifted_charfun_1d():
+#     # Frequency-shifted characteristic function: mult. with
+#     # exp(-1j * b * x) corresponds to shifting the FT by b.
+#     def fshift_char_interval(x):
+#         return np.exp(-1j * x * np.pi) * ((x >= -0.5) & (x <= 0.5))
+#
+#     def fshift_char_interval_ft(x):
+#         return sinc((x + np.pi) / 2) / np.sqrt(2 * np.pi)
+#
+#     # Number of points is very important here (aliasing)
+#     discr = odl.uniform_discr(-2, 2, 400, impl='numpy',
+#                               dtype='complex64')
+#     dft = FourierTransform(discr)
+#     func_true_ft = dft.range.element(fshift_char_interval_ft)
+#     func_dft = dft(fshift_char_interval)
+#     assert (func_dft - func_true_ft).norm() < 0.001
+#
+#
+# def test_dft_with_known_pairs_2d():
+#
+#     # Frequency-shifted product of characteristic functions
+#     def fshift_char_rect(x):
+#         # Characteristic function of the cuboid
+#         # [-1, 1] x [1, 2]
+#         return (x[0] >= -1) & (x[0] <= 1) & (x[1] >= 1) & (x[1] <= 2)
+#
+#     def fshift_char_rect_ft(x):
+#         # FT is a product of shifted and frequency-shifted sinc functions
+#         # 1st comp.: 2 * sinc(y)
+#         # 2nd comp.: exp(-1j * y * 3/2) * sinc(y/2)
+#         # Overall factor: (2 * pi)^(-1)
+#         return (2 * sinc(x[0]) *
+#                 np.exp(-1j * x[1] * 3 / 2) * sinc(x[1] / 2) /
+#                 (2 * np.pi))
+#
+#     discr = odl.uniform_discr([-2] * 2, [2] * 2, (100, 400), impl='numpy',
+#                               dtype='complex64')
+#     dft = FourierTransform(discr)
+#     func_true_ft = dft.range.element(fshift_char_rect_ft)
+#     func_dft = dft(fshift_char_rect)
+#     assert (func_dft - func_true_ft).norm() < 0.001
+#
+#
+# def test_fourier_trafo_completely():
+#     # Complete explicit test of all FT components on two small examples
+#
+#     # Discretization with 4 points
+#     discr = odl.uniform_discr(-2, 2, 4, dtype='complex')
+#     # Interval boundaries -2, -1, 0, 1, 2
+#     assert np.allclose(discr.partition.cell_boundary_vecs[0],
+#                        [-2, -1, 0, 1, 2])
+#     # Grid points -1.5, -0.5, 0.5, 1.5
+#     assert np.allclose(discr.grid.coord_vectors[0],
+#                        [-1.5, -0.5, 0.5, 1.5])
+#
+#     # First test function, symmetric. Can be represented exactly in the
+#     # discretization.
+#     def f(x):
+#         return (x >= -1) & (x <= 1)
+#
+#     def fhat(x):
+#         return np.sqrt(2 / np.pi) * sinc(x)
+#
+#     # Discretize f, check values
+#     f_discr = discr.element(f)
+#     assert np.allclose(f_discr, [0, 1, 1, 0])
+#
+#     # "s" = shifted, "n" = not shifted
+#
+#     # Reciprocal grids
+#     recip_s = reciprocal_grid(discr.grid, shift=True)
+#     recip_n = reciprocal_grid(discr.grid, shift=False)
+#     assert np.allclose(recip_s.coord_vectors[0],
+#                        np.linspace(-np.pi, np.pi / 2, 4))
+#     assert np.allclose(recip_n.coord_vectors[0],
+#                        np.linspace(-3 * np.pi / 4, 3 * np.pi / 4, 4))
+#
+#     # Range
+#     range_part_s = odl.uniform_partition_fromgrid(recip_s)
+#     range_s = odl.uniform_discr_frompartition(range_part_s, dtype='complex')
+#     range_part_n = odl.uniform_partition_fromgrid(recip_n)
+#     range_n = odl.uniform_discr_frompartition(range_part_n, dtype='complex')
+#
+#     # Pre-processing
+#     preproc_s = [1, -1, 1, -1]
+#     preproc_n = [np.exp(1j * 3 / 4 * np.pi * k) for k in range(4)]
+#
+#     fpre_s = dft_preprocess_data(f_discr, shift=True)
+#     fpre_n = dft_preprocess_data(f_discr, shift=False)
+#     assert np.allclose(fpre_s, f_discr * discr.element(preproc_s))
+#     assert np.allclose(fpre_n, f_discr * discr.element(preproc_n))
+#
+#     # FFT step, replicating the _call_numpy method
+#     fft_s = np.fft.fftn(fpre_s, s=discr.shape, axes=[0])
+#     fft_n = np.fft.fftn(fpre_n, s=discr.shape, axes=[0])
+#     assert np.allclose(fft_s, [0, -1 + 1j, 2, -1 - 1j])
+#     assert np.allclose(
+#         fft_n, [np.exp(1j * np.pi * (3 - 2 * k) / 4) +
+#                 np.exp(1j * np.pi * (3 - 2 * k) / 2)
+#                 for k in range(4)])
+#
+#     # Interpolation kernel FT
+#     interp_s = np.sinc(np.linspace(-1 / 2, 1 / 4, 4)) / np.sqrt(2 * np.pi)
+#     interp_n = np.sinc(np.linspace(-3 / 8, 3 / 8, 4)) / np.sqrt(2 * np.pi)
+#     assert np.allclose(interp_s,
+#                        _interp_kernel_ft(np.linspace(-1 / 2, 1 / 4, 4),
+#                                          interp='nearest'))
+#     assert np.allclose(interp_n,
+#                        _interp_kernel_ft(np.linspace(-3 / 8, 3 / 8, 4),
+#                                          interp='nearest'))
+#
+#     # Post-processing
+#     postproc_s = np.exp(1j * np.pi * np.linspace(-3 / 2, 3 / 4, 4))
+#     postproc_n = np.exp(1j * np.pi * np.linspace(-9 / 8, 9 / 8, 4))
+#
+#     fpost_s = dft_postprocess_data(
+#         range_s.element(fft_s), real_grid=discr.grid, recip_grid=recip_s,
+#         shift=[True], axes=(0,), interp='nearest')
+#     fpost_n = dft_postprocess_data(
+#         range_n.element(fft_n), real_grid=discr.grid, recip_grid=recip_n,
+#         shift=[False], axes=(0,), interp='nearest')
+#
+#     assert np.allclose(fpost_s, fft_s * postproc_s * interp_s)
+#     assert np.allclose(fpost_n, fft_n * postproc_n * interp_n)
+#
+#     # Comparing to the known result sqrt(2/pi) * sinc(x)
+#     assert np.allclose(fpost_s, fhat(recip_s.coord_vectors[0]))
+#     assert np.allclose(fpost_n, fhat(recip_n.coord_vectors[0]))
+#
+#     # Doing the exact same with direct application of the FT operator
+#     ft_op_s = FourierTransform(discr, shift=True)
+#     ft_op_n = FourierTransform(discr, shift=False)
+#     assert ft_op_s.range.grid == recip_s
+#     assert ft_op_n.range.grid == recip_n
+#
+#     ft_f_s = ft_op_s(f)
+#     ft_f_n = ft_op_n(f)
+#     assert np.allclose(ft_f_s, fhat(recip_s.coord_vectors[0]))
+#     assert np.allclose(ft_f_n, fhat(recip_n.coord_vectors[0]))
+#
+#     # Second test function, asymmetric. Can also be represented exactly in the
+#     # discretization.
+#     def f(x):
+#         return (x >= 0) & (x <= 1)
+#
+#     def fhat(x):
+#         return np.exp(-1j * x / 2) * sinc(x / 2) / np.sqrt(2 * np.pi)
+#
+#     # Discretize f, check values
+#     f_discr = discr.element(f)
+#     assert np.allclose(f_discr, [0, 0, 1, 0])
+#
+#     # Pre-processing
+#     fpre_s = dft_preprocess_data(f_discr, shift=True)
+#     fpre_n = dft_preprocess_data(f_discr, shift=False)
+#     assert np.allclose(fpre_s, [0, 0, 1, 0])
+#     assert np.allclose(fpre_n, [0, 0, -1j, 0])
+#
+#     # FFT step
+#     fft_s = np.fft.fftn(fpre_s, s=discr.shape, axes=[0])
+#     fft_n = np.fft.fftn(fpre_n, s=discr.shape, axes=[0])
+#     assert np.allclose(fft_s, [1, -1, 1, -1])
+#     assert np.allclose(fft_n, [-1j, 1j, -1j, 1j])
+#
+#     fpost_s = dft_postprocess_data(
+#         range_s.element(fft_s), real_grid=discr.grid, recip_grid=recip_s,
+#         shift=[True], axes=(0,), interp='nearest')
+#     fpost_n = dft_postprocess_data(
+#         range_n.element(fft_n), real_grid=discr.grid, recip_grid=recip_n,
+#         shift=[False], axes=(0,), interp='nearest')
+#
+#     assert np.allclose(fpost_s, fft_s * postproc_s * interp_s)
+#     assert np.allclose(fpost_n, fft_n * postproc_n * interp_n)
+#
+#     # Comparing to the known result exp(-1j*x/2) * sinc(x/2) / sqrt(2*pi)
+#     assert np.allclose(fpost_s, fhat(recip_s.coord_vectors[0]))
+#     assert np.allclose(fpost_n, fhat(recip_n.coord_vectors[0]))
+#
+#     # Doing the exact same with direct application of the FT operator
+#     ft_f_s = ft_op_s(f)
+#     ft_f_n = ft_op_n(f)
+#     assert np.allclose(ft_f_s, fhat(recip_s.coord_vectors[0]))
+#     assert np.allclose(ft_f_n, fhat(recip_n.coord_vectors[0]))
+#
+#==============================================================================
 if __name__ == '__main__':
     pytest.main([str(__file__.replace('\\', '/')), '-v'])

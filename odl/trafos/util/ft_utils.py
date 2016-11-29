@@ -453,9 +453,9 @@ def dft_postprocess_data(arr, real_grid, recip_grid, shift, axes,
         Interpolation scheme used in the real-space.
     sign : {'-', '+'}, optional
         Sign of the complex exponent.
-    op : {'multiply', 'divide'}
-        Operation to perform with the stride times the interpolation
-        kernel FT
+    op : {'multiply', 'divide', 'adjoint', 'inverse_adjoint'}
+        Operation to perform with the stride and times the interpolation
+        kernel FT.
     out : `numpy.ndarray`, optional
         Array in which the result is stored. If ``out is arr``, an
         in-place modification is performed.
@@ -548,6 +548,8 @@ def dft_postprocess_data(arr, real_grid, recip_grid, shift, axes,
             onedim_arr /= stride * _interp_kernel_ft(freqs, intp)
         elif op == 'adjoint':
             onedim_arr *= _interp_kernel_ft(freqs, intp) / stride * (2 * np.pi)
+        elif op == 'inverse_adjoint':
+            onedim_arr /= _interp_kernel_ft(freqs, intp) / stride * (2 * np.pi)
         else:
             raise ValueError("kernel `op` '{}' not understood".format(op_in))
 

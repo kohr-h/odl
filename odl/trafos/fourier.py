@@ -822,12 +822,18 @@ class FourierTransformBase(Operator):
                 self.__halfcomplex = bool(kwargs.pop('halfcomplex', True))
 
             shifts = kwargs.pop('shift', None)
-            if self.halfcomplex or shifts is None:
+
+            default_shifts = tuple(n % 2 == 0 for n in domain.shape)
+            if shifts is None:
                 # Automatically select shifts so that 0 freq is contained
-                self.__shifts = tuple(n % 2 == 0 for n in domain.shape)
+                self.__shifts = default_shifts
             else:
                 self.__shifts = normalized_scalar_param_list(
                     shifts, length=len(self.axes), param_conv=bool)
+            if self.halfcomplex and not self.shifts == default_shifts:
+                raise ValueError('invalid `shifts` {} for `halfcomplex` '
+                                 'transform'.format(shifts))
+
         else:
             raise NotImplementedError('irregular grids not yet supported')
 
@@ -855,6 +861,10 @@ class FourierTransformBase(Operator):
         self._use_fftshift = all(
             (n % 2 == 0 and shift) or (n % 2 != 0 and not shift)
             for n, shift in zip(self.domain.shape, self.shifts))
+
+        # Internal check
+        if self.halfcomplex:
+            assert self._use_fftshift
 
         # TODO: benchmark if we really need these guys
         # Storing temporaries directly as arrays
@@ -1214,6 +1224,12 @@ class FourierTransform(FourierTransformBase):
 
             Variants using this: R2C, C2R (inverse), HC2R (inverse)
 
+        variant : {'forward', 'inverse_adjoint'}, optional
+            The variant that should be used. In the continuous case, the
+            inverse is equal to the adjoint, but in the discrete case they
+            differ slightly.
+            Default: 'forward'
+
         Notes
         -----
         * The transform variants are:
@@ -1238,6 +1254,13 @@ class FourierTransform(FourierTransformBase):
           <odlgroup.github.io/odl/math/trafos/fourier_transform.html#adjoint>`_
           for details.
         """
+        variant = kwargs.pop('variant', 'forward')
+        if variant == 'forward':
+            self.__op = 'multiply'
+        elif variant == 'inverse_adjoint':
+            self.__op = 'inverse_adjoint'
+        else:
+            raise ValueError('`variant` not understood')
         super().__init__(inverse=False, domain=domain, range=range,
                          impl=impl, **kwargs)
 
@@ -1280,7 +1303,7 @@ class FourierTransform(FourierTransformBase):
         return dft_postprocess_data(
             out, real_grid=self.domain.grid, recip_grid=self.range.grid,
             shift=self.shifts, axes=self.axes, sign=self.sign,
-            interp=self.domain.interp, op='multiply', out=out)
+            interp=self.domain.interp, op=self.__op, out=out)
 
     def _call_numpy(self, x):
         """Return ``self(x)`` for numpy back-end.
@@ -1357,11 +1380,9 @@ class FourierTransform(FourierTransformBase):
         kwargs.pop('halfcomplex', None)
         kwargs.pop('normalise_idft', None)  # We use `False`
 
-        # Pre-processing before calculating the sums, in-place for C2C and R2C
-        if self.halfcomplex:
-            preproc = self._preprocess(x)
-            assert is_real_dtype(preproc.dtype)
-        else:
+        # Pre-processing before calculating the sums, only performed
+        # for C2C and R2C
+        if not self._use_fftshift:
             # out is preproc in this case
             preproc = self._preprocess(x, out=out)
             assert is_complex_floating_dtype(preproc.dtype)
@@ -1377,6 +1398,11 @@ class FourierTransform(FourierTransformBase):
         assert is_complex_floating_dtype(out.dtype)
 
         # Post-processing accounting for shift, scaling and interpolation
+        # TODO: benchmark in-place vs. out-of-place
+        if self._use_fftshift:
+            out[:] = fftshift(out, axes=self.axes,
+                              halfcomplex=self.halfcomplex)
+
         out = self._postprocess(out, out=out)
         assert is_complex_floating_dtype(out.dtype)
         return out
@@ -1384,9 +1410,6 @@ class FourierTransform(FourierTransformBase):
     @property
     def adjoint(self):
         """The adjoint Fourier transform."""
-        if self.domain.exponent != 2.0 or self.range.exponent != 2.0:
-            raise NotImplementedError(
-                'Adjoint only implemented for exponent=2')
         sign = '+' if self.sign == '-' else '-'
         return FourierTransformInverse(
             domain=self.range, range=self.domain, impl=self.impl,
@@ -1500,7 +1523,6 @@ class FourierTransformInverse(FourierTransformBase):
           <odlgroup.github.io/odl/math/trafos/fourier_transform.html#adjoint>`_
           for details.
         """
-        # TODO: variants wrt placement of 2*pi
         variant = kwargs.pop('variant', 'inverse')
         if variant == 'inverse':
             self.__op = 'divide'
@@ -1567,15 +1589,19 @@ class FourierTransformInverse(FourierTransformBase):
         out : `numpy.ndarray`
             Result of the transform
         """
-        # Pre-processing before calculating the DFT
-        preproc = self._preprocess(x)
+        # Pre-processing before calculating the DFT. Only used if FFT shift
+        # is not used instead.
+        if self._use_fftshift:
+            preproc = x
+        else:
+            preproc = self._preprocess(x)
 
         # The actual call to the FFT library
         # Normalization by 1 / prod(shape[axes]) is done by Numpy's FFT if
         # one of the "i" functions is used. For sign='-' we need to do it
         # ourselves.
         if self.halfcomplex:
-            s = np.asarray(self.range.shape)[list(self.axes)]
+            s = np.take(self.range.shape, self.axes)
             out = np.fft.irfftn(preproc, axes=self.axes, s=s)
         else:
             if self.sign == '-':
@@ -1585,6 +1611,8 @@ class FourierTransformInverse(FourierTransformBase):
                 out = np.fft.ifftn(preproc, axes=self.axes)
 
         # Post-processing in IFT = pre-processing in FT (in-place)
+        if self._use_fftshift:
+            out = fftshift(out, axes=self.axes, halfcomplex=self.halfcomplex)
         self._postprocess(out, out=out)
         if self.halfcomplex:
             assert is_real_dtype(out.dtype)
@@ -1631,7 +1659,11 @@ class FourierTransformInverse(FourierTransformBase):
 
         # Pre-processing in IFT = post-processing in FT, but with division
         # instead of multiplication and switched grids. In-place for C2C only.
-        if self.range.field == ComplexNumbers():
+        if self._use_fftshift:
+            # Need a copy for the subsequent step in case of C2R.
+            # Otherwise we can just use the input directly.
+            preproc = x.copy() if self.range.field == RealNumbers() else x
+        elif self.range.field == ComplexNumbers():
             # preproc is out in this case
             preproc = self._preprocess(x, out=out)
         else:
@@ -1666,6 +1698,10 @@ class FourierTransformInverse(FourierTransformBase):
         # Post-processing in IFT = pre-processing in FT. In-place for
         # C2C and HC2R. For C2R, this is out-of-place and discards the
         # imaginary part.
+        if self._use_fftshift:
+            # TODO: benchmark in-place vs. out-of-place
+            out[:] = fftshift(out, axes=self.axes,
+                              halfcomplex=self.halfcomplex)
         self._postprocess(fft_arr, out=out)
         return out
 
@@ -1677,6 +1713,11 @@ class FourierTransformInverse(FourierTransformBase):
             domain=self.range, range=self.domain, impl=self.impl,
             axes=self.axes, halfcomplex=self.halfcomplex, shift=self.shifts,
             sign=sign, tmp_r=self._tmp_r, tmp_f=self._tmp_f)
+
+    @property
+    def adjoint(self):
+        """Adjoint of the inverse operator."""
+
 
 
 if __name__ == '__main__':

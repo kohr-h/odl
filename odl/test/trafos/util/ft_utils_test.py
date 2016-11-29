@@ -325,7 +325,7 @@ def test_fftshift_1d(halfcomplex, parity):
     if halfcomplex:
         # Check against the result of shifting a full FFT first and then
         # taking the half-complex part of that
-        true_shifted = _npy_fftshift(dft)[:length // 2 + 1]
+        true_shifted = np.fft.fftshift(dft)[:length // 2 + 1]
         fftshift_input = dft[:length // 2 + 1]
     else:
         true_shifted = _npy_fftshift(dft)
@@ -351,16 +351,13 @@ def test_fftshift_3d(halfcomplex, axes):
         # Reduced length in the last axis in `axes`
         slc = [slice(None)] * len(shape)
         slc[axes[-1]] = slice(shape[axes[-1]] // 2 + 1)
-        true_shifted = _npy_fftshift(dft, axes=axes)[slc]
+        true_shifted = np.fft.fftshift(dft, axes=axes)[slc]
         fftshift_input = dft[slc]
     else:
-        true_shifted = _npy_fftshift(dft, axes=axes)
+        true_shifted = np.fft.fftshift(dft, axes=axes)
         fftshift_input = dft
 
     shifted = fftshift(fftshift_input, axes=axes, halfcomplex=halfcomplex)
-    print(shifted)
-    print('---------------------------------')
-    print(true_shifted)
     assert all_almost_equal(shifted, true_shifted)
 
 
