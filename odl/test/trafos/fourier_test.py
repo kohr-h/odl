@@ -37,6 +37,7 @@ from odl.util import (all_almost_equal, never_skip, skip_if_no_pyfftw,
                       noise_element,
                       is_real_dtype, conj_exponent, complex_dtype,
                       simple_fixture)
+
 # --- pytest fixtures --- #
 
 # Fixture for FFT implementations
@@ -52,88 +53,36 @@ exponent = simple_fixture('p', [2.0, 1.0, float('inf'), 1.5])
 sign = simple_fixture('sign', ['-', '+'])
 
 
-fouriertrafo_params = ['1d real-halfcomplex, odd n',
-                       '1d real-halfcomplex, even n',
-                       '1d real-complex, odd n',
-                       '1d real-complex, even n',
-                       '1d real-complex, odd n, sign +',
-                       '1d real-complex, even n, sign +',
-                       '1d complex-complex odd n',
-                       '1d complex-complex even n',
-                       '2d real-halfcomplex',
-                       '2d real-complex',
-                       '2d complex-complex']
-fouriertrafo_ids = [" ft = '{}' ".format(m)
-                    for m in fouriertrafo_params]
+ft_params = [' '.join(p)
+             for p in product(['1d', '2d'],
+                              ['R2HC', 'R2C', 'C2C'],
+                              ['even', 'odd'],
+                              ['+', '-'])]
+for p in ft_params:
+    if 'HC' in p and '+' in p:
+        ft_params.remove(p)
+ft_ids = [' ft = {} '.format(p) for p in ft_params]
 
 
-@pytest.fixture(scope='module',
-                params=fouriertrafo_params, ids=fouriertrafo_ids)
-def fourier_setup(request, impl):
-    name = request.param
+@pytest.fixture(scope='module', params=ft_params, ids=ft_ids)
+def fourier_trafo(request, impl):
+    dim_str, dom_ran_str, parity, sign = request.param.split(' ')
+    ndim = int(dim_str[0])
+    halfcomplex = dom_ran_str.endswith('HC')
+    dom_real = dom_ran_str.startswith('R')
 
-    if name == '1d real-halfcomplex, odd n':
-        discr = odl.uniform_discr(-2, 2, 11, impl='numpy', dtype='float64')
-        halfcomplex = True
-        ft = FourierTransform(discr, sign='-', impl=impl, halfcomplex=True)
-    elif name == '1d real-halfcomplex, even n':
-        discr = odl.uniform_discr(-2, 2, 20, impl='numpy', dtype='float32')
-        halfcomplex = True
-        ft = FourierTransform(discr, impl=impl, halfcomplex=True)
-    elif name == '1d real-complex, odd n':
-        discr = odl.uniform_discr(-2, 2, 15, impl='numpy', dtype='float32')
-        halfcomplex = False
-        ft = FourierTransform(discr, impl=impl, halfcomplex=False)
-    elif name == '1d real-complex, even n':
-        discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='float64')
-        halfcomplex = False
-        ft = FourierTransform(discr, impl=impl, halfcomplex=False)
-    elif name == '1d real-complex, odd n, sign +':
-        discr = odl.uniform_discr(-2, 2, 15, impl='numpy', dtype='float32')
-        halfcomplex = False
-        ft = FourierTransform(discr, impl=impl, sign='+', halfcomplex=False)
-    elif name == '1d real-complex, even n, sign +':
-        discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='float64')
-        halfcomplex = False
-        ft = FourierTransform(discr, impl=impl, sign='+', halfcomplex=False)
-    elif name == '1d complex-complex odd n':
-        discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='complex64')
-        halfcomplex = False
-        ft = FourierTransform(discr, impl=impl)
-    elif name == '1d complex-complex even n':
-        discr = odl.uniform_discr(-2, 2, 22, impl='numpy', dtype='complex128')
-        halfcomplex = False
-        ft = FourierTransform(discr, impl=impl)
-    elif name == '2d real-halfcomplex':
-        discr = odl.uniform_discr([-2, -3], [0, 4], [6, 5], impl='numpy',
-                                  dtype='float32')
-        halfcomplex = True
-        ft = FourierTransform(discr, impl=impl, halfcomplex=True)
-    elif name == '2d real-complex':
-        discr = odl.uniform_discr([0, -20], [0.3, -16], [11, 11], impl='numpy',
-                                  dtype='float32')
-        halfcomplex = False
-        ft = FourierTransform(discr, impl=impl, halfcomplex=False)
-    elif name == '2d complex-complex':
-        discr = odl.uniform_discr([-2, -2], [2, 2], [20, 4], impl='numpy',
-                                  dtype='complex64')
-        halfcomplex = False
-        ft = FourierTransform(discr, impl=impl)
-    else:
-        assert False
+    dom_shape = (6,) if parity == 'even' else (7,)
+    if ndim == 2:
+        dom_shape += (8,) if parity == 'even' else (9,)
 
-    return ft, halfcomplex
+    dom_dtype = 'float32' if dom_real else 'complex64'
+    ft_domain = odl.uniform_discr([0] * ndim, [1] * ndim, shape=dom_shape,
+                                  dtype=dom_dtype)
+    return FourierTransform(ft_domain, impl=impl, halfcomplex=halfcomplex,
+                            sign=sign)
 
 
 # --- helper functions --- #
-
-def _params_from_dtype(dtype):
-    if is_real_dtype(dtype):
-        halfcomplex = True
-    else:
-        halfcomplex = False
-    return halfcomplex, complex_dtype(dtype)
-
 
 def sinc(x):
     # numpy.sinc scales by pi, we don't want that
@@ -418,134 +367,110 @@ def test_dft_init_plan(impl):
 # ---- FourierTransform ---- #
 
 
-def test_fourier_trafo_range(fourier_setup):
-    # Check if the range is initialized correctly. Encompasses the init test
+def test_fourier_trafo_range(fourier_trafo):
+    """Check if the FT range is initialized correctly.
 
-    ft, halfcomplex = fourier_setup
-    default_shifts = tuple(n % 2 == 0 for n in ft.domain.shape)
-    assert ft.shifts == default_shifts
-    true_grid = reciprocal_grid(ft.domain.grid, halfcomplex=halfcomplex,
+    This encompasses initialization tests.
+    """
+    default_shifts = tuple(n % 2 == 0 for n in fourier_trafo.domain.shape)
+    assert fourier_trafo.shifts == default_shifts
+    true_grid = reciprocal_grid(fourier_trafo.domain.grid,
+                                halfcomplex=fourier_trafo.halfcomplex,
                                 shift=default_shifts)
-    assert ft.range.grid == true_grid
+    assert fourier_trafo.range.grid == true_grid
 
-    if halfcomplex:
+    if fourier_trafo.halfcomplex:
         # Can only use default shifts for halfcomplex
         bad_shifts = tuple(not shift for shift in default_shifts)
         with pytest.raises(ValueError):
-            FourierTransform(ft.domain, halfcomplex=True, shift=bad_shifts)
+            FourierTransform(fourier_trafo.domain, halfcomplex=True,
+                             shift=bad_shifts)
     else:
         opposite_shifts = tuple(not shift for shift in default_shifts)
-        new_ft = FourierTransform(ft.domain, halfcomplex=False,
+        new_ft = FourierTransform(fourier_trafo.domain, halfcomplex=False,
                                   shift=opposite_shifts)
-        true_grid = reciprocal_grid(ft.domain.grid, halfcomplex=False,
+        true_grid = reciprocal_grid(fourier_trafo.domain.grid,
+                                    halfcomplex=False,
                                     shift=opposite_shifts)
         assert new_ft.range.grid == true_grid
 
     with pytest.raises(TypeError):
-        FourierTransform(ft.domain.partition)
+        FourierTransform(fourier_trafo.domain.partition)
 
 
-def test_fourier_trafo_init_plan(impl, floating_dtype):
+def test_fourier_trafo_init_plan(fourier_trafo):
+    """Test if initializing the plans for pyFFTW works."""
 
-    # Not supported, skip
-    if floating_dtype == np.dtype('float16') and impl == 'pyfftw':
-        return
+    # Without temporaries
+    if fourier_trafo.impl != 'pyfftw':
+        with pytest.raises(ValueError):
+            fourier_trafo.init_fftw_plan()
+        with pytest.raises(ValueError):
+            fourier_trafo.clear_fftw_plan()
+    else:
+        fourier_trafo.init_fftw_plan()
+        # Make sure plan can be used
+        fourier_trafo._fftw_plan(
+            fourier_trafo.domain.element().asarray(),
+            fourier_trafo.range.element().asarray())
+        fourier_trafo.clear_fftw_plan()
+        assert fourier_trafo._fftw_plan is None
+
+    # With temporaries, i.e. the plan is created using the temporaries.
+    # We check that they are usable with domain and range elements.
+    fourier_trafo.create_temporaries(r=True, f=False)
+    if fourier_trafo.impl == 'pyfftw':
+        fourier_trafo.init_fftw_plan()
+
+        # Make sure plan can be used
+        fourier_trafo._fftw_plan(
+            fourier_trafo.domain.element().asarray(),
+            fourier_trafo.range.element().asarray())
+        fourier_trafo.clear_fftw_plan()
+        assert fourier_trafo._fftw_plan is None
+
+    fourier_trafo.create_temporaries(r=False, f=True)
+    if fourier_trafo.impl == 'pyfftw':
+        fourier_trafo.init_fftw_plan()
+
+        # Make sure plan can be used
+        fourier_trafo._fftw_plan(
+            fourier_trafo.domain.element().asarray(),
+            fourier_trafo.range.element().asarray())
+        fourier_trafo.clear_fftw_plan()
+        assert fourier_trafo._fftw_plan is None
+
+
+def test_fourier_trafo_create_temp():
+    """Test if creating and clearing temporaries works."""
 
     shape = 10
-    halfcomplex, _ = _params_from_dtype(floating_dtype)
+    space_discr = odl.uniform_discr(0, 1, shape, dtype='complex64')
 
-    space_discr = odl.uniform_discr(0, 1, shape, dtype=floating_dtype)
+    ft = FourierTransform(space_discr)
+    ft.create_temporaries()
+    assert ft._tmp_r is not None
+    assert ft._tmp_f is not None
 
-    ft = FourierTransform(space_discr, impl=impl, halfcomplex=halfcomplex)
-    if impl != 'pyfftw':
-        with pytest.raises(ValueError):
-            ft.init_fftw_plan()
-        with pytest.raises(ValueError):
-            ft.clear_fftw_plan()
-    else:
-        ft.init_fftw_plan()
-        # Make sure plan can be used
-        ft._fftw_plan(ft.domain.element().asarray(),
-                      ft.range.element().asarray())
-        ft.clear_fftw_plan()
-        assert ft._fftw_plan is None
+    ift = ft.inverse
+    assert ift._tmp_r is not None
+    assert ift._tmp_f is not None
+
+    ft.clear_temporaries()
+    assert ft._tmp_r is None
+    assert ft._tmp_f is None
+
+
+def test_fourier_trafo_call(fourier_trafo):
+    """Test if all variants can be called without error."""
+    one = fourier_trafo.domain.one()
+    assert np.allclose(fourier_trafo.inverse(fourier_trafo(one)), one)
 
     # With temporaries
-    ft.create_temporaries(r=True, f=False)
-    if impl != 'pyfftw':
-        with pytest.raises(ValueError):
-            ft.init_fftw_plan()
-        with pytest.raises(ValueError):
-            ft.clear_fftw_plan()
-    else:
-        ft.init_fftw_plan()
-
-        # Make sure plan can be used
-        ft._fftw_plan(ft.domain.element().asarray(),
-                      ft.range.element().asarray())
-        ft.clear_fftw_plan()
-        assert ft._fftw_plan is None
-
-    ft.create_temporaries(r=False, f=True)
-    if impl != 'pyfftw':
-        with pytest.raises(ValueError):
-            ft.init_fftw_plan()
-        with pytest.raises(ValueError):
-            ft.clear_fftw_plan()
-    else:
-        ft.init_fftw_plan()
-
-        # Make sure plan can be used
-        ft._fftw_plan(ft.domain.element().asarray(),
-                      ft.range.element().asarray())
-        ft.clear_fftw_plan()
-        assert ft._fftw_plan is None
+    fourier_trafo.create_temporaries()
+    assert np.allclose(fourier_trafo.inverse(fourier_trafo(one)), one)
 
 
-#==============================================================================
-# def test_fourier_trafo_create_temp():
-#
-#     shape = 10
-#     space_discr = odl.uniform_discr(0, 1, shape, dtype='complex64')
-#
-#     ft = FourierTransform(space_discr)
-#     ft.create_temporaries()
-#     assert ft._tmp_r is not None
-#     assert ft._tmp_f is not None
-#
-#     ift = ft.inverse
-#     assert ift._tmp_r is not None
-#     assert ift._tmp_f is not None
-#
-#     ft.clear_temporaries()
-#     assert ft._tmp_r is None
-#     assert ft._tmp_f is None
-#
-#
-# def test_fourier_trafo_call(impl, floating_dtype):
-#     # Test if all variants can be called without error
-#
-#     # Not supported, skip
-#     if floating_dtype == np.dtype('float16') and impl == 'pyfftw':
-#         return
-#
-#     shape = 10
-#     halfcomplex, _ = _params_from_dtype(floating_dtype)
-#     space_discr = odl.uniform_discr(0, 1, shape, dtype=floating_dtype)
-#
-#     ft = FourierTransform(space_discr, impl=impl, halfcomplex=halfcomplex)
-#     ift = ft.inverse
-#
-#     one = space_discr.one()
-#     assert np.allclose(ift(ft(one)), one)
-#
-#     # With temporaries
-#     ft.create_temporaries()
-#     ift = ft.inverse  # shares temporaries
-#     one = space_discr.one()
-#     assert np.allclose(ift(ft(one)), one)
-#
-#
 # def test_fourier_trafo_charfun_1d():
 #     # Characteristic function of [0, 1], its Fourier transform is
 #     # given by exp(-1j * y / 2) * sinc(y/2)
