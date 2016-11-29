@@ -334,6 +334,10 @@ def test_fftshift_1d(halfcomplex, parity):
     shifted = fftshift(fftshift_input, halfcomplex=halfcomplex)
     assert all_almost_equal(shifted, true_shifted)
 
+    # Check inverse
+    ishifted = fftshift(shifted, halfcomplex=halfcomplex, inverse=True)
+    assert all_almost_equal(ishifted, fftshift_input)
+
 
 def test_fftshift_3d(halfcomplex, axes):
     """Check if FFT shifting works the same as the Numpy function in 3D."""
@@ -359,6 +363,11 @@ def test_fftshift_3d(halfcomplex, axes):
 
     shifted = fftshift(fftshift_input, axes=axes, halfcomplex=halfcomplex)
     assert all_almost_equal(shifted, true_shifted)
+
+    # Check inverse
+    ishifted = fftshift(shifted, axes=axes, halfcomplex=halfcomplex,
+                        inverse=True)
+    assert all_almost_equal(ishifted, fftshift_input)
 
 
 if __name__ == '__main__':
