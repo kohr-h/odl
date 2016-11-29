@@ -834,7 +834,7 @@ class FourierTransformBase(Operator):
         # (shift if even or don't shift if odd).
         self._use_fftshift = all(
             (n % 2 == 0 and shift) or (n % 2 != 0 and not shift)
-            for n, shift in zip(self.domain.shape, self.shifts))
+            for n, shift in zip(domain.shape, self.shifts))
 
         if self.halfcomplex:
             # Internal check
@@ -1106,8 +1106,8 @@ class FourierTransformBase(Operator):
         if self.impl != 'pyfftw':
             raise ValueError('cannot create fftw plan without fftw backend')
 
-        arr_in = self.domain.element()
-        arr_out = self.range.element()
+        arr_in = self.domain.element().asarray()
+        arr_out = self.range.element().asarray()
         kwargs.pop('planning_timelimit', None)
         direction = 'forward' if self.sign == '-' else 'backward'
         self._fftw_plan = pyfftw_call(

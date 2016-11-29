@@ -416,59 +416,15 @@ def test_fourier_trafo_init_plan(fourier_trafo):
         fourier_trafo.clear_fftw_plan()
         assert fourier_trafo._fftw_plan is None
 
-    # With temporaries, i.e. the plan is created using the temporaries.
-    # We check that they are usable with domain and range elements.
-    fourier_trafo.create_temporaries(r=True, f=False)
-    if fourier_trafo.impl == 'pyfftw':
-        fourier_trafo.init_fftw_plan()
 
-        # Make sure plan can be used
-        fourier_trafo._fftw_plan(
-            fourier_trafo.domain.element().asarray(),
-            fourier_trafo.range.element().asarray())
-        fourier_trafo.clear_fftw_plan()
-        assert fourier_trafo._fftw_plan is None
-
-    fourier_trafo.create_temporaries(r=False, f=True)
-    if fourier_trafo.impl == 'pyfftw':
-        fourier_trafo.init_fftw_plan()
-
-        # Make sure plan can be used
-        fourier_trafo._fftw_plan(
-            fourier_trafo.domain.element().asarray(),
-            fourier_trafo.range.element().asarray())
-        fourier_trafo.clear_fftw_plan()
-        assert fourier_trafo._fftw_plan is None
-
-
-def test_fourier_trafo_create_temp():
-    """Test if creating and clearing temporaries works."""
-
-    shape = 10
-    space_discr = odl.uniform_discr(0, 1, shape, dtype='complex64')
-
-    ft = FourierTransform(space_discr)
-    ft.create_temporaries()
-    assert ft._tmp_r is not None
-    assert ft._tmp_f is not None
-
-    ift = ft.inverse
-    assert ift._tmp_r is not None
-    assert ift._tmp_f is not None
-
-    ft.clear_temporaries()
-    assert ft._tmp_r is None
-    assert ft._tmp_f is None
-
-
-def test_fourier_trafo_call(fourier_trafo):
-    """Test if all variants can be called without error."""
-    one = fourier_trafo.domain.one()
-    assert np.allclose(fourier_trafo.inverse(fourier_trafo(one)), one)
-
-    # With temporaries
-    fourier_trafo.create_temporaries()
-    assert np.allclose(fourier_trafo.inverse(fourier_trafo(one)), one)
+#def test_fourier_trafo_call(fourier_trafo):
+#    """Test if all variants can be called without error."""
+#    one = fourier_trafo.domain.one()
+#    assert np.allclose(fourier_trafo.inverse(fourier_trafo(one)), one)
+#
+#    # With temporaries
+#    fourier_trafo.create_temporaries()
+#    assert np.allclose(fourier_trafo.inverse(fourier_trafo(one)), one)
 
 
 # def test_fourier_trafo_charfun_1d():
