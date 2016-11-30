@@ -446,10 +446,12 @@ def test_fourier_trafo_call(fourier_trafo):
     one = fourier_trafo.domain.one()
 
     ft_one = fourier_trafo(one)
+    print('forward sign ', fourier_trafo.sign)
     print(ft_one)
     inv_fwd = fourier_trafo.inverse(ft_one)
+    print('inverse sign ', fourier_trafo.inverse.sign)
     print(inv_fwd)
-    assert np.allclose(fourier_trafo.inverse(fourier_trafo(one)), one)
+    assert np.allclose(inv_fwd, one)
 
 
 def test_fourier_trafo_charfun_1d():

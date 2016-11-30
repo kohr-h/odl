@@ -546,6 +546,7 @@ def dft_postprocess_data(arr, real_grid, recip_grid, shift, axes,
             print('multiplying with ', stride)
             onedim_arr *= stride * _interp_kernel_ft(freqs, intp)
         elif op == 'divide':
+            print('dividing with ', stride)
             onedim_arr /= stride * _interp_kernel_ft(freqs, intp)
         elif op == 'adjoint':
             onedim_arr *= _interp_kernel_ft(freqs, intp) / stride * (2 * np.pi)
