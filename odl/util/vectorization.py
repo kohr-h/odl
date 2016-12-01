@@ -33,7 +33,15 @@ __all__ = ('is_valid_input_array', 'is_valid_input_meshgrid',
 
 
 def is_valid_input_array(x, ndim=None):
-    """Test if ``x`` is a correctly shaped point array in R^d."""
+    """Return ``True`` if ``x`` is a correctly shaped point array in R^d.
+
+    "Correctly shaped" means ``(N,)`` in 1 dimension or ``(d, N)`` in d
+    dimensions.
+
+    **Important:** If used as input check combined with
+    `is_valid_input_meshgrid`, that function should be called first
+    since in 1D, a valid meshgrid is also a valid array.
+    """
     x = np.asarray(x)
 
     if ndim is None or ndim == 1:
@@ -43,11 +51,11 @@ def is_valid_input_array(x, ndim=None):
 
 
 def is_valid_input_meshgrid(x, ndim):
-    """Test if ``x`` is a `meshgrid` sequence for points in R^d."""
-    # This case is triggered in FunctionSetElement.__call__ if the
-    # domain does not have an 'ndim' attribute. We return False and
-    # continue.
+    """Return ``True`` if ``x`` is a `meshgrid` tuple for points in R^d."""
     if ndim is None:
+        # This case is triggered in FunctionSetElement.__call__ if the
+        # domain does not have an 'ndim' attribute. We return False and
+        # continue.
         return False
 
     if not isinstance(x, tuple):

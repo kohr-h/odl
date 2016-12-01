@@ -62,8 +62,14 @@ def remap_points(points, partition, pad_mode):
         raise TypeError('`partition` must be a `RectPartition` instance, '
                         'got {!r}'.format(partition))
 
-    if not (is_valid_input_array(points, partition.ndim) or
-            is_valid_input_meshgrid(points, partition.ndim)):
+    if is_valid_input_meshgrid(points, partition.ndim):
+        remapped = tuple(p.copy().ravel() for p in points)
+    elif is_valid_input_array(points, partition.ndim):
+        remapped = np.copy(points)
+        if remapped.ndim == 1:
+            # Make extra axis 0 so remapped[0] gives whole array
+            remapped = remapped[None, :]
+    else:
         txt_1d = ' or (n,)' if partition.ndim == 1 else ''
         raise TypeError('`points` {!r} not a valid input. Expected '
                         'a `numpy.ndarray` with shape ({ndim}, n){} or a '
@@ -71,47 +77,46 @@ def remap_points(points, partition, pad_mode):
                         ''.format(points, txt_1d, ndim=partition.ndim))
 
     pad_mode, pad_mode_in = str(pad_mode).lower(), pad_mode
+    squeeze_out = (partition.ndim == 1 and isinstance(points, np.ndarray))
 
     outside_left, outside_right, inside = [], [], []
-    for axis in range(partition.ndim):
-        if partition.ndim == 1 and isinstance(points, np.ndarray):
-            pts = points
-        else:
-            pts = points[axis]
+    for axis, new_pts in enumerate(remapped):
         xmin = partition.min_pt[axis]
         xmax = partition.max_pt[axis]
         grid_pts = partition.grid.coord_vectors[axis]
 
         # Store index arrays downstream reuse
         # TODO: perhaps we need the boolean arrays instead?
-        out_left = (pts <= xmin)
-        out_right = (pts >= xmax)
+        out_left = (new_pts <= xmin)
+        out_right = (new_pts >= xmax)
         outside_left.append(np.where(out_left)[0])
         outside_right.append(np.where(out_right)[0])
         inside.append(np.where(~(out_left | out_right))[0])
 
-        # Remap the points in-place
+        # Remap the points to the domain
         if pad_mode == 'constant':
-            pts[out_left] = xmin
-            pts[out_right] = xmax
+            new_pts[out_left] = xmin
+            new_pts[out_right] = xmax
         elif pad_mode == 'periodic':
-            # pts <-- xmin + (pts - xmin) mod (xmax - xmin)
-            np.mod(pts - xmin, xmax - xmin, out=pts)
-            pts += xmin
+            # out <-- xmin + (x - xmin) mod (xmax - xmin)
+            np.mod(new_pts - xmin, xmax - xmin, out=new_pts)
+            new_pts += xmin
         elif pad_mode == 'symmetric':
             #         { y,             if y <= xmax
-            # pts <-- {
+            # out <-- {
             #         { 2 * xmax - y,  if y > xmax
             #
-            # where y = xmin + (pts - xmin) mod (2 * (xmax - xmin))
-            np.mod(pts - xmin, 2 * (xmax - xmin), out=pts)
-            pts += xmin
-            right_half = (pts > xmax)
-            pts[right_half] = 2 * xmax - pts[right_half]
+            # where y = xmin + (x - xmin) mod (2 * (xmax - xmin))
+            np.mod(new_pts - xmin, 2 * (xmax - xmin), out=new_pts)
+            new_pts += xmin
+            right_half = (new_pts > xmax)
+            new_pts[right_half] = 2 * xmax - new_pts[right_half]
         elif pad_mode in ('order0', 'order1'):
-            pts[out_left] = grid_pts[0]
-            pts[out_right] = grid_pts[-1]
+            new_pts[out_left] = grid_pts[0]
+            new_pts[out_right] = grid_pts[-1]
         else:
             raise ValueError("invalid `pad_mode` '{}'".format(pad_mode_in))
 
-    return outside_left, outside_right, inside
+    if squeeze_out:
+        remapped = remapped.squeeze()
+    return remapped, outside_left, outside_right, inside

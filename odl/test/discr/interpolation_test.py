@@ -26,10 +26,14 @@ import pytest
 import numpy as np
 
 import odl
-from odl.discr.interpolation import remap_points
+from odl.discr.grid import sparse_meshgrid
+from odl.discr.interpolation import remap_points, indices_weights
 from odl.util.testutils import (
     all_almost_equal, all_equal, almost_equal,
     simple_fixture)
+
+
+# --- pytest fixtures --- #
 
 
 pad_mode = simple_fixture(
@@ -110,10 +114,10 @@ def remap_setup(pad_mode, ndim, points_type):
 
         remapped = np.array(remapped)
         if points_type == 'array':
-            return (points, remapped, partition, pad_mode, outside_left,
+            return (points, partition, pad_mode, remapped, outside_left,
                     outside_right, inside)
         elif points_type == 'meshgrid':
-            return ((points,), (remapped,), partition, pad_mode, outside_left,
+            return ((points,), partition, pad_mode, (remapped,), outside_left,
                     outside_right, inside)
         else:
             assert False
@@ -157,8 +161,9 @@ def remap_setup(pad_mode, ndim, points_type):
                 assert False
 
         elif points_type == 'meshgrid':
-            points = (np.array([-0.6, 0.0, 0.7, 1.0, 2.8]),
-                      np.array([-4.2, 0.5, 1.7, 4.0, 5.8]))
+            points = sparse_meshgrid(
+                np.array([-0.6, 0.0, 0.7, 1.0, 2.8]),
+                np.array([-4.2, 0.5, 1.7, 4.0, 5.8]))
             outside_left = (np.arange(0, 2), np.arange(0, 2))
             inside = (np.arange(2, 3), np.arange(2, 3))
             outside_right = (np.arange(3, 5), np.arange(3, 5))
@@ -179,7 +184,7 @@ def remap_setup(pad_mode, ndim, points_type):
                 assert False
         else:
             assert False  # points_type
-        return (points, remapped, partition, pad_mode, outside_left,
+        return (points, partition, pad_mode, remapped, outside_left,
                 outside_right, inside)
     else:
         assert False  # ndim
@@ -188,15 +193,16 @@ def remap_setup(pad_mode, ndim, points_type):
 def test_remap_points(remap_setup):
     """Check remapped points and indices against truth from fixture."""
 
-    pts, true_pts, part, pad_mode, true_il, true_ir, true_iin = remap_setup
-    il, ir, iin = remap_points(pts, part, pad_mode)
+    pts, part, pad_mode, true_pts, true_il, true_ir, true_iin = remap_setup
+    new_pts, il, ir, iin = remap_points(pts, part, pad_mode)
 
     if isinstance(pts, tuple):
-        # meshgrid
-        for p, tp in zip(pts, true_pts):
+        # Meshgrid, compare each array
+        for p, tp in zip(new_pts, true_pts):
             assert np.allclose(p, tp)
     else:
-        assert np.allclose(pts, true_pts)
+        # Array, compare at once
+        assert np.allclose(new_pts, true_pts)
 
     for i in range(part.ndim):
         assert np.array_equal(il[i], true_il[i])
