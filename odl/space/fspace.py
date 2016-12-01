@@ -67,10 +67,10 @@ def _default_out_of_place(func, x, **kwargs):
 
 
 def _broadcast_to(array, shape):
-    """Wrapper for the numpy function broadcast_to.
+    """Wrapper for the Numpy function broadcast_to.
 
-    Added since we dont require numpy 1.10 and hence cant guarantee that this
-    exists.
+    Added since we don't require numpy 1.10 and hence can't guarantee
+    that this function exists.
     """
     array = np.asarray(array)
     try:

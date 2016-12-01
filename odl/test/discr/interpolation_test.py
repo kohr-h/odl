@@ -190,6 +190,91 @@ def remap_setup(pad_mode, ndim, points_type):
         assert False  # ndim
 
 
+@pytest.fixture(scope='module')
+def indices_weights_setup(pad_mode, ndim, points_type):
+    """Fixture for points and their indices and weigths."""
+
+    if ndim == 1:
+        min_pt = 1.0
+        max_pt = 2.0
+        shape = (5,)
+        partition = odl.uniform_partition(min_pt, max_pt, shape)
+
+        # Grid points: [1.1, 1.3, 1.5, 1.7, 1.9]
+        points = np.array([1.0, 1.1, 1.5, 1.35, 1.9, 1.65, 1.89, 1.95, 2.0])
+
+        if pad_mode in ('constant', 'order0', 'order1'):
+            # "Virtual" grid points 1.0 and 2.0
+            # -> 1.0 gets weight 0, 1.95 gets weight 0.5
+            # -> 2.0 is moved to index 4 (from 5) and gets weight 1
+            indices = (np.array([-1, 0, 2, 1, 4, 2, 3, 4, 4]),)
+            weights = (np.array(
+                [0.0, 0.0, 0.0, 0.25, 0.0, 0.75, 0.95, 0.5, 1.0]),)
+        elif pad_mode in ('periodic', 'symmetric'):
+            # "Virtual" grid points 0.9 and 2.1
+            # -> 1.0 and 2.0 both get weight 0.5, 1.95 gets weight 0.25
+            indices = (np.array([-1, 0, 2, 1, 4, 2, 3, 4, 4]),)
+            weights = (np.array(
+                [0.5, 0.0, 0.0, 0.25, 0.0, 0.75, 0.95, 0.25, 0.5]),)
+        else:
+            assert False
+
+        if points_type == 'array':
+            return points, partition, pad_mode, indices, weights
+        elif points_type == 'meshgrid':
+            return (points,), partition, pad_mode, indices, weights
+        else:
+            assert False
+
+    elif ndim == 2:
+        min_pt = [0.0, 1.0]
+        max_pt = [1.0, 4.0]
+        shape = (4, 3)
+        partition = odl.uniform_partition(min_pt, max_pt, shape)
+
+        # Grid points:
+        # axis 0: [0.125, 0.375, 0.625, 0.875]
+        # axis 1: [1.5, 2.5, 3.5]
+        if points_type == 'array':
+            points = np.array([[0.0, 0.4, 0.625, 0.5, 1.0],
+                               [1.6, 3.5, 1.0, 4.0, 2.1]])
+            indices = (np.array([-1, 1, 2, 1, 3]),
+                       np.array([0, 2, -1, 2, 0]))
+            if pad_mode in ('constant', 'order0', 'order1'):
+                # See 1D case for explanation
+                weights = (np.array([0.0, 0.1, 0.0, 0.5, 1.0]),
+                           np.array([0.1, 0.0, 0.0, 1.0, 0.6]))
+            elif pad_mode in ('periodic', 'symmetric'):
+                weights = (np.array([0.5, 0.1, 0.0, 0.5, 0.5]),
+                           np.array([0.1, 0.0, 0.5, 0.5, 0.6]))
+            else:
+                assert False
+
+        elif points_type == 'meshgrid':
+            points = sparse_meshgrid(
+                np.array([0.2, 0.875, 1.0]),
+                np.array([1.0, 3.0, 2.3, 3.6]))
+            indices = (np.array([0, 3, 3]),
+                       np.array([-1, 1, 0, 2]))
+            if pad_mode in ('constant', 'order0', 'order1'):
+                # See 1D case for explanation
+                weights = (np.array([0.3, 0.0, 1.0]),
+                           np.array([0.0, 0.5, 0.8, 0.2]))
+            elif pad_mode in ('periodic', 'symmetric'):
+                weights = (np.array([0.3, 0.0, 0.5]),
+                           np.array([0.5, 0.5, 0.8, 0.1]))
+        else:
+            assert False
+
+        return points, partition, pad_mode, indices, weights
+
+    else:  # ndim
+        assert False
+
+
+# --- tests --- #
+
+
 def test_remap_points(remap_setup):
     """Check remapped points and indices against truth from fixture."""
 
@@ -208,6 +293,17 @@ def test_remap_points(remap_setup):
         assert np.array_equal(il[i], true_il[i])
         assert np.array_equal(ir[i], true_ir[i])
         assert np.array_equal(iin[i], true_iin[i])
+
+
+def test_indices_weights(indices_weights_setup):
+    """Check indices & weights against true values from fixture."""
+
+    pts, part, pad_mode, true_indcs, true_wgts = indices_weights_setup
+    indcs, wgts = indices_weights(pts, part, pad_mode)
+
+    for i in range(part.ndim):
+        assert np.array_equal(indcs[i], true_indcs[i])
+        assert np.allclose(wgts[i], true_wgts[i])
 
 
 if __name__ == '__main__':

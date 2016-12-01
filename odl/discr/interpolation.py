@@ -120,3 +120,128 @@ def remap_points(points, partition, pad_mode):
     if squeeze_out:
         remapped = remapped.squeeze()
     return remapped, outside_left, outside_right, inside
+
+
+def indices_weights(points, partition, pad_mode):
+    """Return indices and weights for interpolating at ``points``.
+
+    The weights are computed with respect to ``partition.grid``.
+    All points are assumed to lie in ``partition.set``, which is
+    **not** checked for efficiency reasons. To ensure a correct point
+    layout, use `remap_points`.
+
+    Parameters
+    ----------
+    points : `numpy.ndarray` or `meshgrid` sequence
+        Points whose indices and weights are to be computed. The number of
+        entries along the first axis (for array) or the length of the
+        sequence (for meshgrid) must be equal to ``partition.ndim``.
+    partition : `RectPartition`
+        Domain partition defining the valid domain and a sampling grid.
+    pad_mode : str
+        Padding mode defining how the points close to the boundary are
+        to be handled.
+        Possible values:
+
+        ``'constant', 'periodic', 'symmetric', 'order0', 'order1'``
+
+    Returns
+    -------
+    indices : tuple of `numpy.ndarray`
+        Sequence of index arrays specifying the closest *left* neighbors
+        of ``points`` in each axis. Due to grid extension, indices
+        ``-1`` and ``n`` can occur, where ``n`` is the number of grid
+        points in a given axis.
+    weights : tuple of `numpy.ndarray`
+        Sequence of arrays with values 0.0 <= weights <= 1 specifying
+        the interpolation weight of the *right* neighbors of ``points``
+        in each axis.
+
+    Notes
+    -----
+    Usually, the coordinates of ``partition.min_pt`` and
+    ``partition.grid.min_pt`` are different, i.e. there are parts of
+    the partitioned set that only have neighboring grid points on one
+    side. To handle those points, the grid is extended by 1 point at
+    all boundaries according to the padding mode, such that 2-sided
+    interpolation is possible also in those cases.
+    """
+    if not isinstance(partition, RectPartition):
+        raise TypeError('`partition` must be a `RectPartition` instance, '
+                        'got {!r}'.format(partition))
+
+    if not (is_valid_input_array(points, partition.ndim) or
+            is_valid_input_meshgrid(points, partition.ndim)):
+        txt_1d = ' or (n,)' if partition.ndim == 1 else ''
+        raise TypeError('`points` {!r} not a valid input. Expected '
+                        'a `numpy.ndarray` with shape ({ndim}, n){} or a '
+                        'length-{ndim} meshgrid tuple.'
+                        ''.format(points, txt_1d, ndim=partition.ndim))
+
+    pad_mode, pad_mode_in = str(pad_mode).lower(), pad_mode
+
+    indices, weights = [], []
+    for axis in range(partition.ndim):
+        if partition.ndim == 1 and isinstance(points, np.ndarray):
+            pts = points.ravel()
+        else:
+            pts = points[axis].ravel()
+        xmin = partition.min_pt[axis]
+        xmax = partition.max_pt[axis]
+        grid_pts = partition.grid.coord_vectors[axis]
+
+        if pad_mode in ('constant', 'order0', 'order1'):
+            xleft = xmin
+            xright = xmax
+        elif pad_mode == 'periodic':
+            xleft = xmin - (xmax - grid_pts[-1])
+            xright = xmax + (grid_pts[0] - xmin)
+        elif pad_mode == 'symmetric':
+            xleft = 2 * xmin - grid_pts[0]
+            xright = 2 * xmax - grid_pts[-1]
+        else:
+            raise ValueError("invalid `pad_mode` '{}'".format(pad_mode_in))
+
+        extended_gridpts = np.concatenate([[xleft], grid_pts, [xright]])
+        n_ext = len(extended_gridpts)
+        indcs = np.searchsorted(extended_gridpts, pts, side='right') - 1
+        indcs[indcs == n_ext - 1] = n_ext - 2
+        xi = extended_gridpts[indcs]
+        xip1 = extended_gridpts[indcs + 1]
+        wgts = (pts - xi) / (xip1 - xi)
+
+        indices.append(indcs - 1)  # Compensate for added element left
+        weights.append(wgts)
+
+    return indices, weights
+
+
+# TODO: this was broken from the beginning, but something along these lines
+# should work
+def interp_linear(fvals, indices, weights, mode, const=0):
+    if mode == 'constant':
+        fleft = fright = const
+    elif mode == 'periodic':
+        fleft = fvals[-1]
+        fright = fvals[0]
+    elif mode in ('symmetric', 'order0', 'order1'):
+        fleft = fvals[0]
+        fright = fvals[-1]
+    else:
+        raise RuntimeError('bad mode')
+
+    interp = np.empty_like(fvals)
+    # TODO: get this using np.where as index array
+    left_outside = (indices == 0)
+    right_outside = (indices >= len(fvals) - 1)
+    regular = ~(left_outside | right_outside)
+    print(list(left_outside))
+    print(list(right_outside))
+    print(list(regular))
+    interp[left_outside] = ((1.0 - weights[left_outside]) * fleft +
+                            weights[left_outside] * fvals[0])
+    interp[left_outside] = ((1.0 - weights[right_outside]) * fvals[-1] +
+                            weights[right_outside] * fright)
+    interp[regular] = ((1.0 - weights[regular]) * fvals[indices[regular] - 1] +
+                       weights[regular] * fvals[indices[regular]])
+    return interp
