@@ -30,6 +30,9 @@ __all__ += partition.__all__
 from .discretization import *
 __all__ += discretization.__all__
 
+from .interpolation import *
+__all__ += interpolation.__all__
+
 from .discr_mappings import *
 __all__ += discr_mappings.__all__
 
