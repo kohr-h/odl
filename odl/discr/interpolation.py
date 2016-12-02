@@ -17,11 +17,14 @@
 
 """Functions and classes for n-dimensional extra- and interpolation."""
 
+from itertools import product
 import numpy as np
 
+from odl.discr.grid import sparse_meshgrid
 from odl.discr.partition import RectPartition
 from odl.util.vectorization import (
-    is_valid_input_array, is_valid_input_meshgrid)
+    is_valid_input_array, is_valid_input_meshgrid,
+    out_shape_from_meshgrid)
 
 
 __all__ = ()
@@ -216,32 +219,126 @@ def indices_weights(points, partition, pad_mode):
     return indices, weights
 
 
-# TODO: this was broken from the beginning, but something along these lines
-# should work
-def interp_linear(fvals, indices, weights, mode, const=0):
-    if mode == 'constant':
-        fleft = fright = const
-    elif mode == 'periodic':
+def interp_linear(fvals, indices, weights, bounds_check=False, grid_shape=None,
+                  pad_mode='constant', pad_const=0, out=None):
+    """Evaluate linear interpolation using function values ``fvals``.
+
+    Parameters
+    ----------
+    fvals : `array-like`
+        The function values to interpolate.
+    indices, weights : sequence of `np.ndarray`
+        Arrays of the indices and weights of the points relative to
+        the grid where the function values are defined. Usually the
+        result of the `indices_weights` helper function.
+    bounds_check : bool, optional
+        If ``True``, check for all axes if there are ``indices``
+        below 0 (out-of-bounds left) or above ``n - 2``, where ``n`` is
+        the entry of ``grid_shape`` in the corresponding axis.
+        For such indices, extra values are used according to ``pad_mode``.
+        Apparently, ``grid_shape`` is required in this case.
+
+        For ``False``, no such check is performed. If in this case, there
+        are out-of-bounds indices, they are wrapped (negative) and/or
+        lead to an ``IndexError``.
+    grid_shape : sequence of ints, optional
+        Shape of the interpolation grid. This parameter is required if
+        ``bounds_check=True`` and not used otherwise.
+    pad_mode : str, optional
+        Padding mode defining which function values are used to extend
+        ``fvals`` for points close to the boundary.
+        Possible values:
+
+        ``'constant', 'periodic', 'symmetric', 'order0', 'order1'``
+
+    pad_const : scalar, optional
+        Constant value for extension of ``fvals`` in the case of
+        ``pad_mode='constant'``. Has no effect otherwise.
+    out : `numpy.ndarray`, optional
+        Array to which the interpolated values should be written. Its
+        size must match the number of interpolation points, and its data
+        type must be compatible with (i.e. safely castable from) the one of
+        ``fvals``.
+
+    Returns
+    -------
+    out : `numpy.ndarray`
+        The array of interpolated values. If ``out`` was given, the
+        returned object is a reference to it.
+    """
+    fvals = np.asarray(fvals)
+    if len(indices) != fvals.ndim:
+        raise ValueError('lenght of `indices` does not match number of '
+                         'dimensions in `fvals` ({} != {})'
+                         ''.format(len(indices), fvals.ndim))
+    if len(weights) != fvals.ndim:
+        raise ValueError('lenght of `weights` does not match number of '
+                         'dimensions in `fvals` ({} != {})'
+                         ''.format(len(weights), fvals.ndim))
+    if bounds_check:
+        if grid_shape is None:
+            raise TypeError('`grid_shape` cannot be `None` for for '
+                            '`bounds_check=True`')
+        elif len(grid_shape) != fvals.ndim:
+            raise ValueError('lenght of `grid_shape` does not match number of '
+                             'dimensions in `fvals` ({} != {})'
+                             ''.format(len(grid_shape), fvals.ndim))
+
+    out_shape = out_shape_from_meshgrid(weights)
+    out_dtype = fvals.dtype
+    if out is None:
+        out = np.empty(out_shape, dtype=out_dtype)
+    else:
+        if out.shape != out_shape:
+            raise ValueError('`out` has wrong shape, expected {}, got {}'
+                             ''.format(out_shape, out.shape))
+        if not np.can_cast(fvals.dtype, out.dtype):
+            raise ValueError('cannot safely cast from data type {} of '
+                             '`fvals` to out.dtype {}'
+                             ''.format(fvals.dtype, out.dtype))
+
+    # TODO: this must go inside the loop
+    if pad_mode == 'constant':
+        fleft = fright = pad_const
+    elif pad_mode == 'periodic':
         fleft = fvals[-1]
         fright = fvals[0]
-    elif mode in ('symmetric', 'order0', 'order1'):
+    elif pad_mode in ('symmetric', 'order0', 'order1'):
         fleft = fvals[0]
         fright = fvals[-1]
     else:
         raise RuntimeError('bad mode')
 
-    interp = np.empty_like(fvals)
-    # TODO: get this using np.where as index array
-    left_outside = (indices == 0)
-    right_outside = (indices >= len(fvals) - 1)
-    regular = ~(left_outside | right_outside)
-    print(list(left_outside))
-    print(list(right_outside))
-    print(list(regular))
-    interp[left_outside] = ((1.0 - weights[left_outside]) * fleft +
-                            weights[left_outside] * fvals[0])
-    interp[left_outside] = ((1.0 - weights[right_outside]) * fvals[-1] +
-                            weights[right_outside] * fright)
-    interp[regular] = ((1.0 - weights[regular]) * fvals[indices[regular] - 1] +
-                       weights[regular] * fvals[indices[regular]])
-    return interp
+    edge_indices = [[i, i + 1] for i in indices]
+    weights = sparse_meshgrid(*weights)
+    low_weights = [1.0 - w for w in weights]
+    high_weights = weights
+    axis_order = np.argsort([np.prod(w.strides) for w in weights])[::-1]
+
+    # Iterate over all possible combinations of [i, i+1] for each
+    # axis (i.e. corners), resulting in a loop of length 2**ndim
+    for corner, edges in zip(product(*([['lo', 'hi']] * len(indices))),
+                             product(*edge_indices)):
+        # Determine the weights for this particular corner setup
+        weight = 1.0
+        for axis in axis_order:
+            # We don't multiply in-place to exploit the cheap operations
+            # in the beginning: sizes grow gradually as following:
+            # (n, 1, 1, ...) -> (n, m, 1, ...) -> ...
+            # Hence, it is faster to build up the weight array instead
+            # of doing full-size operations from the beginning.
+            #
+            # The ordering of axes is chosen optimally with respect to the
+            # array strides (largest first)
+            if corner[axis] == 'lo':
+                weight = weight * low_weights[axis]
+            elif corner[axis] == 'hi':
+                weight = weight * high_weights[axis]
+            else:
+                raise RuntimeError('invalid corner')
+
+        # TODO: here somewhere, the OOB indices must be handled. Instead of
+        # fvals[edges], we need to take the `fleft` and `fright` values
+        out += np.asarray(fvals[edges]) * weight
+
+    return np.array(out, copy=False, ndmin=1)
