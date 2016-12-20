@@ -19,6 +19,7 @@ import numpy as np
 
 from odl.discr import RectPartition
 from odl.tomo.geometry.detector import Detector
+from odl.tomo.util.utility import axis_rotation_matrix
 from odl.util.utility import with_metaclass
 
 
@@ -347,18 +348,7 @@ class AxisOrientedGeometry(object):
         if angle not in self.motion_params:
             raise ValueError('`angle` {} is not in the valid range {}'
                              ''.format(angle, self.motion_params))
-
-        axis = self.axis
-
-        cross_mat = np.array([[0, -axis[2], axis[1]],
-                              [axis[2], 0, -axis[0]],
-                              [-axis[1], axis[0], 0]])
-        dy_mat = np.outer(axis, axis)
-        id_mat = np.eye(3)
-        cos_ang = np.cos(angle)
-        sin_ang = np.sin(angle)
-
-        return cos_ang * id_mat + (1. - cos_ang) * dy_mat + sin_ang * cross_mat
+        return axis_rotation_matrix(self.axis, angle)
 
 
 if __name__ == '__main__':
