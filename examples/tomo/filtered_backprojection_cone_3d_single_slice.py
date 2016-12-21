@@ -51,7 +51,7 @@ filter_op = odl.tomo.analytic.filtered_back_projection.fbp_filter_op(
     full_ray_trafo, filter_type='Shepp-Logan', frequency_scaling=0.8)
 
 
-# --- Create raw and filtered data --- #
+# %% --- Create raw and filtered data --- #
 
 
 # Create a discrete Shepp-Logan phantom (modified version)
@@ -62,7 +62,7 @@ proj_data = full_ray_trafo(phantom)
 filtered_data = filter_op(proj_data)
 
 
-# --- Define the slice geometry and backprojector --- #
+# %% --- Define slice and reconstruct it --- #
 
 def rotation_matrix(from_vec, to_vec):
     from_vec = np.array(from_vec, dtype=float, copy=True)
@@ -76,12 +76,12 @@ def rotation_matrix(from_vec, to_vec):
 
 
 # Define the slice by a normal and a shift
-slice_normal = np.array([1, 0, 0], dtype=float)
-slice_shift = np.array([0, 0, 0], dtype=float)
+slice_normal = np.array([1, 1, 0], dtype=float)
+slice_shift = np.array([5, 5, 0], dtype=float)
 
 # Compute geometric quantities derived from the slice definition
 rot_z_axis_to_normal = rotation_matrix(from_vec=[0, 0, 1], to_vec=slice_normal)
-geometry_axis = rot_z_axis_to_normal.T.dot([0, 0, 1])
+geometry_axis = rot_z_axis_to_normal.T.dot([1, 0, 0])
 
 # Reconstruction space of the slice
 non_shifted_min_pt = np.append(full_reco_space.min_pt[:2],
@@ -89,8 +89,8 @@ non_shifted_min_pt = np.append(full_reco_space.min_pt[:2],
 non_shifted_max_pt = np.append(full_reco_space.max_pt[:2],
                                full_reco_space.cell_sides[2] / 2)
 
-slc_min_pt = slice_shift + non_shifted_min_pt
-slc_max_pt = slice_shift + non_shifted_max_pt
+slc_min_pt = rot_z_axis_to_normal.T.dot(slice_shift) + non_shifted_min_pt
+slc_max_pt = rot_z_axis_to_normal.T.dot(slice_shift) + non_shifted_max_pt
 slice_reco_space = odl.uniform_discr(
     min_pt=slc_min_pt, max_pt=slc_max_pt, shape=[500, 500, 1],
     dtype='float32')
