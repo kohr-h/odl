@@ -70,9 +70,13 @@ def rotation_matrix(from_vec, to_vec):
     to_vec = np.array(to_vec, dtype=float, copy=True)
     to_vec /= np.linalg.norm(to_vec)
     rot_axis = np.cross(from_vec, to_vec)
-    rot_axis /= np.linalg.norm(rot_axis)
-    rot_angle = np.arccos(np.dot(from_vec, to_vec))
-    return axis_rotation_matrix(rot_axis, rot_angle)
+    cross_norm = np.linalg.norm(rot_axis)
+    if cross_norm < 1e-6:
+        return np.eye(len(from_vec))
+    else:
+        rot_axis /= cross_norm
+        rot_angle = np.arccos(np.dot(from_vec, to_vec))
+        return axis_rotation_matrix(rot_axis, rot_angle)
 
 
 # Define the slice by a normal and a shift
