@@ -80,8 +80,8 @@ def rotation_matrix(from_vec, to_vec):
 
 
 # Define the slice by a normal and a shift
-slice_normal = np.array([1, 1, 0], dtype=float)
-slice_shift = np.array([5, 5, 0], dtype=float)
+slice_normal = np.array([0, 0, 1], dtype=float)
+slice_shift = np.array([0, 0, 0], dtype=float)
 
 # Compute geometric quantities derived from the slice definition
 rot_z_axis_to_normal = rotation_matrix(from_vec=[0, 0, 1], to_vec=slice_normal)
@@ -119,4 +119,6 @@ slice_ray_trafo = odl.tomo.RayTransform(slice_reco_space, rot_geometry,
 
 # Compute the reconstruction and show it
 fbp_reconstruction = slice_ray_trafo.adjoint(rotated_filtered_data)
-fbp_reconstruction.show(title='Filtered back-projection, slice only')
+fig_title = 'FBP, slice normal = {}, slice shift = {}'.format(slice_normal,
+                                                              slice_shift)
+fbp_reconstruction.show(title=fig_title)
