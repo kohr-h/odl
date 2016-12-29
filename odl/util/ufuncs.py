@@ -78,8 +78,10 @@ def wrap_ufunc_base(name, n_in, n_out, doc):
     if n_in == 1:
         if n_out == 1:
             def wrapper(self, out=None, **kwargs):
-                if out is None or isinstance(out, (type(self.elem),
-                                                   type(self.elem.data))):
+                valid_out_types = (type(self.elem),
+                                   type(self.elem.data),
+                                   np.ndarray)
+                if out is None or isinstance(out, valid_out_types):
                     out = (out,)
 
                 return self.elem.__array_ufunc__(
