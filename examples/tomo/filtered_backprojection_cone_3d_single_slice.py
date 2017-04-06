@@ -80,12 +80,14 @@ def rotation_matrix(from_vec, to_vec):
 
 
 # Define the slice by a normal and a shift
-slice_normal = np.array([0, 0, 1], dtype=float)
-slice_shift = np.array([0, 0, 0], dtype=float)
+slice_normal = np.array([0, 1, 0], dtype=float)
+slice_shift = np.array([5, 0, 5], dtype=float)
 
 # Compute geometric quantities derived from the slice definition
 rot_z_axis_to_normal = rotation_matrix(from_vec=[0, 0, 1], to_vec=slice_normal)
-geometry_axis = rot_z_axis_to_normal.T.dot([1, 0, 0])
+trafo_matrix = np.empty((3, 4))
+trafo_matrix[:, :-1] = rot_z_axis_to_normal.T
+trafo_matrix[:, -1] = slice_shift
 
 # Reconstruction space of the slice
 non_shifted_min_pt = np.append(full_reco_space.min_pt[:2],
@@ -93,8 +95,14 @@ non_shifted_min_pt = np.append(full_reco_space.min_pt[:2],
 non_shifted_max_pt = np.append(full_reco_space.max_pt[:2],
                                full_reco_space.cell_sides[2] / 2)
 
+# transformed point p = (R|t) * (x|1)^T
+trafo_min_pt = trafo_matrix.dot(np.append(non_shifted_min_pt, 1))
+trafo_max_pt = trafo_matrix.dot(np.append(non_shifted_max_pt, 1))
+slc_min_pt = np.minimum(trafo_min_pt, trafo_max_pt)
+slc_max_pt = np.maximum(trafo_min_pt, trafo_max_pt)
 slc_min_pt = rot_z_axis_to_normal.T.dot(slice_shift) + non_shifted_min_pt
 slc_max_pt = rot_z_axis_to_normal.T.dot(slice_shift) + non_shifted_max_pt
+
 slice_reco_space = odl.uniform_discr(
     min_pt=slc_min_pt, max_pt=slc_max_pt, shape=[500, 500, 1],
     dtype='float32')
