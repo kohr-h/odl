@@ -499,7 +499,7 @@ class DiscreteFourierTransform(DiscreteFourierTransformBase):
         sign = '+' if self.sign == '-' else '-'
         return DiscreteFourierTransformInverse(
             domain=self.range, range=self.domain, axes=self.axes,
-            halfcomplex=self.halfcomplex, sign=sign)
+            halfcomplex=self.halfcomplex, sign=sign, impl=self.impl)
 
 
 class DiscreteFourierTransformInverse(DiscreteFourierTransformBase):
@@ -854,6 +854,15 @@ class FourierTransformBase(Operator):
         # Storing temporaries directly as arrays
         tmp_r = kwargs.pop('tmp_r', None)
         tmp_f = kwargs.pop('tmp_f', None)
+
+        interp = kwargs.pop('interp', None)
+        # TODO: do this per axis
+        if interp is None:
+            self._interp = self.range.interp if inverse else self.domain.interp
+        else:
+            if interp not in ('deltas', 'nearest', 'linear'):
+                raise ValueError('interp {!r} not supported'.format(interp))
+            self._interp = interp
 
         if tmp_r is not None:
             tmp_r = domain.element(tmp_r).asarray()
@@ -1272,10 +1281,11 @@ class FourierTransform(FourierTransformBase):
                 out = self._tmp_r if self._tmp_r is not None else self._tmp_f
             else:
                 out = self._tmp_f
+
         return dft_postprocess_data(
             out, real_grid=self.domain.grid, recip_grid=self.range.grid,
             shift=self.shifts, axes=self.axes, sign=self.sign,
-            interp=self.domain.interp, op='multiply', out=out)
+            interp=self._interp, op='multiply', out=out)
 
     def _call_numpy(self, x):
         """Return ``self(x)`` for numpy back-end.
@@ -1495,7 +1505,7 @@ class FourierTransformInverse(FourierTransformBase):
         return dft_postprocess_data(
             x, real_grid=self.range.grid, recip_grid=self.domain.grid,
             shift=self.shifts, axes=self.axes, sign=self.sign,
-            interp=self.domain.interp, op='divide', out=out)
+            interp=self._interp, op='divide', out=out)
 
     def _postprocess(self, x, out=None):
         """Return the post-processed version of ``x``.

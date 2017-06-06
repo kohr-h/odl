@@ -371,24 +371,25 @@ def _interp_kernel_ft(norm_freqs, interp):
     Parameters
     ----------
     norm_freqs : `numpy.ndarray`
-        Normalized frequencies between -1/2 and 1/2
-    interp : {'nearest', 'linear'}
-        Type of interpolation kernel
+        Normalized frequencies between -1/2 and 1/2.
+    interp : {'deltas', 'nearest', 'linear'}
+        Type of interpolation kernel.
 
     Returns
     -------
     ker_ft : `numpy.ndarray`
         Values of the kernel FT at the given frequencies
     """
-    # Numpy's sinc(x) is equal to the 'math' sinc(pi * x)
-    ker_ft = np.sinc(norm_freqs)
-    interp_ = str(interp).lower()
-    if interp_ == 'nearest':
-        pass
-    elif interp_ == 'linear':
-        ker_ft *= ker_ft
+    interp, interp_in = str(interp).lower(), interp
+    if interp == 'deltas':
+        ker_ft = np.ones_like(norm_freqs)
+    elif interp == 'nearest':
+        # Numpy's sinc(x) is equal to the 'math' sinc(pi * x)
+        ker_ft = np.sinc(norm_freqs)
+    elif interp == 'linear':
+        ker_ft = np.sinc(norm_freqs) ** 2
     else:
-        raise ValueError("`interp` '{}' not understood".format(interp))
+        raise ValueError("`interp` {!r} not understood".format(interp_in))
 
     ker_ft /= np.sqrt(2 * np.pi)
     return ker_ft
@@ -446,7 +447,7 @@ def dft_postprocess_data(arr, real_grid, recip_grid, shift, axes,
         Sign of the complex exponent.
     op : {'multiply', 'divide'}, optional
         Operation to perform with the stride times the interpolation
-        kernel FT
+        kernel FT.
     out : `numpy.ndarray`, optional
         Array in which the result is stored. If ``out is arr``, an
         in-place modification is performed.
@@ -540,9 +541,17 @@ def dft_postprocess_data(arr, real_grid, recip_grid, shift, axes,
         interp_kernel *= stride
 
         if op == 'multiply':
+<<<<<<< Updated upstream
             onedim_arr *= interp_kernel
         else:
             onedim_arr /= interp_kernel
+=======
+            onedim_arr *= stride * _interp_kernel_ft(freqs, intp)
+        elif op == 'divide':
+            onedim_arr /= stride * _interp_kernel_ft(freqs, intp)
+        else:
+            raise RuntimeError('bad `op` {!r}'.format(op))
+>>>>>>> Stashed changes
 
         onedim_arrs.append(onedim_arr.astype(out.dtype, copy=False))
 
