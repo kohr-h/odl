@@ -21,7 +21,8 @@ from odl.discr import DiscreteLp
 from odl.operator import Operator
 from odl.space import FunctionSpace
 from odl.tomo.geometry import (
-    Geometry, Parallel2dGeometry, Parallel3dAxisGeometry)
+    Geometry, Parallel2dGeometry, Parallel3dAxisGeometry,
+    ParallelVecGeometry)
 from odl.space.weighting import NoWeighting, ConstWeighting
 from odl.tomo.backends import (
     ASTRA_AVAILABLE, ASTRA_CUDA_AVAILABLE, SKIMAGE_AVAILABLE,
@@ -204,18 +205,26 @@ class RayTransformBase(Operator):
             dtype = reco_space.dtype
             proj_uspace = FunctionSpace(geometry.params, out_dtype=dtype)
 
+            # TODO: use weighting that differentiates between angles and
+            # detector. We need an array of weights here, a different value
+            # for each angle, but constant in the detector axes.
+            # The required partition property is available since
+            # commit a551190d, but weighting is not adapted yet.
+            # See also issues #286 and #1001
+            if isinstance(self.geometry, ParallelVecGeometry):
+                # TODO: change to weighting constant per angle when possible
+                weighting = 1.0
             if isinstance(reco_space.weighting, NoWeighting):
                 weighting = None
             elif (isinstance(reco_space.weighting, ConstWeighting) and
                   np.isclose(reco_space.weighting.const,
                              reco_space.cell_volume)):
                 # Approximate cell volume
-                # TODO: find a way to treat angles and detector differently
-                # regarding weighting. While the detector should be uniformly
-                # discretized, the angles do not have to and often are not.
-                # The needed partition property is available since
-                # commit a551190d, but weighting is not adapted yet.
-                # See also issue #286
+                # TODO: change to weighting constant per angle when possible.
+                # The constant in a given angle has to be the average distance
+                # to previous and next angle. Probably there should also be
+                # an option to use the current implementation for faster
+                # runs (one weighting constant).
                 extent = float(geometry.partition.extent.prod())
                 size = float(geometry.partition.size)
                 weighting = extent / size

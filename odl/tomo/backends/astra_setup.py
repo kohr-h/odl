@@ -51,6 +51,7 @@ import numpy as np
 from odl.discr import DiscreteLp, DiscreteLpElement
 from odl.tomo.geometry import (
     Geometry, DivergentBeamGeometry, ParallelBeamGeometry,
+    ParallelVecGeometry, ConeVecGeometry,
     Flat1dDetector, Flat2dDetector)
 from odl.tomo.util.utility import euler_matrix
 from odl.util.utility import pkg_supports
@@ -209,6 +210,75 @@ def astra_volume_geometry(reco_space):
     return vol_geom
 
 
+def vecs_odl_axes_to_astra_axes(vecs):
+    """Convert geometry vectors from ODL axis convention to ASTRA.
+
+    Parameters
+    ----------
+    vecs : array-like, shape ``(N, 6)`` or ``(N, 12)``
+        Vectors defining the geometric configuration in each
+        projection. The number ``N`` of rows determines the number
+        of projections, and the number of columns the spatial
+        dimension (6 for 2D, 12 for 3D).
+
+    Returns
+    -------
+    astra_vecs : `numpy.ndarray`, same shape as ``vecs``
+        The converted geometry vectors.
+    """
+    vecs = np.asarray(vecs, dtype=float)
+
+    if vecs.shape[1] == 6:
+        # 2D geometry, nothing to do since the axes are the same
+        return vecs
+    elif vecs.shape[1] == 12:
+        # 3D geometry
+        # ASTRA has (z, y, x) axis convention, in contrast to (x, y, z) in ODL,
+        # so we need to adapt to this by changing the order.
+        newind = []
+        for i in range(4):
+            newind.extend([2 + 3 * i, 1 + 3 * i, 0 + 3 * i])
+        return vecs[:, newind]
+    else:
+        raise ValueError('`vecs` must have shape (N, 6) or (N, 12), got '
+                         'array with shape {}'.format(vecs.shape))
+
+
+def vecs_astra_axes_to_odl_axes(vecs):
+    """Convert geometry vectors from ASTRA axis convention to ODL.
+
+    Parameters
+    ----------
+    vecs : array-like, shape ``(N, 6)`` or ``(N, 12)``
+        Vectors defining the geometric configuration in each
+        projection. The number ``N`` of rows determines the number
+        of projections, and the number of columns the spatial
+        dimension (6 for 2D, 12 for 3D).
+
+    Returns
+    -------
+    odl_vecs : `numpy.ndarray`, same shape as ``vecs``
+        The converted geometry vectors.
+    """
+    vecs = np.asarray(vecs, dtype=float)
+
+    if vecs.shape[1] == 6:
+        # 2D geometry, nothing to do since the axes are the same
+        return vecs
+    elif vecs.shape[1] == 12:
+        # 3D geometry
+        # ASTRA has (z, y, x) axis convention, in contrast to (x, y, z) in ODL,
+        # so we need to adapt to this by changing the order.
+        newind = []
+        for i in range(4):
+            newind.extend([2 + 3 * i, 1 + 3 * i, 0 + 3 * i])
+        newind = np.argsort(newind).tolist()
+        return vecs[:, newind]
+    else:
+        raise ValueError('`vecs` must have shape (N, 6) or (N, 12), got '
+                         'array with shape {}'.format(vecs.shape))
+
+
 def astra_conebeam_3d_geom_to_vec(geometry):
     """Create vectors for ASTRA projection geometries from ODL geometry.
 
@@ -266,14 +336,7 @@ def astra_conebeam_3d_geom_to_vec(geometry):
     vectors[:, 9:12] = det_axes[0] * px_sizes[0]
     vectors[:, 6:9] = det_axes[1] * px_sizes[1]
 
-    # ASTRA has (z, y, x) axis convention, in contrast to (x, y, z) in ODL,
-    # so we need to adapt to this by changing the order.
-    newind = []
-    for i in range(4):
-        newind += [2 + 3 * i, 1 + 3 * i, 0 + 3 * i]
-    vectors = vectors[:, newind]
-
-    return vectors
+    return vecs_odl_axes_to_astra_axes(vectors)
 
 
 def astra_conebeam_2d_geom_to_vec(geometry):
@@ -332,7 +395,7 @@ def astra_conebeam_2d_geom_to_vec(geometry):
     px_size = geometry.det_partition.cell_sides[0]
     vectors[:, 4:6] = det_axis * px_size
 
-    return vectors
+    return vecs_odl_axes_to_astra_axes(vectors)
 
 
 def astra_parallel_3d_geom_to_vec(geometry):
@@ -393,13 +456,7 @@ def astra_parallel_3d_geom_to_vec(geometry):
     vectors[:, 9:12] = det_axes[0] * px_sizes[0]
     vectors[:, 6:9] = det_axes[1] * px_sizes[1]
 
-    # ASTRA has (z, y, x) axis convention, in contrast to (x, y, z) in ODL,
-    # so we need to adapt to this by changing the order.
-    new_ind = []
-    for i in range(4):
-        new_ind += [2 + 3 * i, 1 + 3 * i, 0 + 3 * i]
-    vectors = vectors[:, new_ind]
-    return vectors
+    return vecs_odl_axes_to_astra_axes(vectors)
 
 
 def astra_projection_geometry(geometry):
@@ -449,6 +506,22 @@ def astra_projection_geometry(geometry):
         vec = astra_conebeam_2d_geom_to_vec(geometry)
         proj_geom = astra.create_proj_geom('fanflat_vec', det_count, vec)
 
+    elif isinstance(geometry, ParallelVecGeometry) and geometry.ndim == 2:
+        det_count = geometry.detector.size
+        vec = geometry.vectors
+        # TODO: flip axes?
+        if not astra_supports('parallel2d_vec_geometry'):
+            raise NotImplementedError(
+                "'parallel_vec' geometry not supported by ASTRA "
+                'v{}'.format(ASTRA_VERSION))
+        proj_geom = astra.create_proj_geom('parallel_vec', det_count, vec)
+
+    elif isinstance(geometry, ConeVecGeometry) and geometry.ndim == 2:
+        det_count = geometry.detector.size
+        vec = geometry.vectors
+        # TODO: flip axes?
+        proj_geom = astra.create_proj_geom('fanflat_vec', det_count, vec)
+
     elif (isinstance(geometry, ParallelBeamGeometry) and
           isinstance(geometry.detector, (Flat1dDetector, Flat2dDetector)) and
           geometry.ndim == 3):
@@ -468,6 +541,23 @@ def astra_projection_geometry(geometry):
         vec = astra_conebeam_3d_geom_to_vec(geometry)
         proj_geom = astra.create_proj_geom('cone_vec', det_row_count,
                                            det_col_count, vec)
+
+    elif isinstance(geometry, ParallelVecGeometry) and geometry.ndim == 3:
+        det_row_count = geometry.det_partition.shape[1]
+        det_col_count = geometry.det_partition.shape[0]
+        vec = geometry.vectors
+        # TODO: flip axes?
+        proj_geom = astra.create_proj_geom('parallel3d_vec', det_row_count,
+                                           det_col_count, vec)
+
+    elif isinstance(geometry, ConeVecGeometry) and geometry.ndim == 3:
+        det_row_count = geometry.det_partition.shape[1]
+        det_col_count = geometry.det_partition.shape[0]
+        vec = geometry.vectors
+        # TODO: flip axes?
+        proj_geom = astra.create_proj_geom('cone_vec', det_row_count,
+                                           det_col_count, vec)
+
     else:
         raise NotImplementedError('unknown ASTRA geometry type {!r}'
                                   ''.format(geometry))
