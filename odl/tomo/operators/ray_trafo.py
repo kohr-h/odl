@@ -21,8 +21,7 @@ from odl.discr import DiscreteLp
 from odl.operator import Operator
 from odl.space import FunctionSpace
 from odl.tomo.geometry import (
-    Geometry, Parallel2dGeometry, Parallel3dAxisGeometry,
-    ParallelVecGeometry)
+    Geometry, VecGeometry, Parallel2dGeometry, Parallel3dAxisGeometry)
 from odl.space.weighting import NoWeighting, ConstWeighting
 from odl.tomo.backends import (
     ASTRA_AVAILABLE, ASTRA_CUDA_AVAILABLE, SKIMAGE_AVAILABLE,
@@ -211,10 +210,10 @@ class RayTransformBase(Operator):
             # The required partition property is available since
             # commit a551190d, but weighting is not adapted yet.
             # See also issues #286 and #1001
-            if isinstance(self.geometry, ParallelVecGeometry):
-                # TODO: change to weighting constant per angle when possible
-                weighting = 1.0
-            if isinstance(reco_space.weighting, NoWeighting):
+            if isinstance(self.geometry, VecGeometry):
+                # No angular weighting
+                weighting = geometry.det_partition.cell_volume
+            elif isinstance(reco_space.weighting, NoWeighting):
                 weighting = None
             elif (isinstance(reco_space.weighting, ConstWeighting) and
                   np.isclose(reco_space.weighting.const,
@@ -225,9 +224,9 @@ class RayTransformBase(Operator):
                 # to previous and next angle. Probably there should also be
                 # an option to use the current implementation for faster
                 # runs (one weighting constant).
-                extent = float(geometry.partition.extent.prod())
-                size = float(geometry.partition.size)
-                weighting = extent / size
+                angle_weight = float(geometry.motion_partition.extent.prod() /
+                                     geometry.motion_partition.size)
+                weighting = angle_weight * geometry.det_partition.cell_volume
             else:
                 raise NotImplementedError('unknown weighting of domain')
 

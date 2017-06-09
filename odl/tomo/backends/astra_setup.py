@@ -509,7 +509,6 @@ def astra_projection_geometry(geometry):
     elif isinstance(geometry, ParallelVecGeometry) and geometry.ndim == 2:
         det_count = geometry.detector.size
         vec = geometry.vectors
-        # TODO: flip axes?
         if not astra_supports('parallel2d_vec_geometry'):
             raise NotImplementedError(
                 "'parallel_vec' geometry not supported by ASTRA "
@@ -519,7 +518,6 @@ def astra_projection_geometry(geometry):
     elif isinstance(geometry, ConeVecGeometry) and geometry.ndim == 2:
         det_count = geometry.detector.size
         vec = geometry.vectors
-        # TODO: flip axes?
         proj_geom = astra.create_proj_geom('fanflat_vec', det_count, vec)
 
     elif (isinstance(geometry, ParallelBeamGeometry) and
@@ -546,7 +544,6 @@ def astra_projection_geometry(geometry):
         det_row_count = geometry.det_partition.shape[1]
         det_col_count = geometry.det_partition.shape[0]
         vec = geometry.vectors
-        # TODO: flip axes?
         proj_geom = astra.create_proj_geom('parallel3d_vec', det_row_count,
                                            det_col_count, vec)
 
@@ -554,7 +551,6 @@ def astra_projection_geometry(geometry):
         det_row_count = geometry.det_partition.shape[1]
         det_col_count = geometry.det_partition.shape[0]
         vec = geometry.vectors
-        # TODO: flip axes?
         proj_geom = astra.create_proj_geom('cone_vec', det_row_count,
                                            det_col_count, vec)
 
