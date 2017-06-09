@@ -25,7 +25,8 @@ from odl.tomo.backends import (
     astra_versions_supporting, skimage_radon_back_projector,
     skimage_radon_forward_projector)
 from odl.tomo.geometry import (
-    Geometry, Parallel2dGeometry, Parallel3dAxisGeometry, ParallelVecGeometry)
+    Geometry, Parallel2dGeometry, Parallel3dAxisGeometry, ParallelVecGeometry,
+    VecGeometry)
 
 ASTRA_CPU_AVAILABLE = ASTRA_AVAILABLE
 _SUPPORTED_IMPL = ('astra_cpu', 'astra_cuda', 'skimage')
@@ -233,17 +234,16 @@ class RayTransformBase(Operator):
             # runs (one weighting constant).
             if not reco_space.is_weighted:
                 weighting = None
-            if isinstance(self.geometry, ParallelVecGeometry):
-                # TODO: change to weighting constant per angle when available
-                weighting = 1.0
+            elif isinstance(self.geometry, VecGeometry):
+                # No angular weighting
+                weighting = geometry.det_partition.cell_volume
             elif (isinstance(reco_space.weighting, ConstWeighting) and
                   np.isclose(reco_space.weighting.const,
                              reco_space.cell_volume)):
                 # Approximate cell volume
-                # TODO: change to weighting constant per angle when available
-                extent = float(geometry.partition.extent.prod())
-                size = float(geometry.partition.size)
-                weighting = extent / size
+                angle_weight = float(geometry.motion_partition.extent.prod() /
+                                     geometry.motion_partition.size)
+                weighting = angle_weight * geometry.det_partition.cell_volume
             else:
                 raise NotImplementedError('unknown weighting of domain')
 
