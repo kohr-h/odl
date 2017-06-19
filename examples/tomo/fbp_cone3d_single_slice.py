@@ -118,3 +118,6 @@ fbp_reconstruction = ray_trafo_slice.adjoint(trafo_filtered_data)
 fig_title = 'FBP, slice normal = {}, slice shift = {}'.format(slice_normal,
                                                               slice_shift)
 fbp_reconstruction.show(title=fig_title)
+print('Axes in the image:')
+print('x* = ', np.array2string(rot_z_axis_to_normal.T[0], precision=2))
+print('y* = ', np.array2string(rot_z_axis_to_normal.T[1], precision=2))
