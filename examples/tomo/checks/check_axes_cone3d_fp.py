@@ -8,21 +8,27 @@ Both pairs of plots of ODL projections and NumPy axis sums should look
 similar in the sense that they should show the same features in the
 right arrangement (not flipped, rotated, etc.), up to differences in
 magnification and other cone effects.
+
+This example is best run in Spyder section-by-section (CTRL-Enter).
 """
+
+# %% Set up the things that never change
 
 import matplotlib.pyplot as plt
 import numpy as np
 import odl
 
-
-# --- Set up the things that never change --- #
-
+# Set back-end here
+impl = 'astra_cuda'
+# Set a volume shift. This should move the projections in the same direction,
+# and shifts along the projection axis should only change cone effects.
+shift = (0, 25, 0)
 
 vol_shape = (100, 150, 200)
 vol_max_pt = np.array(vol_shape, dtype=float) / 2
 vol_min_pt = -vol_max_pt
-reco_space = odl.uniform_discr(vol_min_pt, vol_max_pt, vol_shape,
-                               dtype='float32')
+reco_space = odl.uniform_discr(vol_min_pt + shift, vol_max_pt + shift,
+                               vol_shape, dtype='float32')
 phantom = odl.phantom.indicate_proj_axis(reco_space)
 
 assert np.allclose(reco_space.cell_sides, 1)
@@ -34,8 +40,8 @@ angle_partition = odl.uniform_partition_fromgrid(grid)
 # Make detector large enough to cover the object
 src_radius = 500
 det_radius = 1000
-opening_angle = np.arctan(vol_max_pt[2] / src_radius)
-det_size = np.floor(1.1 * (src_radius + det_radius) * np.sin(opening_angle))
+cone_angle = np.arctan(vol_max_pt[2] / src_radius)
+det_size = np.floor(1.1 * (src_radius + det_radius) * np.sin(cone_angle))
 det_shape = (int(det_size),) * 2
 det_max_pt = np.array([det_size / 2, det_size / 2])
 det_min_pt = -det_max_pt
@@ -49,7 +55,7 @@ sum_along_y = np.sum(phantom.asarray(), axis=1)
 sum_along_z = np.sum(phantom.asarray(), axis=2)
 
 
-# --- Test case 1: axis = [0, 0, 1] --- #
+# %% Test case 1: axis = [0, 0, 1] -- setup
 
 
 geometry = odl.tomo.CircularConeFlatGeometry(
@@ -61,8 +67,12 @@ assert np.allclose(geometry.det_axes_init[1], [0, 0, 1])
 assert np.allclose(geometry.src_to_det_init, [0, 1, 0])
 
 # Create projections
-ray_trafo = odl.tomo.RayTransform(reco_space, geometry, impl='astra_cuda')
+ray_trafo = odl.tomo.RayTransform(reco_space, geometry, impl=impl)
 proj_data = ray_trafo(phantom)
+
+
+# %% axis = [0, 0, 1], projection along y axis
+
 
 # Axes in this image are (x, z). This corresponds to
 # axis = [0, 0, 1], 0 degrees
@@ -78,6 +88,10 @@ plt.show()
 axes_sum_y = geometry.det_axes(np.deg2rad(0))
 assert np.allclose(axes_sum_y[0], [1, 0, 0])
 assert np.allclose(axes_sum_y[1], [0, 0, 1])
+
+
+# %% axis = [0, 0, 1], projection along x axis
+
 
 # Axes in this image are (y, z). This corresponds to
 # axis = [0, 0, 1], 90 degrees
@@ -95,7 +109,7 @@ assert np.allclose(axes_sum_x[0], [0, 1, 0])
 assert np.allclose(axes_sum_x[1], [0, 0, 1])
 
 
-# --- Test case 2: axis = [0, 1, 0] --- #
+# %% Test case 2: axis = [0, 1, 0] -- setup
 
 
 geometry = odl.tomo.CircularConeFlatGeometry(
@@ -107,8 +121,12 @@ assert np.allclose(geometry.det_axes_init[1], [0, 1, 0])
 assert np.allclose(geometry.src_to_det_init, [0, 0, -1])
 
 # Create projections
-ray_trafo = odl.tomo.RayTransform(reco_space, geometry, impl='astra_cuda')
+ray_trafo = odl.tomo.RayTransform(reco_space, geometry, impl=impl)
 proj_data = ray_trafo(phantom)
+
+
+# %% axis = [0, 1, 0], projection along z axis
+
 
 # Axes in this image are (x, y). This corresponds to:
 # axis = [0, 1, 0], 0 degrees
@@ -124,6 +142,10 @@ plt.show()
 axes_sum_z = geometry.det_axes(np.deg2rad(0))
 assert np.allclose(axes_sum_z[0], [1, 0, 0])
 assert np.allclose(axes_sum_z[1], [0, 1, 0])
+
+
+# %% axis = [0, 1, 0], projection along x axis
+
 
 # Axes in this image are (z, y). This corresponds to
 # axis = [0, 1, 0], 270 degrees
@@ -141,7 +163,7 @@ assert np.allclose(axes_sum_x_T[0], [0, 0, 1])
 assert np.allclose(axes_sum_x_T[1], [0, 1, 0])
 
 
-# --- Test case 3: axis = [1, 0, 0] --- #
+# %% Test case 3: axis = [1, 0, 0] -- setup
 
 
 geometry = odl.tomo.CircularConeFlatGeometry(
@@ -153,8 +175,12 @@ assert np.allclose(geometry.det_axes_init[1], [1, 0, 0])
 assert np.allclose(geometry.src_to_det_init, [0, 1, 0])
 
 # Create projections
-ray_trafo = odl.tomo.RayTransform(reco_space, geometry, impl='astra_cuda')
+ray_trafo = odl.tomo.RayTransform(reco_space, geometry, impl=impl)
 proj_data = ray_trafo(phantom)
+
+
+# %% axis = [1, 0, 0], projection along z axis
+
 
 # Axes in this image are (y, x). This corresponds to
 # axis = [1, 0, 0], 90 degrees
@@ -170,6 +196,10 @@ plt.show()
 axes_sum_z_T = geometry.det_axes(np.deg2rad(90))
 assert np.allclose(axes_sum_z_T[0], [0, 1, 0])
 assert np.allclose(axes_sum_z_T[1], [1, 0, 0])
+
+
+# %% axis = [1, 0, 0], projection along y axis
+
 
 # Axes in this image are (z, x). This corresponds to
 # axis = [1, 0, 0], 180 degrees

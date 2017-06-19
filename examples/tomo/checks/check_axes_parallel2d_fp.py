@@ -7,33 +7,28 @@ done correctly.
 Both pairs of plots of ODL projections and NumPy axis sums should look
 the same in the sense that they should show the same features in the
 right arrangement (not flipped, rotated, etc.).
+
+This example is best run in Spyder section-by-section (CTRL-Enter).
 """
+
+# %% Set up the things that never change
 
 import matplotlib.pyplot as plt
 import numpy as np
 import odl
 
-
-# --- Set up the things that never change --- #
-
-
-# Get a slice through the indiceat_proj_axis phantom
-phantom_3d_shape = (100, 150, 200)
-phantom_3d_max_pt = np.array(phantom_3d_shape, dtype=float) / 2
-phantom_3d_min_pt = -phantom_3d_max_pt
-phantom_3d_space = odl.uniform_discr(
-    phantom_3d_min_pt, phantom_3d_max_pt, phantom_3d_shape, dtype='float32')
-phantom_3d = odl.phantom.indicate_proj_axis(phantom_3d_space)
-
-phantom_arr = phantom_3d.asarray()[:, :, 100]
+# Set back-end here
+impl = 'astra_cuda'
+# Set a volume shift. This should move the projections in the same direction,
+# and shifts along the projection axis should only change cone effects.
+shift = (0, 25)
 
 img_shape = (100, 150)
 img_max_pt = np.array(img_shape, dtype=float) / 2
 img_min_pt = -img_max_pt
-shift = (-25, 0)  # this should shift the projections in the same direction
 reco_space = odl.uniform_discr(img_min_pt + shift, img_max_pt + shift,
                                img_shape, dtype='float32')
-phantom = reco_space.element(phantom_arr)
+phantom = odl.phantom.indicate_proj_axis(reco_space)
 
 assert np.allclose(reco_space.cell_sides, 1)
 
@@ -55,7 +50,7 @@ sum_along_x = np.sum(phantom.asarray(), axis=0)
 sum_along_y = np.sum(phantom.asarray(), axis=1)
 
 
-# --- Test --- #
+# %% Test forward projection along y axis
 
 
 geometry = odl.tomo.Parallel2dGeometry(angle_partition, detector_partition)
@@ -64,7 +59,7 @@ assert np.allclose(geometry.det_axis_init, [1, 0])
 assert np.allclose(geometry.det_pos_init, [0, 1])
 
 # Create projections
-ray_trafo = odl.tomo.RayTransform(reco_space, geometry, impl='astra_cpu')
+ray_trafo = odl.tomo.RayTransform(reco_space, geometry, impl=impl)
 proj_data = ray_trafo(phantom)
 
 # Axis in this image is x. This corresponds to 0 degrees.
@@ -78,6 +73,10 @@ plt.show()
 # Check axes in geometry
 axis_sum_y = geometry.det_axis(np.deg2rad(0))
 assert np.allclose(axis_sum_y, [1, 0])
+
+
+# %% Test forward projection along x axis
+
 
 # Axis in this image is y. This corresponds to 90 degrees.
 proj_data.show(indices=[1, slice(None)],
