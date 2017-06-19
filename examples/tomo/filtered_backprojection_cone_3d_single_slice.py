@@ -25,7 +25,7 @@ methods.
 
 import numpy as np
 import odl
-from odl.tomo.util.utility import axis_rotation_matrix
+from odl.tomo.util import rotation_matrix_from_to
 
 
 # --- Set-up geometry of the problem --- #
@@ -64,27 +64,14 @@ filtered_data = filter_op(proj_data)
 
 # %% --- Define slice and reconstruct it --- #
 
-def rotation_matrix(from_vec, to_vec):
-    from_vec = np.array(from_vec, dtype=float, copy=True)
-    from_vec /= np.linalg.norm(from_vec)
-    to_vec = np.array(to_vec, dtype=float, copy=True)
-    to_vec /= np.linalg.norm(to_vec)
-    rot_axis = np.cross(from_vec, to_vec)
-    cross_norm = np.linalg.norm(rot_axis)
-    if cross_norm < 1e-6:
-        return np.eye(len(from_vec))
-    else:
-        rot_axis /= cross_norm
-        rot_angle = np.arccos(np.dot(from_vec, to_vec))
-        return axis_rotation_matrix(rot_axis, rot_angle)
-
 
 # Define the slice by a normal and a shift
 slice_normal = np.array([0, 1, 0], dtype=float)
 slice_shift = np.array([5, 0, 5], dtype=float)
 
 # Compute geometric quantities derived from the slice definition
-rot_z_axis_to_normal = rotation_matrix(from_vec=[0, 0, 1], to_vec=slice_normal)
+rot_z_axis_to_normal = rotation_matrix_from_to(from_vec=[0, 0, 1],
+                                               to_vec=slice_normal)
 trafo_matrix = np.empty((3, 4))
 trafo_matrix[:, :-1] = rot_z_axis_to_normal.T
 trafo_matrix[:, -1] = slice_shift
@@ -107,15 +94,12 @@ slice_reco_space = odl.uniform_discr(
     min_pt=slc_min_pt, max_pt=slc_max_pt, shape=[500, 500, 1],
     dtype='float32')
 
+matrix = np.hstack([rot_z_axis_to_normal, slice_shift[:, None]])
+
 # Rotated geometry
-rot_det_init_axes = [rot_z_axis_to_normal.T.dot(a)
-                     for a in full_geometry.det_init_axes]
-rot_src_to_det_init = rot_z_axis_to_normal.T.dot(full_geometry.src_to_det_init)
-rot_geometry = odl.tomo.CircularConeFlatGeometry(
+rot_geometry = odl.tomo.CircularConeFlatGeometry.frommatrix(
     angle_partition, detector_partition, src_radius=40, det_radius=40,
-    axis=rot_z_axis_to_normal.T.dot([0, 0, 1]),
-    src_to_det_init=rot_src_to_det_init,
-    det_init_axes=rot_det_init_axes)
+    init_matrix=matrix)
 
 # Ray transforms in the rotated geometry
 rot_ray_trafo = odl.tomo.RayTransform(full_reco_space, rot_geometry,
