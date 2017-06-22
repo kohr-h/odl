@@ -1,20 +1,3 @@
-# Copyright 2014-2016 The ODL development group
-#
-# This file is part of ODL.
-#
-# ODL is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ODL is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with ODL.  If not, see <http://www.gnu.org/licenses/>.
-
 """Single-slice FBP in 3D cone beam geometry for tomopackets.
 
 This example computes the FBP in a single slice by pre-computing the
@@ -34,7 +17,15 @@ prototyped below.
 
 import numpy as np
 import odl
-from odl.tomo.util import rotation_matrix_from_to
+import time
+
+import sys
+tomop_path = '/export/scratch1/kohr/git/slicevis/ext/tomopackets/python'
+if tomop_path not in sys.path:
+    sys.path.append(tomop_path)
+import tomop
+
+DEBUG = True
 
 
 def callback_proto(slice_spec):
@@ -44,15 +35,16 @@ def callback_proto(slice_spec):
     ----------
     slice_spec : `numpy.ndarray`, ``shape=(9,)``
         Real numbers ``a, b, c, d, e, f, g, h, i`` defining the
-        transformation from slice coordinates to world coordinates.
-        See Notes for details.
+        transformation from normalized slice coordinates to
+        normalized world coordinates. See Notes for details.
 
     Returns
     -------
     shape_array : `numpy_ndarray`, ``dtype='int32', shape=(2,)``
         Number of sent values per axis, usually the shape of the full slice.
-    values : `numpy.ndarray`, ``dtype='uint32', shape=shape_array``
-        Values to send. The size is determined by ``shape_array``.
+    values : `numpy.ndarray`, ``dtype='uint32', shape=(np.prod(shape_array),)``
+        Flattened array of reconstructed values to send. The order of
+        flattening is row-major (``'C'``).
 
     Notes
     -----
@@ -97,13 +89,13 @@ def callback_proto(slice_spec):
 
     Let :math:`N = (N_x, N_y, N_z)`, :math:`U = (U_x, U_y, U_z)` and
     :math:`V = (V_x, V_y, V_z)` be 3D unit vectors that are perpendicular
-    to each other. Let further :math:`T = (T_x, T_y, T_z)` be an arbitrary
-    vector. :math:`N` will be the normal vector of the slice, :math:`T`
-    a translation and :math:`U` and :math:`V` the vectors spanning the
-    slice (when shifted back by :math:`-T`).
+    to each other. Let further :math:`O = (O_x, O_y, O_z)` be an arbitrary
+    vector. :math:`N` will be the normal vector of the slice, :math:`O`
+    the origin of the slice and :math:`U` and :math:`V` the vectors spanning
+    the slice (when shifted back by :math:`-O`).
 
-    Consider now a slice defined by an origin :math:`O = (O_x, O_y, O_z)`
-    and side lengths :math:`l = (l_u, l_v) > (0, 0)`:
+    Consider now a slice defined by origin :math:`O` and side lengths
+    :math:`l = (l_u, l_v) > (0, 0)`:
 
         .. math::
 
@@ -130,29 +122,25 @@ def callback_proto(slice_spec):
             np.array([1, 2, 3, 4], dtype='uint32'))
 
 
-def slice_spec_to_geom_matrix(slice_spec, vol_extent=(1.0, 1.0, 1.0)):
-    """Convert a slice specification vector to a 3x4 matrix.
+def callback_null(slice_spec):
+    return (np.array([0, 0], dtype='int32'), np.array([], dtype='uint32'))
 
-    The return value of this function is to be fed into the
-    ``geometry.frommatrix()`` constructor.
+
+def slice_spec_to_rot_matrix(slice_spec):
+    """Convert a slice specification vector to a 3x3 rotation matrix.
 
     Parameters
     ----------
     slice_spec : array-like, ``shape=(9,)``
         Real numbers ``a, b, c, d, e, f, g, h, i`` defining the
         transformation from slice coordinates to world coordinates.
-    vol_extent : sequence of 3 real numbers, optional
-        Side lengths of the volume. These numbers determine how to translate
-        the normalized shift ``(g, h, i)`` to the actual shift of the
-        slice in world coordinates.
 
     Returns
     -------
-    matrix : `numpy.ndarray`, shape ``(3, 4)``
-        Matrix that translates and rotates the world system such that the
-        slice unit vectors ``(a, b, c)`` and ``(d, e, f)`` are transformed
-        to ``(1, 0, 0)`` and ``(0, 1, 0)``, respectively, and the slice
-        becomes centered around ``(0, 0, 0)``.
+    matrix : `numpy.ndarray`, shape ``(3, 3)``
+        Matrix that rotates the world system such that the slice vectors
+        ``(a, b, c)`` and ``(d, e, f)`` are after normalization transformed
+        to ``(1, 0, 0)`` and ``(0, 1, 0)``, respectively.
 
     Notes
     -----
@@ -189,111 +177,283 @@ def slice_spec_to_geom_matrix(slice_spec, vol_extent=(1.0, 1.0, 1.0)):
             \end{equation*}
 
     Thus, the vectors :math:`U = (a, b, c)` and :math:`V = (d, e, f)`
-    are the coordinate vectors of the local slice system, and
-    ``(g, h, i)`` is the normalized shift of the slice center relative to
-    the volume center.
+    span the local slice coordinate system.
     """
     a, b, c, d, e, f, g, h, i = np.asarray(slice_spec, dtype=float)
+
     vec_u = np.array([a, b, c])
+    vec_u_norm = np.linalg.norm(vec_u)
+    if vec_u_norm == 0:
+        raise ValueError('`[a, b, c]` vector is zero')
+    else:
+        vec_u /= vec_u_norm
+
     vec_v = np.array([d, e, f])
-    extent = np.asarray(lengths, dtype=float).reshape((3,))
-    transl = np.array([g, h, i]) * extent
+    vec_v_norm = np.linalg.norm(vec_v)
+    if vec_v_norm == 0:
+        raise ValueError('`[d, e, f]` vector is zero')
+    else:
+        vec_v /= vec_v_norm
 
-    # TODO: do stuff with the vectors
+    # Complete matrix to a rotation matrix
+    normal = np.cross(vec_u, vec_v)
+    rot_matrix = np.vstack([vec_u, vec_v, normal])
+    return slicevis_to_odl_axes.dot(rot_matrix)
 
 
-# %% Setup code for the full problem
+# %% Variables defining the problem geometry
 
-
+# Volume
 vol_min_pt = np.array([-20, -20, -20], dtype=float)
-vol_max_pt = np.array([20, 20, 20], dtype=float)
+vol_extent = [40, 40, 40]
+vol_max_pt = vol_min_pt + vol_extent
 vol_shape = (256, 256, 256)
+vol_half_extent = np.array(vol_extent, dtype=float) / 2
 
-# Create reconstruction space and geometry for the full 3D problem
-full_reco_space = odl.uniform_discr(vol_min_pt, vol_max_pt, vol_shape,
+# Projection angles
+num_angles = 360
+min_angle = 0
+max_angle = 2 * np.pi
+angle_partition = odl.nonuniform_partition(
+    np.linspace(min_angle, max_angle, num_angles, endpoint=False))
+
+# Detector
+det_min_pt = np.array([-40, -40], dtype=float)
+det_extent = [80, 80]
+det_max_pt = det_min_pt + det_extent
+det_shape = (512, 512)
+detector_partition = odl.uniform_partition(det_min_pt, det_max_pt, det_shape)
+
+# Further geometry parameters
+src_radius = 40
+det_radius = 40
+axis = [0, 0, 1]
+
+# Constructor for geometries and arguments by keyword
+geometry_type = odl.tomo.CircularConeFlatGeometry
+geometry_kwargs_base = {
+    'apart': angle_partition,
+    'dpart': detector_partition,
+    'src_radius': src_radius,
+    'det_radius': det_radius
+    }
+geometry_kwargs_full = geometry_kwargs_base.copy()
+geometry_kwargs_full['axis'] = axis
+
+# Filter parameters
+padding = False
+filter_type = 'Shepp-Logan'
+relative_freq_cutoff = 0.8
+
+# Parameters for the slice (given in slice coordinates)
+slice_min_pt = np.array([-20, -20])
+slice_extent = [40, 40]
+slice_max_pt = slice_min_pt + slice_extent
+slice_shape = (256, 256)
+min_val = 0.0
+max_val = 1.0
+
+# Convert axis conventions
+slicevis_to_odl_axes = np.array([[1, 0, 0],
+                                 [0, 1, 0],
+                                 [0, 0, 1]], dtype=float)
+
+
+# %% Define the full problem
+
+
+# Full reconstruction space (volume) and projection geometry
+reco_space_full = odl.uniform_discr(vol_min_pt, vol_max_pt, vol_shape,
                                     dtype='float32')
+geometry_full = geometry_type(**geometry_kwargs_full)
 
-angle_partition = odl.uniform_partition(0, 2 * np.pi, 360)
-detector_partition = odl.uniform_partition([-40, -40], [40, 40], [500, 500])
-full_geometry = odl.tomo.CircularConeFlatGeometry(
-    angle_partition, detector_partition, src_radius=40, det_radius=40,
-    axis=[0, 0, 1])
-
-# Create ray transform and filtering operator
-full_ray_trafo = odl.tomo.RayTransform(full_reco_space, full_geometry,
+# Ray transform and filtering operator
+ray_trafo_full = odl.tomo.RayTransform(reco_space_full, geometry_full,
                                        impl='astra_cuda')
 filter_op = odl.tomo.analytic.filtered_back_projection.fbp_filter_op(
-    full_ray_trafo, filter_type='Shepp-Logan', frequency_scaling=0.8)
+    ray_trafo_full, padding, filter_type,
+    frequency_scaling=relative_freq_cutoff)
 
 
 # %% Create raw and filtered data
 
 
 # Create a discrete Shepp-Logan phantom (modified version)
-phantom = odl.phantom.shepp_logan(full_reco_space, modified=True)
+phantom = odl.phantom.shepp_logan(reco_space_full, modified=True)
 
 # Create projection data by calling the ray transform on the phantom
-proj_data = full_ray_trafo(phantom)
-filtered_data = filter_op(proj_data)
+proj_data = ray_trafo_full(phantom)
+proj_data_filtered = filter_op(proj_data)
 
 
-# %% Define slice and reconstruct it
+# %% Define callback that reconstructs the slice specified by the server
 
 
-# Define the slice by a normal and a shift in the following way:
-#   plane(t, n) = t + perp(n)
-# Here, `t` is the (absolute) translation vector, `n` the normal vector and
-# `perp(n)` the plane perpendicular to `n`.
-# The finite-extent version of this is
-#   slice(t, n) = {u in plane(t, n) | T(t, n)u in R x {0} },
-# where `R` is a 2D rectangle,
-#   T(t, n)u = M(n)^(-1)(u - t),
-# is an affine transformation and `M(n)` is the matrix rotating
-# `(0, 0, 1)` to `n`.
-slice_normal = np.array([0, 1, 0], dtype=float)
-slice_shift = np.array([5, 0, 5], dtype=float)
+def callback_fbp(slice_spec):
+    """Reconstruct the slice given by ``slice_spec``.
 
-# Compute M(n) and M(n)^(-1)t
-rot_z_axis_to_normal = rotation_matrix_from_to(from_vec=[0, 0, 1],
-                                               to_vec=slice_normal)
-slc_shift_rot = rot_z_axis_to_normal.T.dot(slice_shift)
+    Parameters
+    ----------
+    slice_spec : `numpy.ndarray`, ``shape=(9,)``
+        Real numbers ``a, b, c, d, e, f, g, h, i`` defining the
+        transformation from normalized slice coordinates to
+        normalized world coordinates. See Notes for details.
 
-# Construct the slice space, which is a discretized version of
-# `R = T(t, n) slice(t, n)`.
-# TODO: let user specify extent and shape
-slc_min_pt = full_reco_space.min_pt.copy()
-slc_min_pt[2] = -full_reco_space.cell_sides[2] / 2
-slc_max_pt = full_reco_space.max_pt.copy()
-slc_max_pt[2] = full_reco_space.cell_sides[2] / 2
-slice_reco_space = odl.uniform_discr(
-    min_pt=slc_min_pt, max_pt=slc_max_pt, shape=[500, 500, 1],
-    dtype='float32',
-    axis_labels=['$x^*$', '$y^*$', '$z^*$'])
+    Returns
+    -------
+    shape_array : `numpy_ndarray`, ``dtype='int32', shape=(2,)``
+        Number of sent values per axis. Always equal to ``slice_shape``
+        from global scope.
+    values : `numpy.ndarray`, ``dtype='uint32', shape=(np.prod(shape_array),)``
+        Flattened array of reconstructed values to send. The order of
+        flattening is row-major (``'C'``).
 
-# The matrix given to geometry.frommatrix is built up as `[M  v]`, where
-# `M` is the transformation matrix to be applied to the geometry-defining
-# vectors, and `v` is a translation to be applied *after* applying `M`.
-# Thus, in our case we need to set `M = M(n)^(-1)` and `v = -M(n)^(-1)t`
-# in order to effectively apply `T(t, n)` to the default geometry.
-# TODO: adapt this in case the original geometry is not a standard one.
-matrix = np.hstack([rot_z_axis_to_normal.T, -slc_shift_rot[:, None]])
+    Notes
+    -----
+    The callback uses the following variables from global scope:
 
-# Construct the geometry transformed by `T(t, n)`
-trafo_geometry = odl.tomo.CircularConeFlatGeometry.frommatrix(
-    angle_partition, detector_partition, src_radius=40, det_radius=40,
-    init_matrix=matrix)
+        - ``slice_shape`` : Number of points per axis in the slice that is
+          to be reconstructed
+        - ``vol_extent`` : Physical extent of the reconstruction volume,
+          used to scale the normalized translation to a physical shift
+        - ``geometry_type`` : Geometry class used in this problem
+        - ``proj_data_filtered`` : Pre-filtered projection data
+    """
+    # TODO: use logging to log events
+    print('')
+    print('--- New slice requested ---')
+    print('')
+    time_at_start = time.time()
+    slice_spec = np.asarray(slice_spec, dtype=float)
+    a, b, c, d, e, f, g, h, i = slice_spec
 
-# Construct ray transform for slice space and transformed geometry,
-# and cast the filtered data
-ray_trafo_slice = odl.tomo.RayTransform(slice_reco_space, trafo_geometry,
-                                        impl='astra_cuda')
-trafo_filtered_data = ray_trafo_slice.range.element(filtered_data)
+    # Just return empty stuff if shape is wrong, don't crash
+    # TODO: maybe it's better to crash?
+    try:
+        slice_spec = slice_spec.reshape((9,))
+    except ValueError as err:
+        print('Malformed slice specification: expected shape (9,), got'
+              'shape {}'.format(slice_spec.shape))
+        return (np.array([0, 0], dtype='int32'), np.array([], dtype='uint32'))
 
-# Compute the slice reconstruction and show it
-fbp_reconstruction = ray_trafo_slice.adjoint(trafo_filtered_data)
-fig_title = 'FBP, slice normal = {}, slice shift = {}'.format(slice_normal,
-                                                              slice_shift)
-fbp_reconstruction.show(title=fig_title)
-print('Axes in the image:')
-print('x* = ', np.array2string(rot_z_axis_to_normal.T[0], precision=2))
-print('y* = ', np.array2string(rot_z_axis_to_normal.T[1], precision=2))
+    # Construct rotated & translated geometry as defined by slice_spec
+    geom_kwargs = geometry_kwargs_base.copy()
+    rot_world = slice_spec_to_rot_matrix(slice_spec)
+    if DEBUG:
+        print('world rotation to align slice with x-y plane:')
+        print(rot_world)
+
+    vec_u = np.array([a, b, c])
+    vec_v = np.array([d, e, f])
+    orig_norm = np.array([g, h, i])
+    if DEBUG:
+        print('U vector:', vec_u)
+        print('V vector:', vec_v)
+        print('origin:', orig_norm)
+
+    # Scale by half extent since normalized sizes are between -1 and 1
+    slc_pt1 = orig_norm * vol_half_extent
+    slc_pt2 = (orig_norm + vec_u + vec_v) * vol_half_extent
+    slc_mid_pt = (slc_pt1 + slc_pt2) / 2
+    translation = reco_space_full.partition.mid_pt - slc_mid_pt
+    translation_in_slc_coords = rot_world.dot(translation)
+    if DEBUG:
+        print('slice mid_pt:', slc_mid_pt)
+        print('translation (world sys):', translation)
+        print('translation (slice sys):', translation_in_slc_coords)
+
+    init_matrix = np.hstack([rot_world, translation_in_slc_coords[:, None]])
+    if DEBUG:
+        print('slice geometry init_matrix:')
+        print(init_matrix)
+    geom_kwargs['init_matrix'] = init_matrix
+    geometry_slice = geometry_type.frommatrix(**geom_kwargs)
+
+    # Construct slice reco space with size 1 in the z axis
+    slc_pt1_rot = rot_world.dot(slc_pt1)
+    slc_pt2_rot = rot_world.dot(slc_pt2)
+    slc_min_pt_rot = np.minimum(slc_pt1_rot, slc_pt2_rot)
+    slc_max_pt_rot = np.maximum(slc_pt1_rot, slc_pt2_rot)
+    slc_spc_min_pt = (list(slc_min_pt_rot)[:2] +
+                      [-reco_space_full.cell_sides[2] / 2])
+    slc_spc_max_pt = (list(slc_max_pt_rot)[:2] +
+                      [reco_space_full.cell_sides[2] / 2])
+    slc_spc_shape = list(slice_shape) + [1]
+    if DEBUG:
+        print('slice pt1 (slice sys):', slc_pt1_rot)
+        print('slice pt2 (slice sys):', slc_pt2_rot)
+        print('slice min_pt (slice sys):', slc_min_pt_rot)
+        print('slice max_pt (slice sys):', slc_max_pt_rot)
+        print('slice space min_pt:', slc_spc_min_pt)
+        print('slice space max_pt:', slc_spc_max_pt)
+        print('slice spcae shape:', slc_spc_shape)
+    reco_space_slice = odl.uniform_discr(
+        slc_spc_min_pt, slc_spc_max_pt, slc_spc_shape, dtype='float32',
+        axis_labels=['$x^*$', '$y^*$', '$z^*$'])
+
+    if DEBUG:
+        print('slice space:')
+        print(reco_space_slice)
+
+    # Define ray trafo on the slice, using the transformed geometry
+    # TODO: use specialized back-end when available
+    ray_trafo_slice = odl.tomo.RayTransform(reco_space_slice, geometry_slice,
+                                            impl='astra_cuda')
+
+    time_after_setup = time.time()
+    setup_time_ms = 1e3 * (time_after_setup - time_at_start)
+    if DEBUG:
+        print('time for setup: {:7.3f} ms'.format(setup_time_ms))
+
+    # Compute back-projection with this ray transform
+    fbp_reco_slice = ray_trafo_slice.adjoint(proj_data_filtered)
+    if DEBUG:
+        # fbp_reco_slice.show()
+        pass
+
+    time_after_comp = time.time()
+    comp_time_ms = 1e3 * (time_after_comp - time_after_setup)
+    if DEBUG:
+        print('time for computation: {:7.3f} ms'.format(comp_time_ms))
+
+    # Output must be a numpy.ndarray with 'uint32' data type, we first clip
+    # to `[min_val, max_val]` and then rescale to [0, uint32_max - 1]
+    reco_clipped = np.clip(np.asarray(fbp_reco_slice), min_val, max_val)
+    reco_clipped *= np.iinfo(np.uint32).max - 1
+
+    # Returning the shape as an 'int32' array and the flattened values
+    return (np.array(slice_shape, dtype='int32'),
+            reco_clipped.astype('uint32').ravel())
+
+
+# %% Connect to local slicevis server and register the callback
+
+# Connect to server at localhost. The second argument would be the URI(?).
+serv = tomop.server('Slice FBP')
+print('Server started')
+
+reco_space_preview = odl.uniform_discr(vol_min_pt, vol_max_pt, (64, 64, 64))
+
+# Define a preview (coarse resolution volume) and quantize to uint32
+# TODO: replace with FBP
+preview = odl.phantom.shepp_logan(reco_space_preview, modified=True)
+preview_quant = np.clip(np.asarray(preview), 0, 1)
+preview_quant *= np.iinfo(np.uint32).max - 1
+preview_quant = preview_quant.astype('uint32')
+
+# Define volume packet and send it
+preview_packet = tomop.volume_data_packet(
+    serv.scene_id(),
+    np.array(preview_quant.shape, dtype='int32'),
+    preview_quant.ravel())
+serv.send(preview_packet)
+print('Preview volume sent')
+
+# Register the callback
+# serv.set_callback(callback_null)
+# print('NULL callback registered')
+serv.set_callback(callback_fbp)
+print('FBP callback registered')
+
+# Do it
+serv.serve()

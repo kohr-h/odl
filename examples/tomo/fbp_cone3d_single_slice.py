@@ -75,7 +75,7 @@ filtered_data = filter_op(proj_data)
 # is an affine transformation and `M(n)` is the matrix rotating
 # `(0, 0, 1)` to `n`.
 slice_normal = np.array([0, 1, 0], dtype=float)
-slice_shift = np.array([5, 0, 5], dtype=float)
+slice_shift = np.array([5, 10, 5], dtype=float)
 
 # Compute M(n) and M(n)^(-1)t
 rot_z_axis_to_normal = rotation_matrix_from_to(from_vec=[0, 0, 1],
