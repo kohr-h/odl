@@ -197,7 +197,7 @@ def slice_spec_to_rot_matrix(slice_spec):
 
     # Complete matrix to a rotation matrix
     normal = np.cross(vec_u, vec_v)
-    rot_matrix = np.vstack([vec_u, normal, vec_v])
+    rot_matrix = np.vstack([vec_v, normal, vec_u])
     return slicevis_to_odl_axes.dot(rot_matrix)
 
 
@@ -340,7 +340,7 @@ def callback_fbp(slice_spec):
     geom_kwargs = geometry_kwargs_base.copy()
     rot_world = slice_spec_to_rot_matrix(slice_spec)
     if DEBUG:
-        print('world rotation to align slice with x-y plane:')
+        print('world rotation to align slice with x-z plane:')
         print(rot_world)
 
     vec_u = np.array([a, b, c])
@@ -438,7 +438,8 @@ reco_space_preview = odl.uniform_discr(vol_min_pt, vol_max_pt, (64, 64, 64))
 # Define a preview (coarse resolution volume) and quantize to uint32
 # TODO: replace with FBP
 preview = odl.phantom.shepp_logan(reco_space_preview, modified=True)
-preview_quant = np.clip(np.asarray(preview), 0, 1)
+preview_swapped = reco_space_preview.element(np.transpose(preview, (2, 1, 0)))
+preview_quant = np.clip(np.asarray(preview_swapped), 0, 1)
 preview_quant *= np.iinfo(np.uint32).max - 1
 preview_quant = preview_quant.astype('uint32')
 
