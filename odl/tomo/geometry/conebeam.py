@@ -183,7 +183,7 @@ class FanFlatGeometry(DivergentBeamGeometry):
         detector = Flat1dDetector(dpart, det_axis_init)
         translation = kwargs.pop('translation', None)
         super().__init__(ndim=2, motion_part=apart, detector=detector,
-                         translation=translation)
+                         translation=translation, **kwargs)
 
         self.__src_radius = float(src_radius)
         if self.src_radius < 0:
@@ -201,11 +201,6 @@ class FanFlatGeometry(DivergentBeamGeometry):
         if self.motion_partition.ndim != 1:
             raise ValueError('`apart` has dimension {}, expected 1'
                              ''.format(self.motion_partition.ndim))
-
-        # Make sure there are no leftover kwargs
-        if kwargs:
-            raise TypeError('got unexpected keyword arguments {}'
-                            ''.format(kwargs))
 
     @classmethod
     def frommatrix(cls, apart, dpart, src_radius, det_radius, init_matrix):
@@ -357,16 +352,19 @@ class FanFlatGeometry(DivergentBeamGeometry):
         >>> np.allclose(geom.src_position(np.pi / 2), [2, 0])
         True
         """
-        if angle not in self.motion_params:
-            raise ValueError('`angle` {} is not in the valid range {}'
+        if self.check_bounds and not self.motion_params.contains_all(angle):
+            raise ValueError('`angle` {} not in the valid range {}'
                              ''.format(angle, self.motion_params))
+
+        angle = np.array(angle, dtype=float, copy=False, ndmin=1)
 
         # Initial vector from the rotation center to the source. It can be
         # computed this way since source and detector are at maximum distance,
         # i.e. the connecting line passes the origin.
         center_to_src_init = -self.src_radius * self.src_to_det_init
-        return (self.translation +
-                self.rotation_matrix(angle).dot(center_to_src_init))
+        pos_vec = (self.translation[None, :] +
+                   self.rotation_matrix(angle).dot(center_to_src_init))
+        return pos_vec.squeeze()
 
     def det_refpoint(self, angle):
         """Return the detector reference point position at ``angle``.
@@ -407,16 +405,18 @@ class FanFlatGeometry(DivergentBeamGeometry):
         >>> np.allclose(geom.det_refpoint(np.pi / 2), [-5, 0])
         True
         """
-        if angle not in self.motion_params:
-            raise ValueError('`angle` {} is not in the valid range {}'
+        if self.check_bounds and not self.motion_params.contains_all(angle):
+            raise ValueError('`angle` {} not in the valid range {}'
                              ''.format(angle, self.motion_params))
 
+        angle = np.array(angle, dtype=float, copy=False, ndmin=1)
         # Initial vector from the rotation center to the detector. It can be
         # computed this way since source and detector are at maximum distance,
         # i.e. the connecting line passes the origin.
         center_to_det_init = self.det_radius * self.src_to_det_init
-        return (self.translation +
-                self.rotation_matrix(angle).dot(center_to_det_init))
+        refpt = (self.translation[None, :] +
+                 self.rotation_matrix(angle).dot(center_to_det_init))
+        return refpt.squeeze()
 
     def rotation_matrix(self, angle):
         """Return the rotation matrix for ``angle``.
@@ -440,10 +440,10 @@ class FanFlatGeometry(DivergentBeamGeometry):
             the local coordinate system of the detector reference point,
             expressed in the fixed system.
         """
-        angle = float(angle)
-        if angle not in self.motion_params:
+        if self.check_bounds and not self.motion_params.contains_all(angle):
             raise ValueError('`angle` {} not in the valid range {}'
                              ''.format(angle, self.motion_params))
+
         return euler_matrix(angle)
 
     def __repr__(self):
@@ -834,9 +834,9 @@ class HelicalConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         """Discrete angles given in this geometry."""
         return self.motion_grid.coord_vectors[0]
 
-    def det_axes(self, angles):
+    def det_axes(self, angle):
         """Return the detector axes tuple at ``angle``."""
-        return tuple(self.rotation_matrix(angles).dot(axis)
+        return tuple(self.rotation_matrix(angle).dot(axis)
                      for axis in self.det_axes_init)
 
     def det_refpoint(self, angle):
@@ -881,10 +881,11 @@ class HelicalConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         >>> np.allclose(geom.det_refpoint(np.pi / 2), [-10, 0, 0.5])
         True
         """
-        angle = float(angle)
-        if angle not in self.motion_params:
-            raise ValueError('`angle` {} is not in the valid range {}'
+        if self.check_bounds and not self.motion_params.contains_all(angle):
+            raise ValueError('`angle` {} not in the valid range {}'
                              ''.format(angle, self.motion_params))
+
+        angle = np.array(angle, dtype=float, copy=False, ndmin=1)
 
         # Initial vector from center of rotation to detector.
         # It can be computed this way since source and detector are at
@@ -893,10 +894,12 @@ class HelicalConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         circle_component = self.rotation_matrix(angle).dot(center_to_det_init)
 
         # Increment along the rotation axis according to pitch and pitch_offset
-        pitch_component = self.axis * (self.pitch_offset +
-                                       self.pitch * angle / (2 * np.pi))
+        shift_along_axis = (self.pitch_offset +
+                            self.pitch * angle / (2 * np.pi))
+        pitch_component = self.axis[None, :] * shift_along_axis[:, None]
 
-        return self.translation + circle_component + pitch_component
+        refpt = self.translation[None, :] + circle_component + pitch_component
+        return refpt.squeeze()
 
     def src_position(self, angle):
         """Return the source position at ``angle``.
@@ -940,10 +943,11 @@ class HelicalConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         >>> np.allclose(geom.src_position(np.pi / 2), [5, 0, 0.5])
         True
         """
-        angle = float(angle)
-        if angle not in self.motion_params:
-            raise ValueError('`angle` {} is not in the valid range {}'
+        if self.check_bounds and not self.motion_params.contains_all(angle):
+            raise ValueError('`angle` {} not in the valid range {}'
                              ''.format(angle, self.motion_params))
+
+        angle = np.array(angle, dtype=float, copy=False, ndmin=1)
 
         # Initial vector from 0 to the source (non-translated).
         # It can be computed this way since source and detector are at
@@ -951,11 +955,13 @@ class HelicalConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         origin_to_src_init = -self.src_radius * self.src_to_det_init
         circle_component = self.rotation_matrix(angle).dot(origin_to_src_init)
 
-        # Increment by pitch
-        pitch_component = self.axis * (self.pitch_offset +
-                                       self.pitch * angle / (np.pi * 2))
+        # Increment along the rotation axis according to pitch and pitch_offset
+        shift_along_axis = (self.pitch_offset +
+                            self.pitch * angle / (2 * np.pi))
+        pitch_component = self.axis[None, :] * shift_along_axis[:, None]
 
-        return self.translation + circle_component + pitch_component
+        refpt = self.translation[None, :] + circle_component + pitch_component
+        return refpt.squeeze()
 
     def __repr__(self):
         """Return ``repr(self)``."""

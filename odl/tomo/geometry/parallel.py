@@ -83,8 +83,8 @@ class ParallelBeamGeometry(Geometry):
         else:
             return self.motion_grid.points()
 
-    def det_refpoint(self, angle):
-        """Return the position of the detector ref. point at ``angles``.
+    def det_refpoint(self, angles):
+        """Return the position(s) of the detector ref. point at ``angles``.
 
         The reference point is given by a rotation of the initial
         position by ``angles``.
@@ -95,16 +95,20 @@ class ParallelBeamGeometry(Geometry):
                            rot_matrix(phi) * (det_pos_init - translation)
 
         where ``det_pos_init`` is the detector reference point at initial
-        state.
+        state. This function is vectorized, i.e., can be called with
+        multiple angles at once.
 
         Parameters
         ----------
-        angle : float
-            Parameter describing the detector rotation, must be
+        angle : `array-like`
+            Parameter(s) describing the detector rotation, must be
             contained in `motion_params`.
 
         Returns
         -------
+
+        !!! TODO !!!
+
         point : `numpy.ndarray`, shape (`ndim`,)
             The reference point for the given parameter.
 
@@ -132,12 +136,16 @@ class ParallelBeamGeometry(Geometry):
         >>> np.allclose(geom.det_refpoint(np.pi / 2), [-1, 0, 0])
         True
         """
-        if angle not in self.motion_params:
-            raise ValueError('`angle` {} not in the valid range {}'
-                             ''.format(angle, self.motion_params))
-        rot_part = self.rotation_matrix(angle).dot(
+        if (self.check_bounds and
+                not self.motion_params.contains_all(angles)):
+            raise ValueError('`angles` {} not in the valid range {}'
+                             ''.format(angles, self.motion_params))
+
+        angles = np.array(angles, dtype=float, copy=False, ndmin=1)
+        rot_part = self.rotation_matrix(angles).dot(
             self.det_pos_init - self.translation)
-        return self.translation + rot_part
+        refpoints = self.translation[None, :] + rot_part
+        return refpoints.squeeze()
 
     def det_to_src(self, angles, dpar, normalized=True):
         """Direction from a detector location to the source.
@@ -322,16 +330,12 @@ class Parallel2dGeometry(ParallelBeamGeometry):
         # the detector class.
         detector = Flat1dDetector(part=dpart, axis=det_axis_init)
         super().__init__(ndim=2, apart=apart, detector=detector,
-                         det_pos_init=det_pos_init, translation=translation)
+                         det_pos_init=det_pos_init, translation=translation,
+                         **kwargs)
 
         if self.motion_partition.ndim != 1:
             raise ValueError('`apart` dimension {}, expected 1'
                              ''.format(self.motion_partition.ndim))
-
-        # Make sure there are no leftover kwargs
-        if kwargs:
-            raise TypeError('got unexpected keyword arguments {}'
-                            ''.format(kwargs))
 
     @classmethod
     def frommatrix(cls, apart, dpart, init_matrix):
@@ -417,12 +421,12 @@ class Parallel2dGeometry(ParallelBeamGeometry):
         """Detector axis at angle 0."""
         return self.detector.axis
 
-    def det_axis(self, angle):
-        """Return the detector axis at ``angle``."""
-        return self.rotation_matrix(angle).dot(self.det_axis_init)
+    def det_axis(self, angles):
+        """Return the detector axis (axes) at ``angles``."""
+        return self.rotation_matrix(angles).dot(self.det_axis_init)
 
     def rotation_matrix(self, angle):
-        """Return the rotation matrix for ``angle``.
+        """Return the rotation matrix for ``angles``.
 
         For an angle ``phi``, the matrix is given by ::
 
@@ -443,9 +447,11 @@ class Parallel2dGeometry(ParallelBeamGeometry):
             the local coordinate system of the detector reference point,
             expressed in the fixed system.
         """
-        if angle not in self.motion_params:
+        if (self.check_bounds and
+                not self.motion_params.contains_all(angle)):
             raise ValueError('`angle` {} not in the valid range {}'
                              ''.format(angle, self.motion_params))
+
         return euler_matrix(angle)
 
     def __repr__(self):
@@ -609,16 +615,12 @@ class Parallel3dEulerGeometry(ParallelBeamGeometry):
         # the detector class.
         detector = Flat2dDetector(part=dpart, axes=det_axes_init)
         super().__init__(ndim=3, apart=apart, detector=detector,
-                         det_pos_init=det_pos_init, translation=translation)
+                         det_pos_init=det_pos_init, translation=translation,
+                         **kwargs)
 
         if self.motion_partition.ndim not in (2, 3):
             raise ValueError('`apart` has dimension {}, expected '
                              '2 or 3'.format(self.motion_partition.ndim))
-
-        # Make sure there are no leftover kwargs
-        if kwargs:
-            raise TypeError('got unexpected keyword arguments {}'
-                            ''.format(kwargs))
 
     @classmethod
     def frommatrix(cls, apart, dpart, init_matrix):
@@ -709,7 +711,14 @@ class Parallel3dEulerGeometry(ParallelBeamGeometry):
         return self.detector.axes
 
     def det_axes(self, angles):
-        """Return the detector axes tuple at ``angle``."""
+        """Return the detector axes tuple at ``angles``.
+
+        If ``angles`` represents more than a single angle, the tuple
+        will contain two arrays, each of which has the shape
+        ``(num_angles, ndim)``. More precisely, if ``axes`` is the
+        returned tuple, then ``axes[0][i]`` is the first axis at angle ``i``,
+        while ``axes[1][i]`` is the second axis at angle ``i``.
+        """
         return tuple(self.rotation_matrix(angles).dot(axis)
                      for axis in self.det_axes_init)
 
@@ -730,6 +739,8 @@ class Parallel3dEulerGeometry(ParallelBeamGeometry):
             ``angles``. The rotation is extrinsic, i.e., expressed in the
             "world" coordinate system.
         """
+        # TODO: adapt for multiple angle tuples, i.e. decide axis
+
         if angles not in self.motion_params:
             raise ValueError('`angles` {} not in the valid range {}'
                              ''.format(angles, self.motion_params))
@@ -1022,9 +1033,16 @@ class Parallel3dAxisGeometry(ParallelBeamGeometry, AxisOrientedGeometry):
         """Initial axes of the detector."""
         return self.detector.axes
 
-    def det_axes(self, angles):
-        """Return the detector axes tuple at ``angle``."""
-        return tuple(self.rotation_matrix(angles).dot(axis)
+    def det_axes(self, angle):
+        """Return the detector axes tuple at ``angle``.
+
+        If ``angle`` represents more than a single angle, the tuple
+        will contain two arrays, each of which has the shape
+        ``(num_angles, ndim)``. More precisely, if ``axes`` is the
+        returned tuple, then ``axes[0][i]`` is the first axis at angle ``i``,
+        while ``axes[1][i]`` is the second axis at angle ``i``.
+        """
+        return tuple(self.rotation_matrix(angle).dot(axis)
                      for axis in self.det_axes_init)
 
     def __repr__(self):

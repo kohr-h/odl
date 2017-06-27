@@ -45,18 +45,26 @@ class Geometry(object):
     <https://odlgroup.github.io/odl/guide/geometry_guide.html>`_.
     """
 
-    def __init__(self, ndim, motion_part, detector, translation=None):
+    def __init__(self, ndim, motion_part, detector, translation=None,
+                 **kwargs):
         """Initialize a new instance.
 
         Parameters
         ----------
         ndim : positive int
             Number of dimensions of this geometry, i.e. dimensionality
-            of the physical space in which this geometry is embedded
+            of the physical space in which this geometry is embedded.
         motion_part : `RectPartition`
-           Partition for the set of "motion" parameters
+            Partition for the set of "motion" parameters.
         detector : `Detector`
-           The detector of this geometry
+            The detector of this geometry.
+        translation : `array-like`, optional
+            Global translation of the geometry. This is added last in any
+            method that computes an absolute vector, e.g., `det_refpoint`.
+        check_bounds : bool, optional
+            If ``True``, check if provided parameters for query functions
+            like `det_refpoint` are in the valid range.
+            Default: ``True``
         """
         ndim, ndim_in = int(ndim), ndim
         if ndim != ndim_in or ndim <= 0:
@@ -72,6 +80,7 @@ class Geometry(object):
         self.__ndim = ndim
         self.__motion_partition = motion_part
         self.__detector = detector
+        self.__check_bounds = bool(kwargs.pop('check_bounds', True))
 
         if translation is None:
             self.__translation = np.zeros(self.ndim)
@@ -83,6 +92,11 @@ class Geometry(object):
             self.__translation = translation
 
         self.__implementation_cache = {}
+
+        # Make sure there are no leftover kwargs
+        if kwargs:
+            raise TypeError('got unexpected keyword arguments {}'
+                            ''.format(kwargs))
 
     @property
     def ndim(self):
@@ -153,6 +167,11 @@ class Geometry(object):
     def translation(self):
         """Shift of the origin of this geometry."""
         return self.__translation
+
+    @property
+    def check_bounds(self):
+        """Whether to check if method parameters are in the valid range."""
+        return self.__check_bounds
 
     def det_refpoint(self, mpar):
         """Detector reference point function.
@@ -271,7 +290,7 @@ class DivergentBeamGeometry(Geometry):
         """
         raise NotImplementedError('abstract method')
 
-    def det_to_src(self, mpar, dpar, normalized=True):
+    def det_to_src(self, mparams, dparams, normalized=True):
         """Vector pointing from a detector location to the source.
 
         A function of the motion and detector parameters.
@@ -294,20 +313,22 @@ class DivergentBeamGeometry(Geometry):
         vec : `numpy.ndarray`, shape (`ndim`,)
             (Unit) vector pointing from the detector to the source.
         """
-        if mpar not in self.motion_params:
-            raise ValueError('`mpar` {} not in the valid range {}'
-                             ''.format(mpar, self.motion_params))
-        if dpar not in self.det_params:
-            raise ValueError('`dpar` {} not in the valid range {}'
-                             ''.format(dpar, self.det_params))
+        if self.check_bounds:
+            if not self.motion_params.contains_all(mparams):
+                raise ValueError('`mparams` {} not in the valid range {}'
+                                 ''.format(mparams, self.motion_params))
+            if not self.det_params.contains_all(dparams):
+                raise ValueError('`dparams` {} not in the valid range {}'
+                                 ''.format(dparams, self.det_params))
 
-        vec = self.src_position(mpar) - self.det_point_position(mpar, dpar)
+        det_to_src_vec = (self.src_position(mparams) -
+                          self.det_point_position(mparams, dparams))
 
         if normalized:
             # axis = -1 allows this to be vectorized
-            vec /= np.linalg.norm(vec, axis=-1)
+            det_to_src_vec /= np.linalg.norm(det_to_src_vec, axis=-1)
 
-        return vec
+        return det_to_src_vec
 
 
 class AxisOrientedGeometry(object):
@@ -358,9 +379,8 @@ class AxisOrientedGeometry(object):
             the local coordinate system of the detector reference point,
             expressed in the fixed system.
         """
-        angle = float(angle)
-        if angle not in self.motion_params:
-            raise ValueError('`angle` {} is not in the valid range {}'
+        if self.check_bounds and not self.motion_params.contains_all(angle):
+            raise ValueError('`angle` {} not in the valid range {}'
                              ''.format(angle, self.motion_params))
 
         return axis_rotation_matrix(self.axis, angle)
