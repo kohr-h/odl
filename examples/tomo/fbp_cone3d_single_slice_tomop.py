@@ -197,7 +197,7 @@ def slice_spec_to_rot_matrix(slice_spec):
 
     # Complete matrix to a rotation matrix
     normal = np.cross(vec_u, vec_v)
-    rot_matrix = np.vstack([vec_u, vec_v, normal])
+    rot_matrix = np.vstack([vec_u, normal, vec_v])
     return slicevis_to_odl_axes.dot(rot_matrix)
 
 
@@ -374,11 +374,12 @@ def callback_fbp(slice_spec):
     slc_pt2_rot = rot_world.dot(slc_pt2)
     slc_min_pt_rot = np.minimum(slc_pt1_rot, slc_pt2_rot)
     slc_max_pt_rot = np.maximum(slc_pt1_rot, slc_pt2_rot)
-    slc_spc_min_pt = (list(slc_min_pt_rot)[:2] +
-                      [-reco_space_full.cell_sides[2] / 2])
-    slc_spc_max_pt = (list(slc_max_pt_rot)[:2] +
-                      [reco_space_full.cell_sides[2] / 2])
-    slc_spc_shape = list(slice_shape) + [1]
+    slc_spc_min_pt = slc_min_pt_rot.copy()
+    slc_spc_min_pt[1] = -reco_space_full.cell_sides[1] / 2
+    slc_spc_max_pt = slc_max_pt_rot.copy()
+    slc_spc_max_pt[1] = reco_space_full.cell_sides[1] / 2
+    slc_spc_shape = np.ones(3, dtype=int)
+    slc_spc_shape[[0, 2]] = slice_shape
     if DEBUG:
         print('slice pt1 (slice sys):', slc_pt1_rot)
         print('slice pt2 (slice sys):', slc_pt2_rot)
