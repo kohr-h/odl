@@ -214,8 +214,18 @@ vol_half_extent = np.array(vol_extent, dtype=float) / 2
 num_angles = 360
 min_angle = 0
 max_angle = 2 * np.pi
-angle_partition = odl.nonuniform_partition(
-    np.linspace(min_angle, max_angle, num_angles, endpoint=False))
+angles = np.linspace(min_angle, max_angle, num_angles, endpoint=False)
+angle_partition = odl.nonuniform_partition(angles)
+
+
+# Partition along the angles
+num_parts = 4
+my_id = 0
+num_angles_per_part = num_angles // num_parts
+slices = [slice(i * num_angles_per_part, (i + 1) * num_angles_per_part)
+          for i in range(num_parts - 1)]
+slices.append(slice((num_parts - 1) * num_angles_per_part, None))
+angle_parts = [angles[slc] for slc in slices]
 
 # Detector
 det_min_pt = np.array([-40, -40], dtype=float)
@@ -254,6 +264,15 @@ min_val = 0.0
 max_val = 1.0
 
 
+def geometry_part_frommatrix(geom_type, geom_kwargs, matrix, slc):
+    apart = geom_kwargs['apart']
+    angles = apart.grid.coord_vectors[0]
+    angles_sub = angles[slc]
+    geom_kwargs_sub = geom_kwargs.copy()
+    geom_kwargs_sub['apart'] = odl.nonuniform_partition(angles_sub)
+    geom_kwargs_sub['init_matrix'] = matrix
+    return geom_type.frommatrix(**geom_kwargs_sub)
+
 
 # %% Define the full problem
 
@@ -280,6 +299,10 @@ phantom = odl.phantom.shepp_logan(reco_space_full, modified=True)
 # Create projection data by calling the ray transform on the phantom
 proj_data = ray_trafo_full(phantom)
 proj_data_filtered = filter_op(proj_data)
+
+# Partition the filtered data (as plain Numpy arrays)
+proj_data_filtered_split = [proj_data_filtered.asarray()[slc]
+                            for slc in slices]
 
 
 # %% Define callback that reconstructs the slice specified by the server
@@ -362,8 +385,8 @@ def callback_fbp(slice_spec):
     if DEBUG:
         print('slice geometry init_matrix:')
         print(init_matrix)
-    geom_kwargs['init_matrix'] = init_matrix
-    geometry_slice = geometry_type.frommatrix(**geom_kwargs)
+    geometry_slice = geometry_part_frommatrix(
+        geometry_type, geom_kwargs, init_matrix, slices[my_id])
 
     # Construct slice reco space with size 1 in the z axis
     slc_pt1_rot = rot_world.dot(slc_pt1)
@@ -403,7 +426,7 @@ def callback_fbp(slice_spec):
         print('time for setup: {:7.3f} ms'.format(setup_time_ms))
 
     # Compute back-projection with this ray transform
-    fbp_reco_slice = ray_trafo_slice.adjoint(proj_data_filtered)
+    fbp_reco_slice = ray_trafo_slice.adjoint(proj_data_filtered_split[my_id])
     if DEBUG:
         # fbp_reco_slice.show()
         pass
