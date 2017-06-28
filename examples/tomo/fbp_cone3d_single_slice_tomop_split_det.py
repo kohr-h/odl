@@ -27,105 +27,6 @@ import tomop
 
 DEBUG = True
 
-
-def callback_proto(slice_spec):
-    """Prototypical callback for ``tomop.server``.
-
-    Parameters
-    ----------
-    slice_spec : `numpy.ndarray`, ``shape=(9,)``
-        Real numbers ``a, b, c, d, e, f, g, h, i`` defining the
-        transformation from normalized slice coordinates to
-        normalized world coordinates. See Notes for details.
-
-    Returns
-    -------
-    shape_array : `numpy_ndarray`, ``dtype='int32', shape=(2,)``
-        Number of sent values per axis, usually the shape of the full slice.
-    values : `numpy.ndarray`, ``dtype='uint32', shape=(np.prod(shape_array),)``
-        Flattened array of reconstructed values to send. The order of
-        flattening is row-major (``'C'``).
-
-    Notes
-    -----
-    The transformation from normalized slice coordinates to normalized
-    world coordinates is as follows:
-
-        .. math::
-            :nowrap:
-
-            \\begin{equation*}
-
-            \\begin{pmatrix}
-              x \\\\
-              y \\\\
-              z \\\\
-              1
-            \end{pmatrix}
-            %
-            =
-            %
-            \\begin{pmatrix}
-              a & d & g \\\\
-              b & e & h \\\\
-              c & f & i \\\\
-              0 & 0 & 1
-            \end{pmatrix}
-            %
-            \\begin{pmatrix}
-              u \\\\
-              v \\\\
-              1
-            \end{pmatrix}
-
-            \end{equation*}
-
-    In the following we define the exact meaning of that transformation.
-    Throughout the explanation we use :math:`u, v` as slice coordinates
-    and as subscripts of quantities defined in the 2D slice coordinate
-    system.
-    Likewise, :math:`x, y, z` stand for 3D world coordinates or quantities
-    defined there.
-
-    Let :math:`N = (N_x, N_y, N_z)`, :math:`U = (U_x, U_y, U_z)` and
-    :math:`V = (V_x, V_y, V_z)` be 3D unit vectors that are perpendicular
-    to each other. Let further :math:`O = (O_x, O_y, O_z)` be an arbitrary
-    vector. :math:`N` will be the normal vector of the slice, :math:`O`
-    the origin of the slice and :math:`U` and :math:`V` the vectors spanning
-    the slice (when shifted back by :math:`-O`).
-
-    Consider now a slice defined by origin :math:`O` and side lengths
-    :math:`l = (l_u, l_v) > (0, 0)`:
-
-        .. math::
-
-            S = O + \{ u\, l_u\, U + v\, l_v\, V\, |\, 0 \leq u, v \leq 1 \}
-
-    Then the pairs :math:`(u, v)` are called **normalized slice
-    coordinates**.
-
-    Similarly, consider a 3D cube of side lengths :math:`W = (W_x, W_y, W_z)`
-    and origin :math:`P = (P_x, P_y, P_z)`, i.e.,
-
-        .. math::
-
-            C = p + \{ (x\, W_x, y\, W_y, z\, W_z)\, |\,
-                      0 \leq x, y, z \leq 1 \}.
-
-    Here, we refer to :math:`(x, y, z)` as **normalized volume
-    coordinates**.
-
-    Thus, the transformation by the coefficients as passed to the callback
-    is defined in terms of these normalized coordinates.
-    """
-    return (np.array([2, 2], dtype='int32'),
-            np.array([1, 2, 3, 4], dtype='uint32'))
-
-
-def callback_null(slice_spec):
-    return (np.array([0, 0], dtype='int32'), np.array([], dtype='uint32'))
-
-
 def slice_spec_to_rot_matrix(slice_spec):
     """Convert a slice specification vector to a 3x3 rotation matrix.
 
@@ -263,6 +164,19 @@ min_val = 0.0
 max_val = 1.0
 
 
+def geometry_part(geom_type, geom_kwargs, slc):
+    dpart = geom_kwargs['dpart']
+    dgrid = dpart.grid
+    sub_slice = [slice(None), slice(None)]
+    sub_slice[split_axis] = slc
+    sub_slice = tuple(sub_slice)
+    dgrid_sub = dgrid[sub_slice]
+    dpart_sub = odl.uniform_partition_fromgrid(dgrid_sub)
+    geom_kwargs_sub = geom_kwargs.copy()
+    geom_kwargs_sub['dpart'] = dpart_sub
+    return geom_type(**geom_kwargs_sub)
+
+
 def geometry_part_frommatrix(geom_type, geom_kwargs, matrix, slc):
     dpart = geom_kwargs['dpart']
     dgrid = dpart.grid
@@ -288,9 +202,6 @@ geometry_full = geometry_type(**geometry_kwargs_full)
 # Ray transform and filtering operator
 ray_trafo_full = odl.tomo.RayTransform(reco_space_full, geometry_full,
                                        impl='astra_cuda')
-filter_op = odl.tomo.analytic.filtered_back_projection.fbp_filter_op(
-    ray_trafo_full, padding, filter_type,
-    frequency_scaling=relative_freq_cutoff)
 
 
 # %% Create raw and filtered data
@@ -301,15 +212,32 @@ phantom = odl.phantom.shepp_logan(reco_space_full, modified=True)
 
 # Create projection data by calling the ray transform on the phantom
 proj_data = ray_trafo_full(phantom)
-proj_data_filtered = filter_op(proj_data)
 
-# Partition the filtered data (as plain Numpy arrays)
-proj_data_filtered_split = []
+# Partition the projection data (as plain Numpy arrays)
+proj_data_split = []
 for slc in slices:
     sub_slc = [slice(None), slice(None), slice(None)]
     sub_slc[1 + split_axis] = slc  # 1+ for the angles
     sub_slc = tuple(sub_slc)
-    proj_data_filtered_split.append(proj_data_filtered.asarray()[sub_slc])
+    proj_data_split.append(proj_data.asarray()[sub_slc])
+
+# Create filtering operators for the individual parts
+geometries_split = [geometry_part(geometry_type, geometry_kwargs_full, slc)
+                    for slc in slices]
+ray_trafos_split = [odl.tomo.RayTransform(reco_space_full, geom,
+                                          impl='astra_cuda')
+                    for geom in geometries_split]
+
+filter_ops_split = [
+    odl.tomo.analytic.filtered_back_projection.fbp_filter_op(
+            ray_trafo, padding, filter_type,
+            frequency_scaling=relative_freq_cutoff)
+    for ray_trafo in ray_trafos_split]
+
+# Filter the split data part by part
+proj_data_filtered_split = [
+    filter_op(data)
+    for filter_op, data in zip(filter_ops_split, proj_data_split)]
 
 
 # %% Define callback that reconstructs the slice specified by the server
