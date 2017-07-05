@@ -12,7 +12,6 @@
 from __future__ import print_function, division, absolute_import
 from future import standard_library
 standard_library.install_aliases()
-from builtins import super
 
 import numpy as np
 
@@ -59,7 +58,8 @@ class ParallelBeamGeometry(Geometry):
         kwargs :
             Further parameters passed on to `Geometry`.
         """
-        super().__init__(ndim, apart, detector, **kwargs)
+        super(ParallelBeamGeometry, self).__init__(
+            ndim, apart, detector, **kwargs)
 
         if self.ndim not in (2, 3):
             raise ValueError('`ndim` must be 2 or 3, got {}'.format(ndim))
@@ -340,9 +340,10 @@ class Parallel2dGeometry(ParallelBeamGeometry):
         check_bounds = kwargs.get('check_bounds', True)
         detector = Flat1dDetector(dpart, axis=det_axis_init,
                                   check_bounds=check_bounds)
-        super().__init__(ndim=2, apart=apart, detector=detector,
-                         det_pos_init=det_pos_init, translation=translation,
-                         **kwargs)
+        super(Parallel2dGeometry, self).__init__(
+            ndim=2, apart=apart, detector=detector,
+            det_pos_init=det_pos_init, translation=translation,
+            **kwargs)
 
         if self.motion_partition.ndim != 1:
             raise ValueError('`apart` dimension {}, expected 1'
@@ -659,9 +660,10 @@ class Parallel3dEulerGeometry(ParallelBeamGeometry):
         check_bounds = kwargs.get('check_bounds', True)
         detector = Flat2dDetector(dpart, axes=det_axes_init,
                                   check_bounds=check_bounds)
-        super().__init__(ndim=3, apart=apart, detector=detector,
-                         det_pos_init=det_pos_init, translation=translation,
-                         **kwargs)
+        super(Parallel3dEulerGeometry, self).__init__(
+            ndim=3, apart=apart, detector=detector,
+            det_pos_init=det_pos_init, translation=translation,
+            **kwargs)
 
         if self.motion_partition.ndim not in (2, 3):
             raise ValueError('`apart` has dimension {}, expected '
@@ -1028,17 +1030,14 @@ class Parallel3dAxisGeometry(ParallelBeamGeometry, AxisOrientedGeometry):
         check_bounds = kwargs.get('check_bounds', True)
         detector = Flat2dDetector(dpart, axes=det_axes_init,
                                   check_bounds=check_bounds)
-        super().__init__(ndim=3, apart=apart, detector=detector,
-                         det_pos_init=det_pos_init, translation=translation)
+        super(Parallel3dAxisGeometry, self).__init__(
+            ndim=3, apart=apart, detector=detector,
+            det_pos_init=det_pos_init, translation=translation,
+            **kwargs)
 
         if self.motion_partition.ndim != 1:
             raise ValueError('`apart` has dimension {}, expected 1'
                              ''.format(self.motion_partition.ndim))
-
-        # Make sure there are no leftover kwargs
-        if kwargs:
-            raise TypeError('got unexpected keyword arguments {}'
-                            ''.format(kwargs))
 
     @classmethod
     def frommatrix(cls, apart, dpart, init_matrix, **kwargs):

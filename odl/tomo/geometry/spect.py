@@ -12,7 +12,6 @@
 from __future__ import print_function, division, absolute_import
 from future import standard_library
 standard_library.install_aliases()
-from builtins import super
 
 import numpy as np
 
@@ -100,7 +99,8 @@ class ParallelHoleCollimatorGeometry(Parallel3dAxisGeometry):
             kwargs['det_pos_init'] = det_pos_init
         self._orig_to_det_init_arg = orig_to_det_init
 
-        super().__init__(apart, dpart, axis, **kwargs)
+        super(ParallelHoleCollimatorGeometry, self).__init__(
+            apart, dpart, axis, **kwargs)
 
     @classmethod
     def frommatrix(cls, apart, dpart, det_radius, init_matrix, **kwargs):

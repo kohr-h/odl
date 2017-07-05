@@ -12,7 +12,6 @@
 from __future__ import print_function, division, absolute_import
 from future import standard_library
 standard_library.install_aliases()
-from builtins import super
 
 import numpy as np
 
@@ -190,8 +189,9 @@ class FanFlatGeometry(DivergentBeamGeometry):
         detector = Flat1dDetector(dpart, axis=det_axis_init,
                                   check_bounds=check_bounds)
         translation = kwargs.pop('translation', None)
-        super().__init__(ndim=2, motion_part=apart, detector=detector,
-                         translation=translation, **kwargs)
+        super(FanFlatGeometry, self).__init__(
+            ndim=2, motion_part=apart, detector=detector,
+            translation=translation, **kwargs)
 
         self.__src_radius = float(src_radius)
         if self.src_radius < 0:
@@ -729,8 +729,8 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         check_bounds = kwargs.get('check_bounds', True)
         detector = Flat2dDetector(dpart, axes=det_axes_init,
                                   check_bounds=check_bounds)
-        super().__init__(ndim=3, motion_part=apart, detector=detector,
-                         **kwargs)
+        super(ConeFlatGeometry, self).__init__(
+            ndim=3, motion_part=apart, detector=detector, **kwargs)
 
         # Check parameters
         if self.src_radius < 0:

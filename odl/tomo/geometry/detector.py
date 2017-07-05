@@ -12,7 +12,7 @@
 from __future__ import print_function, division, absolute_import
 from future import standard_library
 standard_library.install_aliases()
-from builtins import object, super
+from builtins import object
 
 import numpy as np
 
@@ -243,7 +243,7 @@ class Flat1dDetector(Detector):
         >>> np.allclose(det.surface_normal(0), [0, -1])
         True
         """
-        super().__init__(partition, check_bounds)
+        super(Flat1dDetector, self).__init__(partition, check_bounds)
         if self.ndim != 1:
             raise ValueError('`partition` must be 1-dimensional, got ndim={}'
                              ''.format(self.ndim))
@@ -396,7 +396,7 @@ class Flat2dDetector(Detector):
         >>> det.surface_normal([0, 0])
         array([ 0., -1.,  0.])
         """
-        super().__init__(partition, check_bounds)
+        super(Flat2dDetector, self).__init__(partition, check_bounds)
         if self.ndim != 2:
             raise ValueError('`partition` must be 2-dimensional, got ndim={}'
                              ''.format(self.ndim))
@@ -585,7 +585,7 @@ class CircleSectionDetector(Detector):
         >>> det.tangent_at_0
         array([ 1.,  0.])
         """
-        super().__init__(partition, check_bounds)
+        super(CircleSectionDetector, self).__init__(partition, check_bounds)
         if self.ndim != 1:
             raise ValueError('`partition` must be 1-dimensional, got ndim={}'
                              ''.format(self.ndim))
