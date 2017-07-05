@@ -185,7 +185,10 @@ class FanFlatGeometry(DivergentBeamGeometry):
 
         # Initialize stuff
         self.__src_to_det_init = src_to_det_init
-        detector = Flat1dDetector(dpart, det_axis_init)
+        # `check_bounds` is needed for both detector and geometry
+        check_bounds = kwargs.get('check_bounds', True)
+        detector = Flat1dDetector(dpart, axis=det_axis_init,
+                                  check_bounds=check_bounds)
         translation = kwargs.pop('translation', None)
         super().__init__(ndim=2, motion_part=apart, detector=detector,
                          translation=translation, **kwargs)
@@ -722,7 +725,10 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         # Initialize stuff
         self.__src_to_det_init = src_to_det_init
         AxisOrientedGeometry.__init__(self, axis)
-        detector = Flat2dDetector(dpart, det_axes_init)
+        # `check_bounds` is needed for both detector and geometry
+        check_bounds = kwargs.get('check_bounds', True)
+        detector = Flat2dDetector(dpart, axes=det_axes_init,
+                                  check_bounds=check_bounds)
         super().__init__(ndim=3, motion_part=apart, detector=detector,
                          **kwargs)
 
