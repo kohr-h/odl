@@ -35,7 +35,7 @@ class ScalingOperator(Operator):
         ``ScalingOperator(s)(x) == s * x``
     """
 
-    def __init__(self, domain, scalar):
+    def __init__(self, domain, scalar, range=None):
         """Initialize a new instance.
 
         Parameters
@@ -62,7 +62,10 @@ class ScalingOperator(Operator):
             raise TypeError('`space` {!r} not a `LinearSpace` or `Field` '
                             'instance'.format(domain))
 
-        super().__init__(domain, domain, linear=True)
+        if range is None:
+            range = domain
+
+        super().__init__(domain, range, linear=True)
         self.__scalar = domain.field.element(scalar)
 
     @property
@@ -75,7 +78,8 @@ class ScalingOperator(Operator):
         if out is None:
             out = self.scalar * x
         else:
-            out.lincomb(self.scalar, x)
+            out.lincomb(self.scalar, self.range.element(x))
+
         return out
 
     @property
@@ -107,6 +111,7 @@ class ScalingOperator(Operator):
         adjoint : `ScalingOperator`
             ``self`` if `scalar` is real, else `scalar` is conjugated.
         """
+        # TODO: fix adjoint depending on range using adjoint_weights
         if complex(self.scalar).imag == 0.0:
             return self
         else:
