@@ -25,7 +25,8 @@ from odl.util import array1d_repr, arraynd_repr, signature_string, indent_rows
 
 __all__ = ('MatrixWeighting', 'ArrayWeighting', 'ConstWeighting',
            'NoWeighting',
-           'CustomInner', 'CustomNorm', 'CustomDist')
+           'CustomInner', 'CustomNorm', 'CustomDist',
+           'adjoint_weights')
 
 
 class Weighting(object):
@@ -1015,6 +1016,97 @@ class CustomDist(Weighting):
         optargs = []
         inner_str = signature_string(posargs, optargs, mod=['!r', ''])
         return '{}({})'.format(self.__class__.__name__, inner_str)
+
+
+def adjoint_weights(domain, range):
+    """Return the multiplicative factor for an opeator adjoint.
+
+    This helper is intended to simplify the inference of weighting factors
+    for adjoint operators between weighted spaces.
+
+    Parameters
+    ----------
+    domain : `LinearSpace` or `Field`
+        Operator domain.
+    range : `LinearSpace` or `Field`
+        Operator range.
+
+    Returns
+    -------
+    adj_weights : tuple
+        Weighting factors for pre- and post-multiplication, respectively.
+        A ``None`` entry signals "no multiplication".
+
+    Notes
+    -----
+    Let :math:`X = L^2(\Omega)` and :math:`Y = L^2(M)` be unweighted spaces.
+    Given weights :math:`v : \Omega \\to (0, \infty)` and
+    :math:`w : M \\to (0, \infty)`, we define weighted spaces :math:`X_v`
+    and :math:`Y_w`, respectively.
+    Now consider a linear operator :math:`\mathcal{A} : X \\to Y`, and the
+    "same" operator :math:`\mathcal{B} : X_v \\to Y_w` between the
+    weighted spaces, in the sense that
+    :math:`\mathcal{A}(f) = \mathcal{B}(f)` for all :math:`f \\in X = X_v`.
+
+    Then, we can derive the following relation between the adjoint operators:
+
+    .. math::
+        \\langle \mathcal{B}(f), g \\rangle_{Y_w}
+        = \\langle \mathcal{A}(f), w\, g \\rangle_{Y}
+        = \\langle f, \mathcal{A}^*(w\, g) \\rangle_{X}
+        = \\langle f, v^{-1} \mathcal{A}^*(w\, g) \\rangle_{X_v}.
+
+    Hence, the adjoints are related via
+
+    .. math::
+        \mathcal{B}^* = v^{-1} \mathcal{A}^*(w\, g)
+    """
+    weight_dom = getattr(domain, 'weighting', None)
+    weight_ran = getattr(range, 'weighting', None)
+
+    dom_is_unweighted = (weight_dom is None or
+                         isinstance(weight_dom, NoWeighting))
+    ran_is_unweighted = (weight_ran is None or
+                         isinstance(weight_ran, NoWeighting))
+
+    adj_weights = [None, None]
+
+    # Unhandled cases result in (None, None)
+    if dom_is_unweighted:
+        if isinstance(weight_ran, ConstWeighting):
+            adj_weights[1] = weight_ran.const
+        elif isinstance(weight_ran, ArrayWeighting):
+            adj_weights[1] = weight_ran.array
+
+    elif isinstance(weight_dom, ConstWeighting):
+        if ran_is_unweighted:
+            adj_weights[0] = weight_dom.const
+        elif isinstance(weight_ran, ConstWeighting):
+            # Multiply constants for a single weight, and put it to the
+            # smaller space
+            const = weight_ran.const / weight_dom.const
+            dom_size = getattr(domain, 'size', 0)
+            ran_size = getattr(range, 'size', 0)
+            if ran_size <= dom_size:
+                adj_weights[1] = const
+            else:
+                adj_weights[0] = const
+        elif isinstance(weight_ran, ArrayWeighting):
+            # Make one weighting array
+            adj_weights[1] = weight_ran.array / weight_dom.const
+
+    elif isinstance(weight_dom, ArrayWeighting):
+        if ran_is_unweighted:
+            adj_weights[0] = 1.0 / weight_dom.array
+        elif isinstance(weight_ran, ConstWeighting):
+            # Make one weighting array
+            adj_weights[0] = weight_ran.const / weight_dom.array
+        elif isinstance(weight_ran, ArrayWeighting):
+            # Need both, domain weight inverted
+            adj_weights[0] = 1.0 / weight_dom.array
+            adj_weights[1] = weight_ran.array
+
+    return tuple(adj_weights)
 
 
 if __name__ == '__main__':
