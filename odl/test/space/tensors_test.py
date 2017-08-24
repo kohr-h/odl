@@ -14,9 +14,15 @@ import operator
 from pkg_resources import parse_version
 import pytest
 import sys
-
 import odl
 from odl.set.space import LinearSpaceTypeError
+from odl.space.gpuary_tensors import (
+    PYGPU_AVAILABLE,
+    GpuTensor, GpuTensorSpace,
+    GpuTensorSpaceConstWeighting, GpuTensorSpaceArrayWeighting,
+    GpuTensorSpaceCustomInner, GpuTensorSpaceCustomNorm,
+    GpuTensorSpaceCustomDist,
+    gpuary_weighted_inner, gpuary_weighted_norm, gpuary_weighted_dist)
 from odl.space.npy_tensors import (
     NumpyTensor, NumpyTensorSpace,
     NumpyTensorSpaceConstWeighting, NumpyTensorSpaceArrayWeighting,
@@ -26,6 +32,8 @@ from odl.util.testutils import (
     all_almost_equal, all_equal, simple_fixture,
     noise_array, noise_element, noise_elements)
 from odl.util.ufuncs import UFUNCS
+if PYGPU_AVAILABLE:
+    import pygpu
 
 
 # --- Test helpers --- #
@@ -43,10 +51,17 @@ def _pos_array(space):
     return np.abs(noise_array(space)) + 0.1
 
 
+def _pos_gpuarray(space):
+    """Create a GPU array with positive real entries in ``space``."""
+    return pygpu.array(_pos_array(space), dtype=space.dtype)
+
+
 def _array_cls(impl):
     """Return the array class for given impl."""
     if impl == 'numpy':
         return np.ndarray
+    elif impl == 'gpuarray':
+        return pygpu.gpuarray.GpuArray
     else:
         assert False
 
@@ -55,6 +70,8 @@ def _odl_tensor_cls(impl):
     """Return the ODL tensor class for given impl."""
     if impl == 'numpy':
         return NumpyTensor
+    elif impl == 'gpuarray':
+        return GpuTensor
     else:
         assert False
 
@@ -72,6 +89,19 @@ def _weighting_cls(impl, kind):
             return NumpyTensorSpaceCustomNorm
         elif kind == 'dist':
             return NumpyTensorSpaceCustomDist
+        else:
+            assert False
+    elif impl == 'gpuarray':
+        if kind == 'array':
+            return GpuTensorSpaceArrayWeighting
+        elif kind == 'const':
+            return GpuTensorSpaceConstWeighting
+        elif kind == 'inner':
+            return GpuTensorSpaceCustomInner
+        elif kind == 'norm':
+            return GpuTensorSpaceCustomNorm
+        elif kind == 'dist':
+            return GpuTensorSpaceCustomDist
         else:
             assert False
     else:
@@ -168,6 +198,11 @@ def test_init_tspace_weighting(weight, exponent, tspace_impl):
             weighting_cls = _weighting_cls(tspace_impl, 'array')
         else:
             weighting_cls = _weighting_cls(tspace_impl, 'const')
+    elif tspace_impl == 'gpuarray':
+        if isinstance(weight, (np.ndarray, _array_cls(tspace_impl))):
+            weighting_cls = _weighting_cls(tspace_impl, 'array')
+        else:
+            weighting_cls = _weighting_cls(tspace_impl, 'const')
     else:
         assert False
 
@@ -183,6 +218,8 @@ def test_init_tspace_weighting(weight, exponent, tspace_impl):
     # Errors for bad input
     with pytest.raises(ValueError):
         badly_sized = np.ones((2, 4))
+        if tspace_impl == 'gpuarray':
+            badly_sized = pygpu.array(badly_sized)
         odl.tensor_space((3, 4), weighting=badly_sized, impl=tspace_impl)
 
     if tspace_impl == 'numpy':
@@ -306,6 +343,9 @@ def test_equals_elem(tspace_impl):
 
 def test_tspace_astype(tspace_impl):
     """Test creation of a space counterpart with new dtype."""
+    if tspace_impl == 'gpuarray':
+        pytest.xfail(reason='complex spaces not implemented for GPU arrays')
+
     real_space = odl.rn((3, 4), impl=tspace_impl)
     int_space = odl.tensor_space((3, 4), dtype=int, impl=tspace_impl)
     assert real_space.astype(int) == int_space
@@ -333,63 +373,36 @@ def test_tspace_astype(tspace_impl):
     assert cplx.complex_space is cplx
 
 
-def _test_lincomb(space, a, b, discontig):
+def _test_lincomb(tspace, a, b):
     """Validate lincomb against direct result using arrays."""
-    # Set slice for discontiguous arrays and get result space of slicing
-    if discontig:
-        slc = [slice(None)] * (space.ndim - 1) + [slice(None, None, 2)]
-        res_space = space.element()[slc].space
-    else:
-        res_space = space
-
     # Unaliased arguments
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
-    if discontig:
-        x, y, z = x[slc], y[slc], z[slc]
-        xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
-
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     zarr[:] = a * xarr + b * yarr
-    res_space.lincomb(a, x, b, y, out=z)
+    tspace.lincomb(a, x, b, y, out=z)
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
     # First argument aliased with output
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
-    if discontig:
-        x, y, z = x[slc], y[slc], z[slc]
-        xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
-
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     zarr[:] = a * zarr + b * yarr
-    res_space.lincomb(a, z, b, y, out=z)
+    tspace.lincomb(a, z, b, y, out=z)
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
     # Second argument aliased with output
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
-    if discontig:
-        x, y, z = x[slc], y[slc], z[slc]
-        xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
-
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     zarr[:] = a * xarr + b * zarr
-    res_space.lincomb(a, x, b, z, out=z)
+    tspace.lincomb(a, x, b, z, out=z)
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
     # Both arguments aliased with each other
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
-    if discontig:
-        x, y, z = x[slc], y[slc], z[slc]
-        xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
-
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     zarr[:] = a * xarr + b * xarr
-    res_space.lincomb(a, x, b, x, out=z)
+    tspace.lincomb(a, x, b, x, out=z)
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
     # All aliased
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
-    if discontig:
-        x, y, z = x[slc], y[slc], z[slc]
-        xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
-
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     zarr[:] = a * zarr + b * zarr
-    res_space.lincomb(a, z, b, z, out=z)
+    tspace.lincomb(a, z, b, z, out=z)
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
 
@@ -689,6 +702,9 @@ def test_pdist(tspace_impl, exponent):
 
 def test_element_getitem(tspace_impl, getitem_indices):
     """Check if getitem produces correct values, shape and other stuff."""
+    if tspace_impl == 'gpuarray' and np.ndim(getitem_indices) > 1:
+        pytest.xfail(reason='fancy indexing not supported in pygpu')
+
     space = odl.tensor_space((2, 3, 4), dtype='float32', exponent=1,
                              weighting=2)
     x_arr, x = noise_elements(space)
@@ -719,6 +735,9 @@ def test_element_getitem(tspace_impl, getitem_indices):
 
 def test_element_setitem(tspace_impl, setitem_indices):
     """Check if setitem produces the same result as NumPy."""
+    if tspace_impl == 'gpuarray' and np.ndim(getitem_indices) > 1:
+        pytest.xfail(reason='fancy indexing not supported in pygpu')
+
     space = odl.tensor_space((2, 3, 4), dtype='float32', exponent=1,
                              weighting=2)
     x_arr, x = noise_elements(space)
@@ -1004,6 +1023,8 @@ def test_array_weighting_equals(tspace_impl):
     """Test the equality check method of array weightings."""
     space = odl.rn(5, impl=tspace_impl)
     weight_arr = _pos_array(space)
+    if tspace_impl == 'gpuarray':
+        weight_arr = pygpu.array(weight_arr, cls=pygpu.ndgpuarray)
     weight_elem = space.element(weight_arr)
 
     weighting_cls = _weighting_cls(tspace_impl, 'array')
@@ -1664,4 +1685,4 @@ def test_ufunc_reduction_docs_notempty(tspace_impl):
 
 
 if __name__ == '__main__':
-    odl.util.test_file(__file__)
+    pytest.main([str(__file__.replace('\\', '/')), '-v'])
