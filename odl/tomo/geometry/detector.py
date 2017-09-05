@@ -17,7 +17,7 @@ from builtins import object
 import numpy as np
 
 from odl.discr import RectPartition
-from odl.tomo.util.utility import perpendicular_vector
+from odl.tomo.util import perpendicular_vector, is_inside_bounds
 from odl.util import indent_rows, signature_string
 
 
@@ -173,6 +173,7 @@ class Detector(object):
             - ``param.shape + (space_ndim,)`` if `ndim` is 1,
             - ``param.shape[:-1] + (space_ndim,)`` otherwise.
         """
+        # Checking is done by `surface_deriv`
         if self.ndim == 1 and self.space_ndim == 2:
             return -perpendicular_vector(self.surface_deriv(param))
         elif self.ndim == 2 and self.space_ndim == 3:
@@ -217,6 +218,7 @@ class Detector(object):
         .. _Surface area:
             https://en.wikipedia.org/wiki/Surface_area
         """
+        # Checking is done by `surface_deriv`
         if self.ndim == 1:
             scalar_out = (np.shape(param) == ())
             measure = np.linalg.norm(self.surface_deriv(param), axis=-1)
@@ -326,8 +328,7 @@ class Flat1dDetector(Detector):
         """
         squeeze_out = (np.shape(param) == ())
         param = np.array(param, dtype=float, copy=False, ndmin=1)
-        if self.check_bounds and not self.params.contains_all(param.ravel()):
-            # Allow `param` with ndim > 1 by checking the raveled array
+        if self.check_bounds and not is_inside_bounds(param, self.params):
             raise ValueError('`param` {} not in the valid range '
                              '{}'.format(param, self.params))
 
@@ -379,8 +380,7 @@ class Flat1dDetector(Detector):
         """
         squeeze_out = (np.shape(param) == ())
         param = np.array(param, dtype=float, copy=False, ndmin=1)
-        if self.check_bounds and not self.params.contains_all(param.ravel()):
-            # Allow `param` with ndim > 1 by checking the raveled array
+        if self.check_bounds and not is_inside_bounds(param, self.params):
             raise ValueError('`param` {} not in the valid range '
                              '{}'.format(param, self.params))
         if squeeze_out:
@@ -512,14 +512,9 @@ class Flat2dDetector(Detector):
         param_in = param
         param = tuple(np.array(p, dtype=float, copy=False, ndmin=1)
                       for p in param)
-        if self.check_bounds:
-            # Flesh out and flatten to check bounds
-            bcast_param = np.broadcast_arrays(*param)
-            stacked_param = np.vstack(bcast_param)
-            flat_param = stacked_param.reshape(self.ndim, -1)
-            if not self.params.contains_all(flat_param):
-                raise ValueError('`param` {} not in the valid range '
-                                 '{}'.format(param_in, self.params))
+        if self.check_bounds and not is_inside_bounds(param, self.params):
+            raise ValueError('`param` {} not in the valid range '
+                             '{}'.format(param_in, self.params))
 
         # Compute outer product of the i-th spatial component of the
         # parameter and sum up the contributions
@@ -596,14 +591,9 @@ class Flat2dDetector(Detector):
         param_in = param
         param = tuple(np.array(p, dtype=float, copy=False, ndmin=1)
                       for p in param)
-        if self.check_bounds:
-            # Flesh out and flatten to check bounds
-            bcast_param = np.broadcast_arrays(*param)
-            stacked_param = np.vstack(bcast_param)
-            flat_param = stacked_param.reshape(self.ndim, -1)
-            if not self.params.contains_all(flat_param):
-                raise ValueError('`param` {} not in the valid range '
-                                 '{}'.format(param_in, self.params))
+        if self.check_bounds and not is_inside_bounds(param, self.params):
+            raise ValueError('`param` {} not in the valid range '
+                             '{}'.format(param_in, self.params))
 
         if squeeze_out:
             return self.axes
@@ -756,8 +746,7 @@ class CircleSectionDetector(Detector):
         """
         squeeze_out = (np.shape(param) == ())
         param = np.array(param, dtype=float, copy=False, ndmin=1)
-        if self.check_bounds and not self.params.contains_all(param.ravel()):
-            # Allow `param` with ndim > 1 by checking the raveled array
+        if self.check_bounds and not is_inside_bounds(param, self.params):
             raise ValueError('`param` {} not in the valid range '
                              '{}'.format(param, self.params))
 
@@ -822,8 +811,7 @@ class CircleSectionDetector(Detector):
         """
         squeeze_out = (np.shape(param) == ())
         param = np.array(param, dtype=float, copy=False, ndmin=1)
-        if self.check_bounds and not self.params.contains_all(param.ravel()):
-            # Allow `param` with ndim > 1 by checking the raveled array
+        if self.check_bounds and not is_inside_bounds(param, self.params):
             raise ValueError('`param` {} not in the valid range '
                              '{}'.format(param, self.params))
 
@@ -882,7 +870,7 @@ class CircleSectionDetector(Detector):
         """
         scalar_out = (np.shape(param) == ())
         param = np.array(param, dtype=float, copy=False, ndmin=1)
-        if self.check_bounds and not self.params.contains_all(param):
+        if self.check_bounds and not is_inside_bounds(param, self.params):
             raise ValueError('`param` {} not in the valid range '
                              '{}'.format(param, self.params))
 
