@@ -9,29 +9,29 @@
 """Unit tests for Numpy-based tensors."""
 
 from __future__ import division
-import numpy as np
+
 import operator
-from pkg_resources import parse_version
-import pytest
 import sys
+
+import numpy as np
+import pytest
+from pkg_resources import parse_version
+
 import odl
 from odl.set.space import LinearSpaceTypeError
 from odl.space.gpuary_tensors import (
-    PYGPU_AVAILABLE,
-    GpuTensor, GpuTensorSpace,
-    GpuTensorSpaceConstWeighting, GpuTensorSpaceArrayWeighting,
-    GpuTensorSpaceCustomInner, GpuTensorSpaceCustomNorm,
-    GpuTensorSpaceCustomDist,
-    gpuary_weighted_inner, gpuary_weighted_norm, gpuary_weighted_dist)
+    PYGPU_AVAILABLE, GpuTensor, GpuTensorSpaceArrayWeighting,
+    GpuTensorSpaceConstWeighting, GpuTensorSpaceCustomDist,
+    GpuTensorSpaceCustomInner, GpuTensorSpaceCustomNorm)
 from odl.space.npy_tensors import (
-    NumpyTensor, NumpyTensorSpace,
-    NumpyTensorSpaceConstWeighting, NumpyTensorSpaceArrayWeighting,
-    NumpyTensorSpaceCustomInner, NumpyTensorSpaceCustomNorm,
-    NumpyTensorSpaceCustomDist)
+    NumpyTensor, NumpyTensorSpace, NumpyTensorSpaceArrayWeighting,
+    NumpyTensorSpaceConstWeighting, NumpyTensorSpaceCustomDist,
+    NumpyTensorSpaceCustomInner, NumpyTensorSpaceCustomNorm)
 from odl.util.testutils import (
-    all_almost_equal, all_equal, simple_fixture,
-    noise_array, noise_element, noise_elements)
+    all_almost_equal, all_equal, noise_array, noise_element, noise_elements,
+    simple_fixture)
 from odl.util.ufuncs import UFUNCS
+
 if PYGPU_AVAILABLE:
     import pygpu
 
@@ -110,6 +110,9 @@ def _weighting_cls(impl, kind):
 
 # --- Pytest fixtures --- #
 
+lico_a = simple_fixture('a', [0, 1, -1, 3.41])
+lico_b = simple_fixture('b', [0, 1, -1, 3.41])
+discontig = simple_fixture('discontig', [True, False])
 exponent = simple_fixture('exponent', [2.0, 1.0, float('inf'), 0.5, 1.5])
 
 setitem_indices_params = [
@@ -132,7 +135,11 @@ def weight(request):
 
 @pytest.fixture(scope='module')
 def tspace(floating_dtype, tspace_impl):
-    return odl.tensor_space(shape=(3, 4), dtype=floating_dtype)
+    cls = odl.space.entry_points.tensor_space_impl(tspace_impl)
+    if floating_dtype not in cls.available_dtypes():
+        pytest.skip('dtype not supported')
+    return odl.tensor_space(shape=(3, 4), dtype=floating_dtype,
+                            impl=tspace_impl)
 
 
 # --- Space classes --- #
@@ -247,6 +254,11 @@ def test_properties(tspace_impl):
 
 def test_element(tspace, elem_order):
     """Test creation of space elements."""
+    if tspace.impl == 'gpuarray':
+        may_share_memory = pygpu.gpuarray.may_share_memory
+    else:
+        may_share_memory = np.may_share_memory
+
     # From scratch
     elem = tspace.element(order=elem_order)
     assert elem.shape == elem.data.shape
@@ -263,41 +275,72 @@ def test_element(tspace, elem_order):
     else:
         assert elem.data.flags[elem_order + '_CONTIGUOUS']
 
-    # From Numpy array (C order)
+    # From raw array (C order)
     arr_c = np.random.rand(*tspace.shape).astype(tspace.dtype)
+    if tspace.impl == 'gpuarray':
+        arr_c = pygpu.array(arr_c, order='C')
     elem = tspace.element(arr_c, order=elem_order)
     assert all_equal(elem, arr_c)
     assert elem.shape == elem.data.shape
     assert elem.dtype == tspace.dtype == elem.data.dtype
     if elem_order is None or elem_order == 'C':
         # None or same order should not lead to copy
-        assert np.may_share_memory(elem.data, arr_c)
+        assert may_share_memory(elem.data, arr_c)
     if elem_order is not None:
         # Contiguousness in explicitly provided order should be guaranteed
         assert elem.data.flags[elem_order + '_CONTIGUOUS']
 
-    # From Numpy array (F order)
+    # From raw array (F order)
     arr_f = np.asfortranarray(arr_c)
+    if tspace.impl == 'gpuarray':
+        arr_f = pygpu.array(arr_f, order='F')
     elem = tspace.element(arr_f, order=elem_order)
     assert all_equal(elem, arr_f)
     assert elem.shape == elem.data.shape
     assert elem.dtype == tspace.dtype == elem.data.dtype
     if elem_order is None or elem_order == 'F':
         # None or same order should not lead to copy
-        assert np.may_share_memory(elem.data, arr_f)
+        assert may_share_memory(elem.data, arr_f)
     if elem_order is not None:
         # Contiguousness in explicitly provided order should be guaranteed
         assert elem.data.flags[elem_order + '_CONTIGUOUS']
 
     # From pointer
-    arr_c_ptr = arr_c.ctypes.data
-    elem = tspace.element(data_ptr=arr_c_ptr, order='C')
-    assert all_equal(elem, arr_c)
-    assert np.may_share_memory(elem.data, arr_c)
-    arr_f_ptr = arr_f.ctypes.data
-    elem = tspace.element(data_ptr=arr_f_ptr, order='F')
-    assert all_equal(elem, arr_f)
-    assert np.may_share_memory(elem.data, arr_f)
+    if isinstance(arr_c, pygpu.gpuarray.GpuArray):
+        if arr_c.context.kind == b'cuda':
+            arr_c_ptr = arr_c.gpudata
+        elif arr_c.context.kind == b'opencl':
+            arr_c_ptr = arr_c.data
+        else:
+            assert False
+    else:
+        arr_c_ptr = arr_c.ctypes.data
+
+    if tspace.impl == 'gpuarray':
+        with pytest.raises(NotImplementedError):
+            elem = tspace.element(data_ptr=arr_c_ptr, order='C')
+    else:
+        elem = tspace.element(data_ptr=arr_c_ptr, order='C')
+        assert all_equal(elem, arr_c)
+        assert may_share_memory(elem.data, arr_c)
+
+    if isinstance(arr_f, pygpu.gpuarray.GpuArray):
+        if arr_f.context.kind == b'cuda':
+            arr_f_ptr = arr_f.gpudata
+        elif arr_f.context.kind == b'opencl':
+            arr_f_ptr = arr_f.data
+        else:
+            assert False
+    else:
+        arr_f_ptr = arr_f.ctypes.data
+
+    if tspace.impl == 'gpuarray':
+        with pytest.raises(NotImplementedError):
+            elem = tspace.element(data_ptr=arr_f_ptr, order='F')
+    else:
+        elem = tspace.element(data_ptr=arr_f_ptr, order='F')
+        assert all_equal(elem, arr_f)
+        assert may_share_memory(elem.data, arr_f)
 
     # Check errors
     with pytest.raises(ValueError):
@@ -373,17 +416,18 @@ def test_tspace_astype(tspace_impl):
     assert cplx.complex_space is cplx
 
 
-def _test_lincomb(space, a, b, discontig):
+def test_lincomb(tspace, lico_a, lico_b, discontig):
     """Validate lincomb against direct result using arrays."""
+    a, b = lico_a, lico_b
     # Set slice for discontiguous arrays and get result space of slicing
     if discontig:
-        slc = [slice(None)] * (space.ndim - 1) + [slice(None, None, 2)]
-        res_space = space.element()[slc].space
+        slc = [slice(None)] * (tspace.ndim - 1) + [slice(None, None, 2)]
+        res_space = tspace.element()[slc].space
     else:
-        res_space = space
+        res_space = tspace
 
     # Unaliased arguments
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     if discontig:
         x, y, z = x[slc], y[slc], z[slc]
         xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
@@ -393,7 +437,7 @@ def _test_lincomb(space, a, b, discontig):
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
     # First argument aliased with output
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     if discontig:
         x, y, z = x[slc], y[slc], z[slc]
         xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
@@ -403,7 +447,7 @@ def _test_lincomb(space, a, b, discontig):
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
     # Second argument aliased with output
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     if discontig:
         x, y, z = x[slc], y[slc], z[slc]
         xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
@@ -413,7 +457,7 @@ def _test_lincomb(space, a, b, discontig):
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
     # Both arguments aliased with each other
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     if discontig:
         x, y, z = x[slc], y[slc], z[slc]
         xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
@@ -423,7 +467,7 @@ def _test_lincomb(space, a, b, discontig):
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
 
     # All aliased
-    [xarr, yarr, zarr], [x, y, z] = noise_elements(space, 3)
+    [xarr, yarr, zarr], [x, y, z] = noise_elements(tspace, 3)
     if discontig:
         x, y, z = x[slc], y[slc], z[slc]
         xarr, yarr, zarr = xarr[slc], yarr[slc], zarr[slc]
@@ -431,33 +475,6 @@ def _test_lincomb(space, a, b, discontig):
     zarr[:] = a * zarr + b * zarr
     res_space.lincomb(a, z, b, z, out=z)
     assert all_almost_equal([x, y, z], [xarr, yarr, zarr])
-
-
-def test_lincomb(tspace):
-    """Validate lincomb against direct result using arrays and some scalars."""
-    scalar_values = [0, 1, -1, 3.41]
-    for a in scalar_values:
-        for b in scalar_values:
-            _test_lincomb(tspace, a, b, discontig=False)
-
-
-def test_lincomb_discontig(tspace_impl):
-    """Test lincomb with discontiguous input."""
-    scalar_values = [0, 1, -1, 3.41]
-
-    # Use small size for small array case
-    tspace = odl.rn((3, 4), impl=tspace_impl)
-
-    for a in scalar_values:
-        for b in scalar_values:
-            _test_lincomb(tspace, a, b, discontig=True)
-
-    # Use medium size to test fallback impls
-    tspace = odl.rn((30, 40), impl=tspace_impl)
-
-    for a in scalar_values:
-        for b in scalar_values:
-            _test_lincomb(tspace, a, b, discontig=True)
 
 
 def test_lincomb_raise(tspace):
@@ -1113,14 +1130,15 @@ def test_array_weighting_inner(tspace):
     [xarr, yarr], [x, y] = noise_elements(tspace, 2)
 
     weight_arr = _pos_array(tspace)
-    weighting = NumpyTensorSpaceArrayWeighting(weight_arr)
+    weighting_cls = _weighting_cls(tspace.impl, 'array')
+    weighting = weighting_cls(weight_arr)
 
     true_inner = np.vdot(yarr, xarr * weight_arr)
     assert weighting.inner(x, y) == pytest.approx(true_inner)
 
     # Exponent != 2 -> no inner product, should raise
     with pytest.raises(NotImplementedError):
-        NumpyTensorSpaceArrayWeighting(weight_arr, exponent=1.0).inner(x, y)
+        weighting_cls(weight_arr, exponent=1.0).inner(x, y)
 
 
 def test_array_weighting_norm(tspace, exponent):
@@ -1129,7 +1147,8 @@ def test_array_weighting_norm(tspace, exponent):
     xarr, x = noise_elements(tspace)
 
     weight_arr = _pos_array(tspace)
-    weighting = NumpyTensorSpaceArrayWeighting(weight_arr, exponent=exponent)
+    weighting_cls = _weighting_cls(tspace.impl, 'array')
+    weighting = weighting_cls(weight_arr, exponent=exponent)
 
     if exponent == float('inf'):
         true_norm = np.linalg.norm(
@@ -1149,7 +1168,8 @@ def test_array_weighting_dist(tspace, exponent):
     [xarr, yarr], [x, y] = noise_elements(tspace, n=2)
 
     weight_arr = _pos_array(tspace)
-    weighting = NumpyTensorSpaceArrayWeighting(weight_arr, exponent=exponent)
+    weighting_cls = _weighting_cls(tspace.impl, 'array')
+    weighting = weighting_cls(weight_arr, exponent=exponent)
 
     if exponent == float('inf'):
         true_dist = np.linalg.norm(
@@ -1224,11 +1244,12 @@ def test_const_weighting_inner(tspace):
     constant = 1.5
     true_result_const = constant * np.vdot(yarr, xarr)
 
-    w_const = NumpyTensorSpaceConstWeighting(constant)
+    weighting_cls = _weighting_cls(tspace.impl, 'const')
+    w_const = weighting_cls(constant)
     assert w_const.inner(x, y) == pytest.approx(true_result_const)
 
     # Exponent != 2 -> no inner
-    w_const = NumpyTensorSpaceConstWeighting(constant, exponent=1)
+    w_const = weighting_cls(constant, exponent=1)
     with pytest.raises(NotImplementedError):
         w_const.inner(x, y)
 
@@ -1244,7 +1265,8 @@ def test_const_weighting_norm(tspace, exponent):
         factor = constant ** (1 / exponent)
     true_norm = factor * np.linalg.norm(xarr.ravel(), ord=exponent)
 
-    w_const = NumpyTensorSpaceConstWeighting(constant, exponent=exponent)
+    weighting_cls = _weighting_cls(tspace.impl, 'const')
+    w_const = weighting_cls(constant, exponent=exponent)
     assert w_const.norm(x) == pytest.approx(true_norm)
 
 
@@ -1259,7 +1281,8 @@ def test_const_weighting_dist(tspace, exponent):
         factor = constant ** (1 / exponent)
     true_dist = factor * np.linalg.norm((xarr - yarr).ravel(), ord=exponent)
 
-    w_const = NumpyTensorSpaceConstWeighting(constant, exponent=exponent)
+    weighting_cls = _weighting_cls(tspace.impl, 'const')
+    w_const = weighting_cls(constant, exponent=exponent)
     assert w_const.dist(x, y) == pytest.approx(true_dist)
 
 
@@ -1272,9 +1295,10 @@ def test_custom_inner(tspace):
     def inner(x, y):
         return np.vdot(y, x)
 
-    w = NumpyTensorSpaceCustomInner(inner)
-    w_same = NumpyTensorSpaceCustomInner(inner)
-    w_other = NumpyTensorSpaceCustomInner(np.dot)
+    weighting_cls = _weighting_cls(tspace.impl, 'inner')
+    w = weighting_cls(inner)
+    w_same = weighting_cls(inner)
+    w_other = weighting_cls(np.dot)
 
     assert w == w
     assert w == w_same
@@ -1290,21 +1314,22 @@ def test_custom_inner(tspace):
     assert w.dist(x, y) == pytest.approx(true_dist, rel=rtol)
 
     with pytest.raises(TypeError):
-        NumpyTensorSpaceCustomInner(1)
+        weighting_cls(1)
 
 
 def test_custom_norm(tspace):
     """Test weighting with a custom norm."""
     [xarr, yarr], [x, y] = noise_elements(tspace, 2)
 
-    norm = np.linalg.norm
+    npy_norm = np.linalg.norm
 
-    def other_norm(x):
+    def norm(x):
         return np.linalg.norm(x, ord=1)
 
-    w = NumpyTensorSpaceCustomNorm(norm)
-    w_same = NumpyTensorSpaceCustomNorm(norm)
-    w_other = NumpyTensorSpaceCustomNorm(other_norm)
+    weighting_cls = _weighting_cls(tspace.impl, 'norm')
+    w = weighting_cls(norm)
+    w_same = weighting_cls(norm)
+    w_other = weighting_cls(npy_norm)
 
     assert w == w
     assert w == w_same
@@ -1320,7 +1345,7 @@ def test_custom_norm(tspace):
     assert w.dist(x, y) == pytest.approx(true_dist)
 
     with pytest.raises(TypeError):
-        NumpyTensorSpaceCustomNorm(1)
+        weighting_cls(1)
 
 
 def test_custom_dist(tspace):
@@ -1333,9 +1358,10 @@ def test_custom_dist(tspace):
     def other_dist(x, y):
         return np.linalg.norm(x - y, ord=1)
 
-    w = NumpyTensorSpaceCustomDist(dist)
-    w_same = NumpyTensorSpaceCustomDist(dist)
-    w_other = NumpyTensorSpaceCustomDist(other_dist)
+    weighting_cls = _weighting_cls(tspace.impl, 'dist')
+    w = weighting_cls(dist)
+    w_same = weighting_cls(dist)
+    w_other = weighting_cls(other_dist)
 
     assert w == w
     assert w == w_same
@@ -1351,7 +1377,7 @@ def test_custom_dist(tspace):
     assert w.dist(x, y) == pytest.approx(true_dist)
 
     with pytest.raises(TypeError):
-        NumpyTensorSpaceCustomDist(1)
+        weighting_cls(1)
 
 
 # --- Ufuncs & Reductions --- #

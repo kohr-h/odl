@@ -9,21 +9,20 @@
 """Implementation of tensor spaces using ``pygpu``."""
 
 # Imports for common Python 2/3 codebase
-from __future__ import print_function, division, absolute_import
-from future import standard_library
-standard_library.install_aliases()
+from __future__ import absolute_import, division, print_function
 
 import os
-import numpy as np
 import warnings
 
+import numpy as np
+
 from odl.set import RealNumbers
-from odl.space.base_tensors import TensorSpace, Tensor
+from odl.space.base_tensors import Tensor, TensorSpace
 from odl.space.weighting import (
-    Weighting, ArrayWeighting, ConstWeighting,
-    CustomInner, CustomNorm, CustomDist)
+    ArrayWeighting, ConstWeighting, CustomDist, CustomInner, CustomNorm,
+    Weighting)
 from odl.util import (
-    dtype_str, is_int_dtype, is_floating_dtype, signature_string)
+    dtype_str, is_floating_dtype, is_int_dtype, signature_string)
 
 try:
     import pygpu
@@ -2042,82 +2041,6 @@ def _weighting(weights, exponent):
         weights = pygpu.array(weights, copy=False)
         weighting = GpuTensorSpaceArrayWeighting(weights, exponent=exponent)
     return weighting
-
-
-def gpuary_weighted_inner(weights):
-    """Weighted inner product on `GpuTensorSpace` spaces as free function.
-
-    Parameters
-    ----------
-    weights : scalar or `array-like`
-        Weights of the inner product. A scalar is interpreted as a
-        constant weight, an array as pointwise weights.
-
-    Returns
-    -------
-    inner : callable
-        Inner product function with given weight. Constant weightings
-        are applicable to spaces of any size, for arrays the shapes
-        of the weighting and the space must match.
-
-    See Also
-    --------
-    GpuTensorSpaceConstWeighting
-    GpuTensorSpaceArrayWeighting
-    """
-    return _weighting(weights, exponent=2.0).inner
-
-
-def gpuary_weighted_norm(weights, exponent=2.0):
-    """Weighted norm on `GpuTensorSpace` spaces as free function.
-
-    Parameters
-    ----------
-    weights : scalar or `array-like`
-        Weights of the inner product. A scalar is interpreted as a
-        constant weight, an array as pointwise weights.
-    exponent : positive float
-        Exponent of the norm.
-
-    Returns
-    -------
-    norm : callable
-        Norm function with given weight. Constant weightings
-        are applicable to spaces of any size, for arrays the shapes
-        of the weighting and the space must match.
-
-    See Also
-    --------
-    GpuTensorSpaceConstWeighting
-    GpuTensorSpaceArrayWeighting
-    """
-    return _weighting(weights, exponent=exponent).norm
-
-
-def gpuary_weighted_dist(weights, exponent=2.0):
-    """Weighted distance on `GpuTensorSpace` spaces as free function.
-
-    Parameters
-    ----------
-    weights : scalar or `array-like`
-        Weights of the inner product. A scalar is interpreted as a
-        constant weight, an array as pointwise weights.
-    exponent : positive float
-        Exponent of the norm inducing the distance metric.
-
-    Returns
-    -------
-    dist : callable
-        Distance function with given weight. Constant weightings
-        are applicable to spaces of any size, for arrays the shapes
-        of the weighting and the space must match.
-
-    See Also
-    --------
-    GpuTensorSpaceConstWeighting
-    GpuTensorSpaceArrayWeighting
-    """
-    return _weighting(weights, exponent=exponent).dist
 
 
 def _pnorm(x, p, w=None):
