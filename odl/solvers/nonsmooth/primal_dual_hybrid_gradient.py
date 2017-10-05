@@ -1,4 +1,4 @@
-# Copyright 2014-2017 The ODL contributors
+# Copyright 2014-2018 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -12,11 +12,11 @@ The primal-dual hybrid gradient algorithm is a flexible method well suited for
 non-smooth convex optimization problems in imaging.
 """
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
 from odl.operator import Operator
-
 
 __all__ = ('pdhg', 'pdhg_stepsize')
 
@@ -29,7 +29,7 @@ def pdhg(x, f, g, L, niter, tau=None, sigma=None, **kwargs):
 
     First order primal-dual hybrid-gradient method for non-smooth convex
     optimization problems with known saddle-point structure. The
-    primal formulation of the general problem is::
+    primal formulation of the general problem is ::
 
         min_{x in X} f(x) + g(L x)
 
@@ -125,10 +125,10 @@ def pdhg(x, f, g, L, niter, tau=None, sigma=None, **kwargs):
         \min_x \|Ax - b\|_2^2 + \|\nabla x\|_1.
 
     Here it is tempting to let :math:`f(x)=\|\nabla x\|_1`, :math:`L=A` and
-    :math:`g(y)=||y||_2^2`. This is however not feasible since the
-    proximal of :math:`||\nabla x||_1` has no closed form expression.
+    :math:`g(y)=\|y\|_2^2`. However, this is not feasible since the
+    proximal of :math:`\|\nabla \cdot\|_1` has no closed form expression.
 
-    Instead, the problem can be formulated :math:`f(x)=0`,
+    Instead, the problem can be formulated :math:`f(x) = 0`,
     :math:`L(x) = (A(x), \nabla x)` and
     :math:`g((x_1, x_2)) = \|x_1\|_2^2 + \|x_2\|_1`. See the
     examples folder for more information on how to do this.

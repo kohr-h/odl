@@ -1,4 +1,4 @@
-# Copyright 2014-2017 The ODL contributors
+# Copyright 2014-2018 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -8,10 +8,12 @@
 
 """Test configuration file."""
 
-from __future__ import print_function, division, absolute_import
-import numpy as np
+from __future__ import absolute_import, division, print_function
+
 import operator
 import os
+
+import numpy as np
 
 import odl
 from odl.space.entry_points import tensor_space_impl_names

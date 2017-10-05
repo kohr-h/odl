@@ -1,4 +1,4 @@
-# Copyright 2014-2017 The ODL contributors
+# Copyright 2014-2018 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -8,16 +8,13 @@
 
 """Gradient-based optimization schemes."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
 from odl.solvers.util import ConstantLineSearch
 
-
 __all__ = ('steepest_descent', 'adam')
-
-
-# TODO: update all docs
 
 
 def steepest_descent(f, x, line_search=1.0, maxiter=1000, tol=1e-16,
@@ -116,9 +113,9 @@ def adam(f, x, learning_rate=1e-3, beta1=0.9, beta2=0.999, eps=1e-8,
 
     where :math:`f` is a differentiable functional.
 
-    The algorithm is described in [KB2015] (`arxiv
-    <https://arxiv.org/abs/1412.6980>`_). All parameter names and default
-    valuesare taken from the article.
+    The algorithm is described in `[KB2015]
+    <https://arxiv.org/abs/1412.6980>`_. All parameter names and default
+    values are taken from the article.
 
     Parameters
     ----------

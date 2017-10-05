@@ -1,4 +1,4 @@
-# Copyright 2014-2017 The ODL contributors
+# Copyright 2014-2018 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -8,12 +8,11 @@
 
 """Douglas-Rachford splitting algorithm for convex optimization."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
 
 import numpy as np
 
 from odl.operator import Operator
-
 
 __all__ = ('douglas_rachford_pd', 'douglas_rachford_pd_stepsize')
 
@@ -23,13 +22,13 @@ def douglas_rachford_pd(x, f, g, L, niter, tau=None, sigma=None,
     r"""Douglas-Rachford primal-dual splitting algorithm.
 
     Minimizes the sum of several convex functions composed with linear
-    operators::
+    operators, ::
 
         min_x f(x) + sum_i g_i(L_i x)
 
     where ``f``, ``g_i`` are convex functions, ``L_i`` are linear `Operator`'s.
 
-    Can also be used to solve the more general problem::
+    Can also be used to solve the more general problem ::
 
         min_x f(x) + sum_i (g_i @ l_i)(L_i x)
 
