@@ -560,6 +560,94 @@ def _lincomb_impl(a, x1, b, x2, out, dtype):
                 axpy(x1.data, out.data, size, a)
 
 
+def _dot_impl(x, y):
+    """Dot product trying to mitigate single-precision rounding errors.
+
+    Parameters
+    ----------
+    x, y : 1D `numpy.ndarray`
+        Arrays whose dot product should be computed. If the result dtype
+        of ``x`` and ``y`` is half- or single-precision, a simple heuristic
+        is used to determine whether summation is likely to overflow or not.
+        If overflow is expected, a slower but more accurate implementation
+        is used.
+
+    Returns
+    -------
+    dot : scalar
+        The (hopefully) correct dot product of ``x`` and ``y`` even in
+        case of expected loss of accuracy in single-precision loops.
+    """
+    loop_dtype = np.result_type(x, y)
+
+    # Shortcut for arrays that don't use single-precision loops
+    if loop_dtype not in ('float16', 'float32', 'complex64'):
+        return np.dot(x, y)
+
+    # This takes about 1/80 of the runtime of `np.dot` with array size 2**28,
+    # which seems acceptable for making a decision
+    probe_size = np.maximum(100, x.size // 10000)
+    probe_inds = np.random.randint(0, x.size - 1, size=probe_size)
+    probe_dtype = np.promote_types(loop_dtype, 'float64')
+    probe_x = x[probe_inds].astype(probe_dtype)
+    probe_y = y[probe_inds].astype(probe_dtype)
+    probe_res = np.dot(probe_x, probe_y)
+
+    if abs(probe_res) * x.size / probe_size < (1 << 27):
+        # Not expecting problems here
+        return np.dot(x, y)
+    else:
+        # This is the danger zone, use higher precision loop. It is about
+        # 5-8x slower than the BLAS implementation
+        return np.add.reduce(x * y, dtype=probe_dtype)
+
+
+def _vdot_impl(x, y):
+    """Complex dot product trying to mitigate single-precision rounding errors.
+
+    Parameters
+    ----------
+    x, y : 1D `numpy.ndarray`
+        Arrays whose complex dot product should be computed. If the result
+        dtype of ``x`` and ``y`` is half- or single-precision, a simple
+        heuristic is used to determine whether summation is likely to
+        overflow or not.
+        If overflow is expected, a slower but more accurate implementation
+        is used.
+
+    Returns
+    -------
+    vdot : real scalar
+        The (hopefully) correct complex dot product of ``x`` and ``y`` even
+        in case of expected loss of accuracy in single-precision loops.
+    """
+    loop_dtype = np.result_type(x, y)
+    if loop_dtype not in ('complex64', 'complex128'):
+        # Real loop, go to real implementation
+        return _dot_impl(x, y)
+
+    # Shortcut for arrays that don't use single-precision loops
+    if loop_dtype != 'complex64':
+        return np.vdot(x, y)
+
+    # This takes about 1/80 of the runtime of `np.vdot` with array size 2**28,
+    # which seems acceptable for making a decision
+    probe_size = np.maximum(100, x.size // 10000)
+    probe_inds = np.random.randint(0, x.size - 1, size=probe_size)
+    probe_dtype = np.promote_types(loop_dtype, 'float64')
+    probe_x = x[probe_inds].astype(probe_dtype)
+    probe_y = y[probe_inds].astype(probe_dtype)
+    probe_res = np.vdot(probe_x, probe_y)
+
+    if abs(probe_res) * x.size / probe_size < (1 << 27):
+        # Not expecting problems here
+        return np.vdot(x, y)
+    else:
+        # This is the danger zone, use higher precision loop. It is about
+        # 5-8x slower than the BLAS implementation
+        return np.add.reduce(x * y.conj(), dtype=probe_dtype).real
+
+
 class NumpyFn(FnBase, NumpyNtuples):
 
     """Vector space F^n with vector multiplication.
