@@ -28,10 +28,11 @@ from odl.solvers.functional.default_functionals import (
 # --- pytest fixtures --- #
 
 
+complex_space = simple_fixture('complex_space', [False, True])
 scalar = simple_fixture('scalar', [0.01, 2.7, 10, -2, -0.2, -7.1, 0])
 sigma = simple_fixture('sigma', [0.001, 2.7, np.array(0.5), 10])
 
-space_params = ['r10', 'uniform_discr']
+space_params = ['r10', 'c10', 'uniform_discr']
 space_ids = [' space={} '.format(p) for p in space_params]
 
 
@@ -41,6 +42,11 @@ def space(request, fn_impl):
 
     if name == 'r10':
         return odl.rn(10, impl=fn_impl)
+    elif name == 'c10':
+        cls = odl.space.entry_points.fn_impl(fn_impl)
+        if not any(np.dtype(dt).kind == 'c' for dt in cls.available_dtypes()):
+            pytest.skip('complex not supported for this impl')
+        return odl.cn(10, impl=fn_impl)
     elif name == 'uniform_discr':
         # Discretization parameters
         return odl.uniform_discr(0, 1, 7, impl=fn_impl)
@@ -107,6 +113,13 @@ def test_derivative(functional):
     the inner product of the gradient and the direction, if the gradient is
     defined.
     """
+    complex_failing = [
+        type(odl.solvers.KullbackLeibler(functional.domain).convex_conj),
+        type(odl.solvers.KullbackLeiblerCrossEntropy(functional.domain).convex_conj)]
+
+    if functional.domain.is_cn and type(functional) in complex_failing:
+        pytest.xfail('functional not adapted for complex spaces')
+
     if isinstance(functional, odl.solvers.functional.IndicatorLpUnitBall):
         # IndicatorFunction has no derivative
         with pytest.raises(NotImplementedError):
@@ -131,8 +144,10 @@ def test_derivative(functional):
     step = float(np.sqrt(np.finfo(functional.domain.dtype).eps))
 
     # Numerical test of gradient, only low accuracy can be guaranteed.
+    # For complex spaces, only the real part can be correct due to the
+    # complex-to-real mapping.
     assert all_almost_equal((functional(x + step * y) - functional(x)) / step,
-                            y.inner(functional.gradient(x)),
+                            y.inner(functional.gradient(x)).real,
                             places=1)
 
     # Check that derivative and gradient is consistent
@@ -140,25 +155,30 @@ def test_derivative(functional):
                             y.inner(functional.gradient(x)))
 
 
-def test_arithmetic():
+def test_arithmetic(complex_space):
     """Test that all standard arithmetic works."""
-    space = odl.rn(3)
+    if complex_space:
+        space = odl.cn(3)
+    else:
+        space = odl.rn(3)
 
     # Create elements needed for later
-    functional = odl.solvers.L2Norm(space).translated([1, 2, 3])
+    transl = [1 + 1j, 2 - 1j, 3] if complex_space else [1, 2, 3]
+    functional = odl.solvers.L2Norm(space).translated(transl)
     functional2 = odl.solvers.L2NormSquared(space)
-    operator = odl.IdentityOperator(space) - space.element([4, 5, 6])
+    shift = [4 + 2j, 5 + 1j, 6] if complex_space else [4, 5, 6]
+    operator = odl.IdentityOperator(space) - space.element(shift)
     x = noise_element(functional.domain)
     y = noise_element(functional.domain)
-    scalar = np.pi
+    scalar = np.pi * (1 + 1j) if complex_space else np.pi
 
     # Simple tests here, more in depth comes later
     assert functional(x) == functional(x)
     assert functional(x) != functional2(x)
     assert (scalar * functional)(x) == scalar * functional(x)
-    assert (scalar * (scalar * functional))(x) == scalar**2 * functional(x)
+    assert (scalar * (scalar * functional))(x) == scalar ** 2 * functional(x)
     assert (functional * scalar)(x) == functional(scalar * x)
-    assert ((functional * scalar) * scalar)(x) == functional(scalar**2 * x)
+    assert ((functional * scalar) * scalar)(x) == functional(scalar ** 2 * x)
     assert (functional + functional2)(x) == functional(x) + functional2(x)
     assert (functional - functional2)(x) == functional(x) - functional2(x)
     assert (functional * operator)(x) == functional(operator(x))
@@ -171,7 +191,7 @@ def test_arithmetic():
 def test_left_scalar_mult(space, scalar):
     """Test for right and left multiplication of a functional with a scalar."""
     # Less strict checking for single precision
-    places = 3 if space.dtype == np.float32 else 5
+    places = 3 if space.dtype in ('f', 'F') else 5
 
     x = noise_element(space)
     func = odl.solvers.functional.L2Norm(space)

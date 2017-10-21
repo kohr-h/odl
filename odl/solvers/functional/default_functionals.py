@@ -24,7 +24,7 @@ from odl.solvers.nonsmooth.proximal_operators import (
     proximal_convex_conj, proximal_convex_conj_kl,
     proximal_convex_conj_kl_cross_entropy,
     combine_proximals)
-from odl.util import conj_exponent
+from odl.util import conj_exponent, writable_array
 
 
 __all__ = ('LpNorm', 'L1Norm', 'L2Norm', 'L2NormSquared',
@@ -75,19 +75,19 @@ class LpNorm(Functional):
     def _call(self, x):
         """Return the Lp-norm of ``x``."""
         if self.exponent == 0:
-            return self.domain.one().inner(np.not_equal(x, 0))
+            return np.real(self.domain.one().inner(np.not_equal(x, 0)))
         elif self.exponent == 1:
-            return x.ufuncs.absolute().inner(self.domain.one())
+            return np.real(x.ufuncs.absolute().inner(self.domain.one()))
         elif self.exponent == 2:
-            return np.sqrt(x.inner(x))
+            return np.sqrt(np.real(x.inner(x)))
         elif np.isfinite(self.exponent):
-            tmp = x.ufuncs.absolute()
+            tmp = x.ufuncs.absolute().real
             tmp.ufuncs.power(self.exponent, out=tmp)
             return np.power(tmp.inner(self.domain.one()), 1 / self.exponent)
         elif self.exponent == np.inf:
-            return x.ufuncs.absolute().ufuncs.max()
+            return x.ufuncs.absolute().real.ufuncs.max()
         elif self.exponent == -np.inf:
-            return x.ufuncs.absolute().ufuncs.min()
+            return x.ufuncs.absolute().real.ufuncs.min()
         else:
             raise RuntimeError('unknown exponent')
 
@@ -135,9 +135,20 @@ class LpNorm(Functional):
                     super(L1Gradient, self).__init__(
                         functional.domain, functional.domain, linear=False)
 
-                def _call(self, x):
+                def _call(self, x, out):
                     """Apply the gradient operator to the given point."""
-                    return x.ufuncs.sign()
+                    if self.domain.is_rn:
+                        return x.ufuncs.sign(out=out)
+                    else:
+                        out.assign(x)
+                        denom = x.ufuncs.absolute().real
+
+                        with writable_array(out) as out_arr:
+                            out_arr.real /= denom.asarray()
+                            out_arr.imag /= denom.asarray()
+                            out_arr[np.isnan(out_arr)] = 0
+
+                        return out
 
                 def derivative(self, x):
                     """Derivative is a.e. zero."""
@@ -830,10 +841,20 @@ class IndicatorBox(Functional):
     :math:`b` is defined as:
 
     .. math::
-        F(x) = \\begin{cases}
+        \iota_{[a, b]}(x) = \\begin{cases}
             0 & \\text{if } a \\leq x \\leq b \\text{ everywhere}, \\\\
             \\infty & \\text{else}
             \\end{cases}
+
+    For complex spaces, **real** bounds apply to **both** real and imaginary
+    parts, whereas complex bounds apply to real and imaginary parts
+    separately. The return value is the sum of the results for real and
+    imaginary parts.
+
+    .. note::
+        Be careful when representing infinite complex values. For instance,
+        Python interprets ``float('inf') * 1j`` as ``(nan+inf*j)``.
+        The correct way to write this is ``complex('infj')``.
     """
 
     def __init__(self, space, lower=None, upper=None):
@@ -843,20 +864,31 @@ class IndicatorBox(Functional):
         ----------
         space : `LinearSpace`
             Domain of the functional.
-        lower : ``space.field`` element or ``space`` `element-like`, optional
+        lower : ``space.field`` element or `array-like`, optional
             The lower bound.
-            Default: ``None``, interpreted as -infinity
-        upper : ``space.field`` element or ``space`` `element-like`, optional
+            Default: ``None``, interpreted as ``-inf``
+        upper : ``space.field`` element or `array-like`, optional
             The upper bound.
-            Default: ``None``, interpreted as +infinity
+            Default: ``None``, interpreted as ``+inf``
 
         Examples
         --------
-        >>> space = odl.rn(3)
-        >>> func = IndicatorBox(space, 0, 2)
-        >>> func([0, 1, 2])  # all points inside
-        0
-        >>> func([0, 1, 3])  # one point outside
+        Real space:
+
+        >>> space = odl.rn(2)
+        >>> func = IndicatorBox(space, 0, 1)
+        >>> func([0, 1])  # all points inside
+        0.0
+        >>> func([0, 2])  # one point outside
+        inf
+
+        Complex space:
+
+        >>> space = odl.cn(2)
+        >>> func = IndicatorBox(space, 0, 1)
+        >>> func([-1, 0 + 1j])  # -1 outside
+        inf
+        >>> func([-1j, 0 + 1j])  # -1j outside (0 applies)
         inf
         """
         super(IndicatorBox, self).__init__(space, linear=False)
@@ -865,20 +897,10 @@ class IndicatorBox(Functional):
 
     def _call(self, x):
         """Apply the functional to the given point."""
-        # Compute the projection of x onto the box, if this is equal to x we
-        # know x is inside the box.
-        tmp = self.domain.element()
-        if self.lower is not None and self.upper is None:
-            x.ufuncs.maximum(self.lower, out=tmp)
-        elif self.lower is None and self.upper is not None:
-            x.ufuncs.minimum(self.upper, out=tmp)
-        elif self.lower is not None and self.upper is not None:
-            x.ufuncs.maximum(self.lower, out=tmp)
-            tmp.ufuncs.minimum(self.upper, out=tmp)
-        else:
-            tmp.assign(x)
-
-        return np.inf if x.dist(tmp) > 0 else 0
+        # Since the proximal operator is the projection onto the box we
+        # can simply check if the proximal is the identity or not.
+        proj = self.proximal(1)(x)
+        return float('inf') if x.dist(proj) > 0 else 0.0
 
     @property
     def proximal(self):
@@ -920,7 +942,7 @@ class IndicatorNonnegativity(IndicatorBox):
         >>> space = odl.rn(3)
         >>> func = IndicatorNonnegativity(space)
         >>> func([0, 1, 2])  # all points positive
-        0
+        0.0
         >>> func([0, 1, -3])  # one point negative
         inf
         """

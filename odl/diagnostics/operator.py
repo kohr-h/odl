@@ -52,7 +52,7 @@ class OperatorTest(object):
         self.operator = operator
         self.verbose = False
         if operator_norm is None:
-            self.operator_norm = self.norm()
+            self.operator_norm = self.norm() if self.operator.is_linear else 1
         else:
             self.operator_norm = float(operator_norm)
 

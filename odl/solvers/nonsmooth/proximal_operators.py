@@ -552,9 +552,19 @@ def proximal_box_constraint(space, lower=None, upper=None):
         upper = space.element(upper)
 
     if lower in space.field and upper in space.field:
-        if lower > upper:
-            raise ValueError('invalid values, `lower` ({}) > `upper` ({})'
-                             ''.format(lower, upper))
+        if space.is_rn:
+            if lower > upper:
+                raise ValueError('invalid values, `lower` ({}) > `upper` ({})'
+                                 ''.format(lower, upper))
+        else:
+            if lower.real > upper.real:
+                raise ValueError(
+                    'invalid values, `lower.real` ({}) > `upper.real` ({})'
+                    ''.format(lower.real, upper.real))
+            if lower.imag > upper.imag:
+                raise ValueError(
+                    'invalid values, `lower.imag` ({}) > `upper.imag` ({})'
+                    ''.format(lower.imag, upper.imag))
 
     class ProxOpBoxConstraint(Operator):
 
@@ -573,16 +583,43 @@ def proximal_box_constraint(space, lower=None, upper=None):
 
         def _call(self, x, out):
             """Apply the operator to ``x`` and store the result in ``out``."""
+            if self.domain.is_rn:
+                if lower is not None and upper is None:
+                    x.ufuncs.maximum(lower, out=out)
+                elif lower is None and upper is not None:
+                    x.ufuncs.minimum(upper, out=out)
+                elif lower is not None and upper is not None:
+                    x.ufuncs.maximum(lower, out=out)
+                    out.ufuncs.minimum(upper, out=out)
+                else:
+                    out.assign(x)
 
-            if lower is not None and upper is None:
-                x.ufuncs.maximum(lower, out=out)
-            elif lower is None and upper is not None:
-                x.ufuncs.minimum(upper, out=out)
-            elif lower is not None and upper is not None:
-                x.ufuncs.maximum(lower, out=out)
-                out.ufuncs.minimum(upper, out=out)
             else:
-                out.assign(x)
+                if np.iscomplexobj(lower):
+                    lower_real = lower.real
+                    lower_imag = lower.imag
+                else:
+                    lower_real = lower_imag = lower
+
+                if np.iscomplexobj(upper):
+                    upper_real = upper.real
+                    upper_imag = upper.imag
+                else:
+                    upper_real = upper_imag = upper
+
+                if lower is not None and upper is None:
+                    x.real.ufuncs.maximum(lower_real, out=out.real)
+                    x.imag.ufuncs.maximum(lower_imag, out=out.imag)
+                elif lower is None and upper is not None:
+                    x.real.ufuncs.minimum(upper_real, out=out.real)
+                    x.imag.ufuncs.minimum(upper_imag, out=out.imag)
+                elif lower is not None and upper is not None:
+                    x.real.ufuncs.maximum(lower_real, out=out.real)
+                    x.imag.ufuncs.maximum(lower_imag, out=out.imag)
+                    out.real.ufuncs.minimum(upper_real, out=out.real)
+                    out.imag.ufuncs.minimum(upper_imag, out=out.imag)
+                else:
+                    out.assign(x)
 
     return ProxOpBoxConstraint
 

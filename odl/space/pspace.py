@@ -244,9 +244,6 @@ class ProductSpace(LinearSpace):
             raise TypeError('{!r} not LinearSpace instance(s)'
                             ''.format(wrong_spaces))
 
-        if not all(spc.field == spaces[0].field for spc in spaces):
-            raise ValueError('all spaces must have the same field')
-
         # Assign spaces and field
         self.__spaces = tuple(spaces)
         self.__size = len(spaces)
