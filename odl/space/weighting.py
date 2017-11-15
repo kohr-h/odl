@@ -572,6 +572,41 @@ class ArrayWeighting(Weighting):
         return repr(self)
 
 
+class PerAxisWeighting(Weighting):
+
+    """Weighting of a space with one weight per axis."""
+
+    def __init__(self, factors, impl, exponent=2.0):
+        """Initialize a new instance.
+
+        Parameters
+        ----------
+        factors : sequence of `array-like`
+            Weighting factors, one per axis. The factors can be constants
+            or one-dimensional array-like objects.
+        impl : string
+            Specifier for the implementation backend.
+        exponent : positive float, optional
+            Exponent of the norm. For values other than 2.0, the inner
+            product is not defined.
+        """
+        super(PerAxisWeighting, self).__init__(impl=impl, exponent=exponent)
+        try:
+            iter(factors)
+        except TypeError:
+            raise TypeError('`factors` {!r} is not a sequence'.format(factors))
+        self.__factors = factors
+
+    @property
+    def weights(self):
+        """Weighting factors for inner product, norm and distance."""
+        return self.__factors
+
+    # No further methods implemented here since that will require some
+    # knowledge on the array type
+
+
+# TODO: remove this class
 class ConstWeighting(Weighting):
 
     """Weighting of a space by a constant."""

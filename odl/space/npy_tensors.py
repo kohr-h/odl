@@ -2166,6 +2166,73 @@ class NumpyTensorSpaceArrayWeighting(ArrayWeighting):
             return float(_pnorm_diagweight(x, self.exponent, self.array))
 
 
+class PerAxisWeighting(Weighting):
+
+    """Weighting of a space with one weight per axis.
+
+    See Notes for mathematical details.
+    """
+
+    def __init__(self, factors, impl, exponent=2.0):
+        """Initialize a new instance.
+
+        Parameters
+        ----------
+        factors : sequence of `array-like`
+            Weighting factors, one per axis. The factors can be constants
+            or one-dimensional array-like objects.
+        impl : string
+            Specifier for the implementation backend.
+        exponent : positive float, optional
+            Exponent of the norm. For values other than 2.0, the inner
+            product is not defined.
+
+        Notes
+        -----
+        We consider a tensor space :math:`\mathbb{F}^n` of shape
+        :math:`n \in \mathbb{N}^d` over a field :math:`\mathbb{F}`.
+        If :math:`0 < c^i \in \mathbb{R}^{n_i}` are vectors of length
+        equal to the corresponding axis, the outer product
+
+        .. math::
+            c_{k} = \prod_{i=0}^d c^i_{k_i}
+
+        defines a tensor of shape :math:`n`. With this tensor
+        we can define a weighted space as follows.
+
+        - For exponent 2.0, a new weighted inner product is given as
+
+          .. math::
+              \\langle a, b\\rangle_c :=
+              \\langle c \odot a, b\\rangle =
+              b^{\mathrm{H}} (c \odot a),
+
+          where :math:`b^{\mathrm{H}}` stands for transposed complex
+          conjugate and ":math:`\odot`" for pointwise product.
+
+        - For other exponents, only norm and dist are defined. In the
+          case of exponent :math:`\\infty`, the weighted norm is defined
+          as
+
+          .. math::
+              \| a \|_{c, \\infty} := \| a \|_{\\infty},
+
+          otherwise it is
+
+          .. math::
+              \| a \|_{c, p} := \| c^{1/p} \odot a \|_{p}.
+
+          Note that this definition is chosen such that the limit
+          property in :math:`p` holds, i.e.
+
+          .. math::
+              \| a\|_{c, p} \\to
+              \| a \|_{c, \\infty} \quad (p \\to \\infty).
+        """
+        pass
+
+
+# TODO: remove
 class NumpyTensorSpaceConstWeighting(ConstWeighting):
 
     """Weighting of a `NumpyTensorSpace` by a constant.
