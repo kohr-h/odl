@@ -354,6 +354,65 @@ def astra_conebeam_2d_geom_to_vec(geometry):
     return vectors
 
 
+def astra_parallel_2d_geom_to_vec(geometry):
+    """Create vectors for ASTRA projection geometries from ODL geometry.
+
+    The 2D vectors are used to create an ASTRA projection geometry for
+    parallel beam geometries, see ``'parallel_vec'`` in the
+    `ASTRA projection geometry documentation`_.
+
+    Each row of the returned vectors corresponds to a single projection
+    and consists of ::
+
+        (rayX, rayY, dX, dY, uX, uY)
+
+    with
+
+        - ``ray``: the ray direction
+        - ``d``  : the center of the detector
+        - ``u``  : the vector from detector pixel ``0`` to ``1``
+
+    Parameters
+    ----------
+    geometry : `Geometry`
+        ODL projection geometry from which to create the ASTRA geometry.
+
+    Returns
+    -------
+    vectors : `numpy.ndarray`
+        Array of shape ``(num_angles, 6)`` containing the vectors.
+
+    References
+    ----------
+    .. _ASTRA projection geometry documentation:
+       http://www.astra-toolbox.com/docs/geom2d.html#projection-geometries
+    """
+    # Instead of rotating the data by 90 degrees counter-clockwise,
+    # we subtract pi/2 from the geometry angles, thereby rotating the
+    # geometry by 90 degrees clockwise
+    rot_minus_90 = euler_matrix(-np.pi / 2)
+    angles = geometry.angles
+    mid_pt = geometry.det_params.mid_pt
+    vectors = np.zeros((angles.size, 6))
+
+    # Source position
+    ray_dir = -geometry.det_to_src(angles, mid_pt)
+    vectors[:, 0:2] = rot_minus_90.dot(ray_dir.T).T  # dot along 2nd axis
+
+    # Center of detector
+    # Need to cast `mid_pt` to float since otherwise the empty axis is
+    # not removed
+    centers = geometry.det_point_position(angles, float(mid_pt))
+    vectors[:, 2:4] = rot_minus_90.dot(centers.T).T
+
+    # Vector from detector pixel 0 to 1
+    det_axis = rot_minus_90.dot(geometry.det_axis(angles).T).T
+    px_size = geometry.det_partition.cell_sides[0]
+    vectors[:, 4:6] = det_axis * px_size
+
+    return vectors
+
+
 def astra_parallel_3d_geom_to_vec(geometry):
     """Create vectors for ASTRA projection geometries from ODL geometry.
 
@@ -452,15 +511,19 @@ def astra_projection_geometry(geometry):
     if (isinstance(geometry, ParallelBeamGeometry) and
             isinstance(geometry.detector, (Flat1dDetector, Flat2dDetector)) and
             geometry.ndim == 2):
-        # TODO: change to parallel_vec when available
-        det_width = geometry.det_partition.cell_sides[0]
-        det_count = geometry.detector.size
-        # Instead of rotating the data by 90 degrees counter-clockwise,
-        # we subtract pi/2 from the geometry angles, thereby rotating the
-        # geometry by 90 degrees clockwise
-        angles = geometry.angles - np.pi / 2
-        proj_geom = astra.create_proj_geom('parallel', det_width, det_count,
-                                           angles)
+        if astra_supports('par2d_vec_geometry'):
+            det_count = geometry.detector.size
+            vec = astra_parallel_2d_geom_to_vec(geometry)
+            proj_geom = astra.create_proj_geom('parallel_vec', det_count, vec)
+        else:
+            det_width = geometry.det_partition.cell_sides[0]
+            det_count = geometry.detector.size
+            # Instead of rotating the data by 90 degrees counter-clockwise,
+            # we subtract pi/2 from the geometry angles, thereby rotating the
+            # geometry by 90 degrees clockwise
+            angles = geometry.angles - np.pi / 2
+            proj_geom = astra.create_proj_geom('parallel', det_width,
+                                               det_count, angles)
 
     elif (isinstance(geometry, DivergentBeamGeometry) and
           isinstance(geometry.detector, (Flat1dDetector, Flat2dDetector)) and
@@ -610,7 +673,7 @@ def astra_projector(vol_interp, astra_vol_geom, astra_proj_geom, ndim, impl):
     ndim = int(ndim)
 
     proj_type = astra_proj_geom['type']
-    if proj_type not in ('parallel', 'fanflat', 'fanflat_vec',
+    if proj_type not in ('parallel', 'parallel_vec', 'fanflat', 'fanflat_vec',
                          'parallel3d', 'parallel3d_vec', 'cone', 'cone_vec'):
         raise ValueError('invalid geometry type {!r}'.format(proj_type))
 
@@ -625,6 +688,7 @@ def astra_projector(vol_interp, astra_vol_geom, astra_proj_geom, ndim, impl):
                                    'linear': 'linear3d'},  # I
                     'cone': {'nearest': 'linearcone',  # I
                              'linear': 'linearcone'}}  # I
+    type_map_cpu['parallel_vec'] = type_map_cpu['parallel']
     type_map_cpu['fanflat_vec'] = type_map_cpu['fanflat']
     type_map_cpu['parallel3d_vec'] = type_map_cpu['parallel3d']
     type_map_cpu['cone_vec'] = type_map_cpu['cone']
@@ -633,6 +697,7 @@ def astra_projector(vol_interp, astra_vol_geom, astra_proj_geom, ndim, impl):
     # releases making the interface more coherent regarding CPU and GPU
     type_map_cuda = {'parallel': 'cuda',  # I
                      'parallel3d': 'cuda3d'}  # I
+    type_map_cuda['parallel_vec'] = type_map_cuda['parallel']
     type_map_cuda['fanflat'] = type_map_cuda['parallel']
     type_map_cuda['fanflat_vec'] = type_map_cuda['fanflat']
     type_map_cuda['cone'] = type_map_cuda['parallel3d']
