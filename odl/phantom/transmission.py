@@ -18,11 +18,11 @@ from odl.phantom.geometric import ellipsoid_phantom
 __all__ = ('shepp_logan_ellipsoids', 'shepp_logan', 'forbild')
 
 
-def _shepp_logan_ellipse_2d():
+def _shepp_logan_ellipses_2d():
     """Return ellipse parameters for a 2d Shepp-Logan phantom.
 
     This assumes that the ellipses are contained in the square
-    [-1, -1]x[-1, -1].
+    ``[-1, -1] x [-1, -1]``.
     """
     rad18 = np.deg2rad(18.0)
     #       value  axisx  axisy     x       y  rotation
@@ -42,7 +42,7 @@ def _shepp_logan_ellipsoids_3d():
     """Return ellipsoid parameters for a 3d Shepp-Logan phantom.
 
     This assumes that the ellipses are contained in the cube
-    [-1, -1, -1]x[1, 1, 1].
+    ``[-1, -1, -1] x [1, 1, 1]``.
     """
     rad18 = np.deg2rad(18.0)
     #       value  axisx  axisy  axisz,  x        y      z    rotation
@@ -79,6 +79,23 @@ def _modified_shepp_logan_ellipsoids(ellipsoids):
 def shepp_logan_ellipsoids(ndim, modified=False):
     """Ellipsoids for the standard `Shepp-Logan phantom`_ in 2 or 3 dimensions.
 
+    In two dimensions, each ellipsoid is parameterized by a list of 6
+    numbers::
+
+        val, ax_x, ax_y, cent_x, cent_y, rot
+
+    where ``val`` is the contribution of the ellipsoid to the final
+    phantom, ``ax`` refers to the ellipse half-axes, ``cent`` denotes
+    the midpoint, and ``rot`` is the angle in radians with which
+    the ellipse is rotated.
+
+    In three dimensions, there are 10 parameters ::
+
+        val, ax_x, ax_y, ax_z, cent_x, cent_y, cent_z, rot_ph, rot_th, rot_ps
+
+    where the ``rot`` values correspond to Euler angles ``phi``, ``theta``,
+    ``psi``.
+
     Parameters
     ----------
     ndim : {2, 3}
@@ -87,6 +104,12 @@ def shepp_logan_ellipsoids(ndim, modified=False):
         True if the modified Shepp-Logan phantom should be given.
         The modified phantom has greatly amplified contrast to aid
         visualization.
+
+    Returns
+    -------
+    ell_params : list of lists
+        Parameters for the ellipsoids, where the i-th list contains the
+        parameters of the i-th ellipsoid. See above for details.
 
     See Also
     --------
@@ -99,7 +122,7 @@ def shepp_logan_ellipsoids(ndim, modified=False):
     .. _Shepp-Logan phantom: en.wikipedia.org/wiki/Shepp–Logan_phantom
     """
     if ndim == 2:
-        ellipsoids = _shepp_logan_ellipse_2d()
+        ellipsoids = _shepp_logan_ellipses_2d()
     elif ndim == 3:
         ellipsoids = _shepp_logan_ellipsoids_3d()
     else:

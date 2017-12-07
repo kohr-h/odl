@@ -334,7 +334,8 @@ class FanFlatGeometry(DivergentBeamGeometry):
         For an angle ``phi``, the source position is given by ::
 
             src(phi) = translation +
-                       rot_matrix(phi) * (-src_rad * src_to_det_init)
+                       rot_matrix(phi) * (-src_rad * src_to_det_init -
+                                          translation)
 
         where ``src_to_det_init`` is the initial unit vector pointing
         from source to detector.
@@ -386,7 +387,8 @@ class FanFlatGeometry(DivergentBeamGeometry):
         # i.e. the connecting line passes the origin.
         center_to_src_init = -self.src_radius * self.src_to_det_init
         pos_vec = (self.translation[None, :] +
-                   self.rotation_matrix(angle).dot(center_to_src_init))
+                   self.rotation_matrix(angle).dot(center_to_src_init -
+                                                   self.translation))
         if squeeze_out:
             pos_vec = pos_vec.squeeze()
 
@@ -398,7 +400,8 @@ class FanFlatGeometry(DivergentBeamGeometry):
         For an angle ``phi``, the detector position is given by ::
 
             det_ref(phi) = translation +
-                           rot_matrix(phi) * (det_rad * src_to_det_init)
+                           rot_matrix(phi) * (det_rad * src_to_det_init -
+                                              translation)
 
         where ``src_to_det_init`` is the initial unit vector pointing
         from source to detector.
@@ -450,7 +453,8 @@ class FanFlatGeometry(DivergentBeamGeometry):
         # i.e. the connecting line passes the origin.
         center_to_det_init = self.det_radius * self.src_to_det_init
         refpt = (self.translation[None, :] +
-                 self.rotation_matrix(angle).dot(center_to_det_init))
+                 self.rotation_matrix(angle).dot(center_to_det_init -
+                                                 self.translation))
         if squeeze_out:
             refpt = refpt.squeeze()
 
@@ -498,20 +502,25 @@ class FanFlatGeometry(DivergentBeamGeometry):
         posargs = [self.motion_partition, self.det_partition]
         optargs = [('src_radius', self.src_radius, -1),
                    ('det_radius', self.det_radius, -1)]
+        optmod = [':4', ':4']
 
         if not np.allclose(self.src_to_det_init,
                            self._default_config['src_to_det_init']):
             optargs.append(
                 ['src_to_det_init', array_str(self.src_to_det_init), ''])
+            optmod.append('!s')
 
         if self._det_axis_init_arg is not None:
             optargs.append(
                 ['det_axis_init', array_str(self._det_axis_init_arg), ''])
+            optmod.append('!s')
 
         if not np.array_equal(self.translation, (0, 0)):
             optargs.append(['translation', array_str(self.translation), ''])
+            optmod.append('!s')
 
-        sig_str = signature_string(posargs, optargs, sep=',\n')
+        sig_str = signature_string(posargs, optargs, sep=',\n',
+                                   mod=['!r', optmod])
         return '{}(\n{}\n)'.format(self.__class__.__name__, indent(sig_str))
 
     def __getitem__(self, indices):
@@ -968,7 +977,8 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         For an angle ``phi``, the detector position is given by ::
 
             det_ref(phi) = translation +
-                           rot_matrix(phi) * (det_rad * src_to_det_init) +
+                           rot_matrix(phi) * (det_rad * src_to_det_init -
+                                              translation) +
                            (offset_along_axis + pitch * phi) * axis
 
         where ``src_to_det_init`` is the initial unit vector pointing
@@ -1027,7 +1037,8 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         # maximum distance, i.e. the connecting line passes the center.
         center_to_det_init = self.det_radius * self.src_to_det_init
         # `circle_component` has shape (a, ndim)
-        circle_component = rot_matrix.dot(center_to_det_init)
+        circle_component = rot_matrix.dot(center_to_det_init -
+                                          self.translation)
 
         # Increment along the rotation axis according to pitch and
         # offset_along_axis
@@ -1054,7 +1065,8 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         For an angle ``phi``, the source position is given by ::
 
             src(phi) = translation +
-                       rot_matrix(phi) * (-src_rad * src_to_det_init) +
+                       rot_matrix(phi) * (-src_rad * src_to_det_init -
+                                          translation) +
                        (offset_along_axis + pitch * phi) * axis
 
         where ``src_to_det_init`` is the initial unit vector pointing
@@ -1113,7 +1125,8 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         # maximum distance, i.e. the connecting line passes the center.
         center_to_src_init = -self.src_radius * self.src_to_det_init
         # `circle_component` has shape (a, ndim)
-        circle_component = rot_matrix.dot(center_to_src_init)
+        circle_component = rot_matrix.dot(center_to_src_init -
+                                          self.translation)
 
         # Increment along the rotation axis according to pitch and
         # offset_along_axis
@@ -1141,27 +1154,34 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
                    ('det_radius', self.det_radius, -1),
                    ('pitch', self.pitch, 0)
                    ]
+        optmod = [':4', ':4', ':4']
 
         if not np.allclose(self.axis, self._default_config['axis']):
             optargs.append(['axis', array_str(self.axis), ''])
+            optmod.append('!s')
 
         optargs.append(['offset_along_axis', self.offset_along_axis, 0])
+        optmod.append(':4')
 
         if self._src_to_det_init_arg is not None:
             optargs.append(['src_to_det_init',
                             array_str(self._src_to_det_init_arg),
                             None])
+            optmod.append('!s')
 
         if self._det_axes_init_arg is not None:
             optargs.append(
                 ['det_axes_init',
                  tuple(array_str(a) for a in self._det_axes_init_arg),
                  None])
+            optmod.append(lambda t: '({}, {})'.format(t[0], t[1]))
 
         if not np.array_equal(self.translation, (0, 0, 0)):
             optargs.append(['translation', array_str(self.translation), ''])
+            optmod.append('!s')
 
-        sig_str = signature_string(posargs, optargs, sep=',\n')
+        sig_str = signature_string(posargs, optargs, sep=',\n',
+                                   mod=['!r', optmod])
         return '{}(\n{}\n)'.format(self.__class__.__name__, indent(sig_str))
 
     def __getitem__(self, indices):

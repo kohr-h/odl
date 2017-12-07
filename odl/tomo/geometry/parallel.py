@@ -646,21 +646,26 @@ class Parallel2dGeometry(ParallelBeamGeometry):
         """Return ``repr(self)``."""
         posargs = [self.motion_partition, self.det_partition]
         optargs = []
+        optmod = []
 
         if not np.allclose(self.det_pos_init - self.translation,
                            self._default_config['det_pos_init']):
             optargs.append(
                 ['det_pos_init', array_str(self.det_pos_init), ''])
+            optmod.append('!s')
 
         if self._det_axis_init_arg is not None:
             optargs.append(
                 ['det_axis_init', array_str(self._det_axis_init_arg), ''])
+            optmod.append('!s')
 
         if not np.array_equal(self.translation, (0, 0)):
             optargs.append(
                 ['translation', array_str(self.translation), ''])
+            optmod.append('!s')
 
-        sig_str = signature_string(posargs, optargs, sep=',\n')
+        sig_str = signature_string(posargs, optargs, sep=',\n',
+                                   mod=['!r', optmod])
         return '{}(\n{}\n)'.format(self.__class__.__name__, indent(sig_str))
 
     def __getitem__(self, indices):
@@ -1054,22 +1059,27 @@ class Parallel3dEulerGeometry(ParallelBeamGeometry):
         """Return ``repr(self)``."""
         posargs = [self.motion_partition, self.det_partition]
         optargs = []
+        optmod = []
 
         if not np.allclose(self.det_pos_init - self.translation,
                            self._default_config['det_pos_init']):
             optargs.append(
                 ['det_pos_init', array_str(self.det_pos_init), ''])
+            optmod.append('!s')
 
         if self._det_axes_init_arg is not None:
             optargs.append(
                 [('det_axes_init',
                   tuple(array_str(a) for a in self._det_axes_init_arg),
                   None)])
+            optmod.append(lambda t: '({}, {})'.format(t[0], t[1]))
 
         if not np.array_equal(self.translation, (0, 0, 0)):
             optargs.append(['translation', array_str(self.translation), ''])
+            optmod.append('!s')
 
-        sig_str = signature_string(posargs, optargs, sep=',\n')
+        sig_str = signature_string(posargs, optargs, sep=',\n',
+                                   mod=['!r', optmod])
         return '{}(\n{}\n)'.format(self.__class__.__name__, indent(sig_str))
 
 
@@ -1406,25 +1416,31 @@ class Parallel3dAxisGeometry(ParallelBeamGeometry, AxisOrientedGeometry):
         """Return ``repr(self)``."""
         posargs = [self.motion_partition, self.det_partition]
         optargs = []
+        optmod = []
 
         if not np.allclose(self.axis, self._default_config['axis']):
             optargs.append(['axis', array_str(self.axis), ''])
+            optmod.append('!s')
 
         if self._det_pos_init_arg is not None:
             optargs.append(['det_pos_init',
                             array_str(self._det_pos_init_arg),
                             None])
+            optmod.append('!s')
 
         if self._det_axes_init_arg is not None:
             optargs.append(
                 ['det_axes_init',
                  tuple(array_str(a) for a in self._det_axes_init_arg),
                  None])
+            optmod.append(lambda t: '({}, {})'.format(t[0], t[1]))
 
         if not np.array_equal(self.translation, (0, 0, 0)):
             optargs.append(['translation', array_str(self.translation), ''])
+            optmod.append('!s')
 
-        sig_str = signature_string(posargs, optargs, sep=',\n')
+        sig_str = signature_string(posargs, optargs, sep=',\n',
+                                   mod=['!r', optmod])
         return '{}(\n{}\n)'.format(self.__class__.__name__, indent(sig_str))
 
     def __getitem__(self, indices):

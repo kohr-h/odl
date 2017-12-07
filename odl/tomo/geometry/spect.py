@@ -172,23 +172,29 @@ class ParallelHoleCollimatorGeometry(Parallel3dAxisGeometry):
         """Return ``repr(self)``."""
         posargs = [self.motion_partition, self.det_partition]
         optargs = [('det_radius', self.det_radius, -1)]
+        optmod = [':4']
 
         if not np.allclose(self.axis, self._default_config['axis']):
             optargs.append(['axis', array_str(self.axis), ''])
+            optmod.append('!s')
 
         if self._orig_to_det_init_arg is not None:
             optargs.append(['orig_to_det_init',
                             array_str(self._orig_to_det_init_arg),
                             ''])
+            optmod.append('!s')
 
         if self._det_axes_init_arg is not None:
             optargs.append(
                 ['det_axes_init',
                  tuple(array_str(a) for a in self._det_axes_init_arg),
                  None])
+            optmod.append(lambda t: '({}, {})'.format(t[0], t[1]))
 
         if not np.array_equal(self.translation, (0, 0, 0)):
             optargs.append(['translation', array_str(self.translation), ''])
+            optmod.append('!s')
 
-        sig_str = signature_string(posargs, optargs, sep=',\n')
+        sig_str = signature_string(posargs, optargs, sep=',\n',
+                                   mod=['!r', optmod])
         return '{}(\n{}\n)'.format(self.__class__.__name__, indent(sig_str))
