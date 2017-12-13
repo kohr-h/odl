@@ -68,6 +68,8 @@ class FanFlatGeometry(DivergentBeamGeometry):
 
         Other Parameters
         ----------------
+        rot_center : `array-like`, shape ``(2,)``, optional
+            Center of rotation of the geometry.
         det_axis_init : `array-like` (shape ``(2,)``), optional
             Initial axis defining the detector orientation. The default
             depends on ``src_to_det_init``, see Notes.
@@ -185,6 +187,11 @@ class FanFlatGeometry(DivergentBeamGeometry):
 
         # Initialize stuff
         self.__src_to_det_init = src_to_det_init
+        rot_center = kwargs.pop('rot_center', [0, 0])
+        self.__rot_center = np.asarray(rot_center)
+        if self.__rot_center.shape != (2,):
+            raise ValueError('`rot_center` must have shape (2,), got '
+                             '{}'.format(self.__rot_center.shape))
         # `check_bounds` is needed for both detector and geometry
         check_bounds = kwargs.get('check_bounds', True)
         detector = Flat1dDetector(dpart, axis=det_axis_init,
@@ -310,6 +317,11 @@ class FanFlatGeometry(DivergentBeamGeometry):
         return self.__det_radius
 
     @property
+    def rot_center(self):
+        """Rotation center of this geometry."""
+        return self.__rot_center
+
+    @property
     def src_to_det_init(self):
         """Initial source-to-detector unit vector."""
         return self.__src_to_det_init
@@ -385,8 +397,10 @@ class FanFlatGeometry(DivergentBeamGeometry):
         # computed this way since source and detector are at maximum distance,
         # i.e. the connecting line passes the origin.
         center_to_src_init = -self.src_radius * self.src_to_det_init
-        pos_vec = (self.translation[None, :] +
-                   self.rotation_matrix(angle).dot(center_to_src_init))
+        rotated = (self.rot_center +
+                   self.rotation_matrix(angle).dot(center_to_src_init -
+                                                   self.rot_center))
+        pos_vec = self.translation[None, :] + rotated
         if squeeze_out:
             pos_vec = pos_vec.squeeze()
 
@@ -449,8 +463,10 @@ class FanFlatGeometry(DivergentBeamGeometry):
         # computed this way since source and detector are at maximum distance,
         # i.e. the connecting line passes the origin.
         center_to_det_init = self.det_radius * self.src_to_det_init
-        refpt = (self.translation[None, :] +
-                 self.rotation_matrix(angle).dot(center_to_det_init))
+        rotated = (self.rot_center +
+                   self.rotation_matrix(angle).dot(center_to_det_init -
+                                                   self.rot_center))
+        refpt = self.translation[None, :] + rotated
         if squeeze_out:
             refpt = refpt.squeeze()
 
@@ -609,6 +625,8 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
             translation along the axis at angle 0 is
             ``offset_along_axis * axis``.
             Default: 0.
+        rot_center : `array-like`, shape ``(3,)``, optional
+            Center of rotation of the geometry.
         src_to_det_init : `array-like`, shape ``(3,)``, optional
             Initial state of the vector pointing from source to detector
             reference point. The zero vector is not allowed.
@@ -764,6 +782,11 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
 
         # Initialize stuff
         self.__src_to_det_init = src_to_det_init
+        rot_center = kwargs.pop('rot_center', [0, 0, 0])
+        self.__rot_center = np.asarray(rot_center)
+        if self.__rot_center.shape != (3,):
+            raise ValueError('`rot_center` must have shape (3,), got '
+                             '{}'.format(self.__rot_center.shape))
         AxisOrientedGeometry.__init__(self, axis)
         # `check_bounds` is needed for both detector and geometry
         check_bounds = kwargs.get('check_bounds', True)
@@ -911,6 +934,11 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         return self.__pitch
 
     @property
+    def rot_center(self):
+        """Rotation center of this geometry."""
+        return self.__rot_center
+
+    @property
     def src_to_det_init(self):
         """Initial state of the vector pointing from source to detector
         reference point."""
@@ -1027,7 +1055,9 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         # maximum distance, i.e. the connecting line passes the center.
         center_to_det_init = self.det_radius * self.src_to_det_init
         # `circle_component` has shape (a, ndim)
-        circle_component = rot_matrix.dot(center_to_det_init)
+        circle_component = (self.rot_center +
+                            rot_matrix.dot(center_to_det_init -
+                                           self.rot_center))
 
         # Increment along the rotation axis according to pitch and
         # offset_along_axis
@@ -1113,7 +1143,9 @@ class ConeFlatGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
         # maximum distance, i.e. the connecting line passes the center.
         center_to_src_init = -self.src_radius * self.src_to_det_init
         # `circle_component` has shape (a, ndim)
-        circle_component = rot_matrix.dot(center_to_src_init)
+        circle_component = (self.rot_center +
+                            rot_matrix.dot(center_to_src_init -
+                                           self.rot_center))
 
         # Increment along the rotation axis according to pitch and
         # offset_along_axis
