@@ -21,8 +21,9 @@ from odl.util import (
     is_real_dtype, is_complex_floating_dtype, dtype_repr, dtype_str,
     complex_dtype, real_dtype, signature_string,
     is_valid_input_array, is_valid_input_meshgrid,
-    out_shape_from_array, out_shape_from_meshgrid, vectorize, broadcast_to,
+    out_shape_from_array, out_shape_from_meshgrid, vectorize,
     writable_array)
+from odl.util.npy_compat import broadcast_to
 from odl.util.utility import preload_first_arg, getargspec
 
 
