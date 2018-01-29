@@ -90,4 +90,7 @@ target/
 *.ipynb
 .ipynb_checkpoints
 
+# VSCode stuff
+.vscode/
+
 # Documentation build files
