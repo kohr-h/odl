@@ -12,7 +12,7 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 
 
-__all__ = ('broadcast_to', 'moveaxis')
+__all__ = ('broadcast_to', 'moveaxis', 'flip')
 
 
 # TODO: Remove when Numpy 1.10 is an ODL dependency

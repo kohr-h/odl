@@ -9,12 +9,12 @@
 """Default operators defined on any `ProductSpace`."""
 
 from __future__ import print_function, division, absolute_import
-from numbers import Integral
 import numpy as np
 
 from odl.operator.operator import Operator
 from odl.operator.default_ops import ZeroOperator
 from odl.space import ProductSpace
+from odl.util import is_int
 
 
 __all__ = ('ProductSpaceOperator',
@@ -693,7 +693,7 @@ class BroadcastOperator(Operator):
         """
         if (len(operators) == 2 and
                 isinstance(operators[0], Operator) and
-                isinstance(operators[1], Integral)):
+                is_int(operators[1])):
             operators = (operators[0],) * operators[1]
 
         self.__operators = operators
@@ -868,7 +868,7 @@ class ReductionOperator(Operator):
         """
         if (len(operators) == 2 and
                 isinstance(operators[0], Operator) and
-                isinstance(operators[1], Integral)):
+                is_int(operators[1])):
             operators = (operators[0],) * operators[1]
 
         self.__operators = operators
@@ -1059,7 +1059,7 @@ class DiagonalOperator(ProductSpaceOperator):
 
         if (len(operators) == 2 and
                 isinstance(operators[0], Operator) and
-                isinstance(operators[1], Integral)):
+                is_int(operators[1])):
             operators = (operators[0],) * operators[1]
 
         indices = [range(len(operators)), range(len(operators))]

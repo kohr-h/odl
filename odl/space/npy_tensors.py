@@ -221,7 +221,9 @@ class NumpyTensorSpace(TensorSpace):
         tensor_space((2, 3), dtype=int)
         """
         super(NumpyTensorSpace, self).__init__(shape, dtype)
-        if self.dtype.char not in self.available_dtypes():
+        # Check if dtype is supported; to include variable-size dtypes
+        # (mostly string types) we check `dtype.char`
+        if np.dtype(self.dtype.char) not in self.available_dtypes():
             raise ValueError('`dtype` {!r} not supported'
                              ''.format(dtype_str(dtype)))
 
@@ -499,12 +501,17 @@ class NumpyTensorSpace(TensorSpace):
     def available_dtypes():
         """Return the set of data types available in this implementation.
 
+        Returns
+        -------
+        available_dtypes : set
+
         Notes
         -----
-        This is all dtypes available in Numpy. See `numpy.sctypes`
-        for more information.
+        This set includes all Numpy dtypes, except for ``object`` and
+        ``void``. See `numpy.sctypes` for more information.
 
-        The available dtypes may depend on the specific system used.
+        The available dtypes can depend on the operating system and the
+        Numpy version.
         """
         all_dtypes = []
         for lst in np.sctypes.values():
@@ -513,8 +520,8 @@ class NumpyTensorSpace(TensorSpace):
                     all_dtypes.append(np.dtype(dtype))
         # Need to add these manually since np.sctypes['others'] will only
         # contain one of them (depending on Python version)
-        lst.extend([np.dtype('S'), np.dtype('U')])
-        return tuple(sorted(set(all_dtypes)))
+        all_dtypes.extend([np.dtype('S'), np.dtype('U')])
+        return set(all_dtypes)
 
     @staticmethod
     def default_dtype(field=None):
@@ -859,6 +866,8 @@ class NumpyTensorSpace(TensorSpace):
         >>> rn[[2, 0], [3, 3], [0, 1], [5, 2]]
         rn(2)
         """
+        #print(type(indices))
+        #print(indices)
         new_shape, removed_axes, _, _ = simulate_slicing(self.shape, indices)
         weighting = slice_weighting(self.weighting, self.shape, indices)
         return type(self)(shape=new_shape, dtype=self.dtype,
@@ -959,7 +968,7 @@ class NumpyTensor(Tensor):
 
     def __init__(self, space, data):
         """Initialize a new instance."""
-        Tensor.__init__(self, space)
+        super(Tensor, self).__init__(space)
         self.__data = data
 
     @property

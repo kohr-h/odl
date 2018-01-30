@@ -22,7 +22,7 @@ __all__ = ('array_str', 'dtype_str', 'dtype_repr', 'npy_printoptions',
            'is_numeric_dtype', 'is_int_dtype', 'is_floating_dtype',
            'is_real_dtype', 'is_real_floating_dtype',
            'is_complex_floating_dtype', 'real_dtype', 'complex_dtype',
-           'is_string', 'conj_exponent', 'writable_array',
+           'is_int', 'is_string', 'conj_exponent', 'writable_array',
            'run_from_ipython', 'NumpyRandomSeed', 'cache_arguments', 'unique')
 
 TYPE_MAP_R2C = {np.dtype(dtype): np.result_type(dtype, 1j)
@@ -430,8 +430,29 @@ def complex_dtype(dtype, default=None):
         return np.dtype((complex_base_dtype, dtype.shape))
 
 
+def is_int(obj):
+    """Return ``True`` if ``obj`` behaves like an integer, ``False`` else.
+
+    This is faster than ``isinstance(obj, Integral)``, although perhaps not
+    quite as general.
+    """
+    # Shortcut for common case
+    if isinstance(obj, int):
+        return True
+
+    try:
+        obj_int = int(obj)
+        return obj_int == obj
+    except (TypeError, ValueError):
+        return False
+
+
 def is_string(obj):
     """Return ``True`` if ``obj`` behaves like a string, ``False`` else."""
+    # Shortcut for common case
+    if isinstance(obj, str):
+        return True
+
     try:
         obj + ''
     except TypeError:

@@ -15,6 +15,7 @@ import numpy as np
 from odl.discr import RectPartition
 from odl.tomo.util import perpendicular_vector, is_inside_bounds
 from odl.util import indent, signature_string, array_str
+from odl.util.npy_compat import moveaxis
 
 
 __all__ = ('Detector',
@@ -187,7 +188,7 @@ class Detector(object):
             deriv = self.surface_deriv(param)
             if deriv.ndim > 2:
                 # Vectorized, need to reshape (N, 2, 3) to (2, N, 3)
-                deriv = np.moveaxis(deriv, -2, 0)
+                deriv = moveaxis(deriv, -2, 0)
             normal = np.cross(*deriv, axis=-1)
             normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
             return normal
@@ -243,7 +244,7 @@ class Detector(object):
             deriv = self.surface_deriv(param)
             if deriv.ndim > 2:
                 # Vectorized, need to reshape (N, 2, 3) to (2, N, 3)
-                deriv = np.moveaxis(deriv, -2, 0)
+                deriv = moveaxis(deriv, -2, 0)
             cross = np.cross(*deriv, axis=-1)
             measure = np.linalg.norm(cross, axis=-1)
             if scalar_out:
