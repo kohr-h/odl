@@ -84,10 +84,10 @@ class DiscreteLp(DiscretizedSpace):
         if not fspace.domain.contains_set(partition.set):
             raise ValueError('`partition` {} is not a subset of the function '
                              'domain {}'.format(partition, fspace.domain))
-        if fspace.scalar_out_dtype != tspace.dtype:
-            raise ValueError('`fspace.scalar_out_dtype` does not match '
+        if fspace.scalar_dtype_out != tspace.dtype:
+            raise ValueError('`fspace.scalar_dtype_out` does not match '
                              '`tspace.dtype`: {} != {}'
-                             ''.format(fspace.scalar_out_dtype, tspace.dtype))
+                             ''.format(fspace.scalar_dtype_out, tspace.dtype))
 
         self.__partition = partition
 
@@ -207,7 +207,7 @@ class DiscreteLp(DiscretizedSpace):
         For spaces of discretized vector- or tensor-valued functions,
         this includes the output components as ::
 
-            shape = fspace.out_shape + partition.shape
+            shape = fspace.shape_out + partition.shape
         """
         return self.tspace.shape
 
@@ -234,7 +234,7 @@ class DiscreteLp(DiscretizedSpace):
         this is the shape of a function value; for scalar-valued functions,
         it is an empty tuple.
         """
-        return self.fspace.out_shape
+        return self.fspace.shape_out
 
     @property
     def ndim_out(self):
@@ -254,8 +254,8 @@ class DiscreteLp(DiscretizedSpace):
         the data type has a shape. For the base data type without shape,
         use `scalar_dtype`.
         """
-        # Construct this way since `fspace` may have dtype `None`
-        return np.dtype((self.tspace.dtype, self.fspace.out_shape))
+        # Construct explicitly since `fspace` may have dtype `None`
+        return np.dtype((self.tspace.dtype, self.fspace.shape_out))
 
     @property
     def scalar_dtype(self):
@@ -587,10 +587,10 @@ class DiscreteLp(DiscretizedSpace):
         # - the `partition` is indexed with the "in" part of the tuple
         #   only, i.e., the last part excluding `n_out = len(shape_out)`
         #   axes
-        # - the `out_shape` for the function space is determined using the
+        # - the `shape_out` for the function space is determined using the
         #   first `n_out` index tuple entries
         # - the new function space is constructed from `new_partition.set`,
-        #   `fspace.scalar_out_dtype` and the new `out_shape`
+        #   `fspace.scalar_dtype_out` and the new `shape_out`
 
         # Normalize the index expression based on the full shape, and
         # split into "in" and "out" parts
@@ -624,7 +624,7 @@ class DiscreteLp(DiscretizedSpace):
             self.shape_out, indices_out)
         res_fspace = FunctionSpace(
             res_part.set,
-            out_dtype=(self.fspace.scalar_out_dtype, sliced_shape_out))
+            dtype_out=(self.fspace.scalar_dtype_out, sliced_shape_out))
 
         remaining_axes_out = [i for i in range(self.ndim_out)
                               if i not in collapsed_axes_out]
@@ -1318,9 +1318,9 @@ class DiscreteLpElement(DiscretizedSpaceElement):
                     # Make new function space based on result dtype,
                     # keep everything else, and get `tspace` from the result
                     # tensor.
-                    out_dtype = (res_tens.dtype, self.space.fspace.out_shape)
+                    dtype_out = (res_tens.dtype, self.space.fspace.shape_out)
                     fspace = FunctionSpace(self.space.fspace.domain,
-                                           out_dtype)
+                                           dtype_out)
                     res_space = DiscreteLp(
                         fspace, self.space.partition,
                         res_tens.space, self.space.interp_byaxis,
@@ -1338,9 +1338,9 @@ class DiscreteLpElement(DiscretizedSpaceElement):
 
                 if out1 is None:
                     # Wrap as for nout = 1
-                    out_dtype = (res1_tens.dtype, self.space.fspace.out_shape)
+                    dtype_out = (res1_tens.dtype, self.space.fspace.shape_out)
                     fspace = FunctionSpace(self.space.fspace.domain,
-                                           out_dtype)
+                                           dtype_out)
                     res_space = DiscreteLp(
                         fspace, self.space.partition,
                         res1_tens.space, self.space.interp_byaxis,
@@ -1351,9 +1351,9 @@ class DiscreteLpElement(DiscretizedSpaceElement):
 
                 if out2 is None:
                     # Wrap as for nout = 1
-                    out_dtype = (res2_tens.dtype, self.space.fspace.out_shape)
+                    dtype_out = (res2_tens.dtype, self.space.fspace.shape_out)
                     fspace = FunctionSpace(self.space.fspace.domain,
-                                           out_dtype)
+                                           dtype_out)
                     res_space = DiscreteLp(
                         fspace, self.space.partition,
                         res2_tens.space, self.space.interp_byaxis,
@@ -1408,7 +1408,7 @@ class DiscreteLpElement(DiscretizedSpaceElement):
                     # Make `fspace` with appropriate dtype, get `tspace`
                     # from the result tensor and keep the rest
                     fspace = FunctionSpace(self.space.domain,
-                                           out_dtype=res_tens.dtype)
+                                           dtype_out=res_tens.dtype)
 
                     res_space = DiscreteLp(
                         fspace, self.space.partition, res_tens.space,
@@ -1421,7 +1421,7 @@ class DiscreteLpElement(DiscretizedSpaceElement):
                     # and determine `tspace` from the result tensor
                     inp1, inp2 = inputs
                     domain = inp1.space.domain.append(inp2.space.domain)
-                    fspace = FunctionSpace(domain, out_dtype=res_tens.dtype)
+                    fspace = FunctionSpace(domain, dtype_out=res_tens.dtype)
                     part = inp1.space.partition.append(inp2.space.partition)
                     interp = (inp1.space.interp_byaxis +
                               inp2.space.interp_byaxis)
@@ -1687,8 +1687,8 @@ def uniform_discr_frompartition(partition, dtype=None, impl='numpy', **kwargs):
     if dtype is not None:
         dtype = np.dtype(dtype)
 
-    fspace = FunctionSpace(partition.set, out_dtype=dtype)
-    ds_type = tspace_type(fspace, impl, fspace.scalar_out_dtype)
+    fspace = FunctionSpace(partition.set, dtype_out=dtype)
+    ds_type = tspace_type(fspace, impl, fspace.scalar_dtype_out)
 
     if dtype is None:
         dtype = ds_type.default_dtype()
@@ -1698,10 +1698,10 @@ def uniform_discr_frompartition(partition, dtype=None, impl='numpy', **kwargs):
     if (weighting is None and
             is_numeric_dtype(dtype) and
             exponent != float('inf')):
-        weighting = np.concatenate([np.ones(len(fspace.out_shape)),
+        weighting = np.concatenate([np.ones(len(fspace.shape_out)),
                                     partition.cell_sides])
 
-    tspace = ds_type(fspace.out_shape + partition.shape, dtype.base,
+    tspace = ds_type(fspace.shape_out + partition.shape, dtype.base,
                      exponent=exponent, weighting=weighting)
     return DiscreteLp(fspace, partition, tspace, **kwargs)
 
@@ -1754,19 +1754,19 @@ def uniform_discr_fromspace(fspace, shape, dtype=None, impl='numpy', **kwargs):
                         '`IntervalProd` instance'.format(fspace.domain))
 
     # Set data type. If given, check consistency with fspace's field and
-    # out_dtype. If not given, take the latter.
+    # dtype_out. If not given, take the latter.
     if dtype is None:
-        dtype = fspace.out_dtype
+        dtype = fspace.dtype_out
     else:
         dtype, dtype_in = np.dtype(dtype), dtype
-        if not np.can_cast(fspace.scalar_out_dtype, dtype, casting='safe'):
+        if not np.can_cast(fspace.scalar_dtype_out, dtype, casting='safe'):
             raise ValueError('cannot safely cast from output data {} type of '
                              'the function space to given data type {}'
                              ''.format(fspace.out, dtype_in))
-        if dtype.shape != fspace.out_shape:
+        if dtype.shape != fspace.shape_out:
             raise ValueError('`dtype.shape` {} not equal to '
-                             '`fspace.out_shape` {}'
-                             ''.format(dtype.shape, fspace.out_shape))
+                             '`fspace.shape_out` {}'
+                             ''.format(dtype.shape, fspace.shape_out))
 
     if fspace.field == RealNumbers() and not is_real_dtype(dtype):
         raise ValueError('cannot discretize real space {} with '
@@ -1824,7 +1824,7 @@ def uniform_discr_fromintv(intv_prod, shape, dtype=None, impl='numpy',
     if dtype is None:
         dtype = tensor_space_impl(str(impl).lower()).default_dtype()
 
-    fspace = FunctionSpace(intv_prod, out_dtype=dtype)
+    fspace = FunctionSpace(intv_prod, dtype_out=dtype)
     return uniform_discr_fromspace(fspace, shape, dtype, impl, **kwargs)
 
 
