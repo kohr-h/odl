@@ -105,6 +105,10 @@ def all_equal(iter1, iter2):
     if iter1 is None and iter2 is None:
         return True
 
+    # Do it faster for arrays
+    if hasattr(iter1, '__array__') and hasattr(iter2, '__array__'):
+        return np.array_equal(iter1, iter2)
+
     # If one nested iterator is exhausted, go to direct comparison
     try:
         it1 = iter(iter1)
@@ -132,12 +136,6 @@ def all_equal(iter1, iter2):
     return True
 
 
-def all_almost_equal_array(v1, v2, places):
-    return np.allclose(v1, v2,
-                       rtol=10 ** (-places), atol=10 ** (-places),
-                       equal_nan=True)
-
-
 def all_almost_equal(iter1, iter2, places=None):
     """Return ``True`` if all elements in ``a`` and ``b`` are almost equal."""
     try:
@@ -154,7 +152,9 @@ def all_almost_equal(iter1, iter2, places=None):
         # otherwise for recursive calls.
         if places is None:
             places = _places(iter1, iter2, None)
-        return all_almost_equal_array(iter1, iter2, places)
+        return np.allclose(iter1, iter2,
+                           rtol=10 ** (-places), atol=10 ** (-places),
+                           equal_nan=True)
 
     try:
         it1 = iter(iter1)

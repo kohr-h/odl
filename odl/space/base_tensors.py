@@ -91,18 +91,18 @@ class TensorSpace(LinearSpace):
         self.__shape = dtype.shape + shape
         self.__dtype = dtype.base
 
-        if is_real_dtype(self.dtype):
+        if is_real_dtype(self.__dtype):
             # real includes non-floating-point like integers
             field = RealNumbers()
-            self.__real_dtype = self.dtype
+            self.__real_dtype = self.__dtype
             self.__real_space = self
-            self.__complex_dtype = TYPE_MAP_R2C.get(self.dtype, None)
+            self.__complex_dtype = TYPE_MAP_R2C.get(self.__dtype, None)
             self.__complex_space = None  # Set in first call of astype
-        elif is_complex_floating_dtype(self.dtype):
+        elif is_complex_floating_dtype(self.__dtype):
             field = ComplexNumbers()
-            self.__real_dtype = TYPE_MAP_C2R[self.dtype]
+            self.__real_dtype = TYPE_MAP_C2R[self.__dtype]
             self.__real_space = None  # Set in first call of astype
-            self.__complex_dtype = self.dtype
+            self.__complex_dtype = self.__dtype
             self.__complex_space = self
         else:
             field = None
@@ -243,8 +243,9 @@ class TensorSpace(LinearSpace):
         if dtype == self.dtype:
             return self
 
-        if is_numeric_dtype(self.dtype):
-            # Caching for real and complex versions (exact dtype mappings)
+        # Invoke caching for real and complex versions (exact dtype mappings)
+        # if the provided dtype has no shape
+        if is_numeric_dtype(self.dtype) and dtype.shape == ():
             if dtype == self.__real_dtype:
                 if self.__real_space is None:
                     self.__real_space = self._astype(dtype)
@@ -806,11 +807,11 @@ numpy.ufunc.reduceat.html
         # --- Get some parameters for later --- #
 
         # Arguments for `writable_array` and/or space constructors
-        out_dtype = kwargs.get('dtype', None)
-        if out_dtype is None:
+        dtype_out = kwargs.get('dtype', None)
+        if dtype_out is None:
             array_kwargs = {}
         else:
-            array_kwargs = {'dtype': out_dtype}
+            array_kwargs = {'dtype': dtype_out}
 
         # --- Evaluate ufunc --- #
 
