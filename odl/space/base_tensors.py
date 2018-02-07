@@ -209,15 +209,26 @@ class TensorSpace(LinearSpace):
         Subclasses with differing init parameters should overload this
         method.
         """
+        # TODO: this is too hacky, the slicing should be a method on the
+        # weightings instead!
+        from odl.space.npy_tensors import slice_weighting
+        dtype = np.dtype(dtype)
+
         kwargs = {}
         if is_floating_dtype(dtype):
             # Use weighting only for floating-point types, otherwise, e.g.,
             # `space.astype(bool)` would fail
             weighting = getattr(self, 'weighting', None)
             if weighting is not None:
+                if dtype.shape:
+                    # Add axes corresponding to `dtype.shape` to weighting
+                    slc = ((None,) * len(dtype.shape) +
+                           (slice(None),) * self.ndim)
+                    weighting = slice_weighting(weighting, self.shape, slc)
                 kwargs['weighting'] = weighting
-
-        return type(self)(self.shape, dtype=dtype, **kwargs)
+        # Support creating space of tensor-valued functions
+        shape = dtype.shape + self.shape
+        return type(self)(shape, dtype=dtype.base, **kwargs)
 
     def astype(self, dtype):
         """Return a copy of this space with new ``dtype``.
