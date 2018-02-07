@@ -1998,11 +1998,11 @@ def _lincomb_impl(a, x1, b, x2, out):
 
     if size < THRESHOLD_SMALL:
         # Faster for small arrays
-        out.data[:] = a * x1.data + b * x2.data
+        out[:] = a * x1 + b * x2
         return
 
     elif (size < THRESHOLD_MEDIUM or
-          not _blas_is_applicable(x1.data, x2.data, out.data)):
+          not _blas_is_applicable(x1, x2, out)):
 
         def fallback_axpy(x1, x2, n, a):
             """Fallback axpy implementation avoiding copy."""
@@ -2023,23 +2023,23 @@ def _lincomb_impl(a, x1, b, x2, out):
             return x2
 
         axpy, scal, copy = (fallback_axpy, fallback_scal, fallback_copy)
-        x1_arr = x1.data
-        x2_arr = x2.data
-        out_arr = out.data
+        x1_arr = x1
+        x2_arr = x2
+        out_arr = out
 
     else:
         # Need flat data for BLAS, otherwise in-place does not work.
         # Raveling must happen in fixed order for non-contiguous out,
         # otherwise 'A' is applied to arrays, which makes the outcome
         # dependent on their respective contiguousness.
-        if out.data.flags.f_contiguous:
+        if out.flags.f_contiguous:
             ravel_order = 'F'
         else:
             ravel_order = 'C'
 
-        x1_arr = x1.data.ravel(order=ravel_order)
-        x2_arr = x2.data.ravel(order=ravel_order)
-        out_arr = out.data.ravel(order=ravel_order)
+        x1_arr = x1.ravel(order=ravel_order)
+        x2_arr = x2.ravel(order=ravel_order)
+        out_arr = out.ravel(order=ravel_order)
         axpy, scal, copy = scipy.linalg.blas.get_blas_funcs(
             ['axpy', 'scal', 'copy'], arrays=(x1_arr, x2_arr, out_arr))
 
