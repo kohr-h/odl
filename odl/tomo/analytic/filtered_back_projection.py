@@ -296,7 +296,7 @@ def parker_weighting(ray_trafo, q=0.25):
         broadcast_to(S_sum * scale, ray_trafo.range.shape))
 
 
-def fbp_filter_op(ray_trafo, padding=True, filter_type='Ram-Lak',
+def fbp_filter_op(ray_trafo, padding=True, filter='Ram-Lak',
                   frequency_scaling=1.0):
     """Create a filter operator for FBP from a `RayTransform`.
 
@@ -304,31 +304,31 @@ def fbp_filter_op(ray_trafo, padding=True, filter_type='Ram-Lak',
     ----------
     ray_trafo : `RayTransform`
         The ray transform (forward operator) whose approximate inverse should
-        be computed. Its geometry has to be any of the following
+        be computed. Its geometry has to be any of the following:
 
-        `Parallel2DGeometry` : Exact reconstruction
-
-        `Parallel3dAxisGeometry` : Exact reconstruction
-
-        `FanFlatGeometry` : Approximate reconstruction, correct in limit of
-        fan angle = 0.
-
-        `ConeFlatGeometry`, pitch = 0 (circular) : Approximate reconstruction,
-        correct in the limit of fan angle = 0 and cone angle = 0.
-
-        `ConeFlatGeometry`, pitch > 0 (helical) : Very approximate unless a
-        `tam_danielson_window` is used. Accurate with the window.
-
-        Other geometries: Not supported
+        - `Parallel2DGeometry` : Exact reconstruction
+        - `Parallel3dAxisGeometry` : Exact reconstruction
+        - `FanFlatGeometry` : Approximate reconstruction, correct in limit
+          of zero fan angle
+        - `ConeFlatGeometry`, pitch 0 (circular) : Approximate
+          reconstruction, correct in the limit of zero fan and cone angles
+        - `ConeFlatGeometry`, pitch > 0 (helical) : Very approximate unless
+          a `tam_danielson_window` is used; accurate with the window
+        - Other geometries: Not supported
 
     padding : bool, optional
         If the data space should be zero padded. Without padding, the data may
         be corrupted due to the circular convolution used. Using padding makes
         the algorithm slower.
-    filter_type : string, optional
-        The type of filter to be used. The options are, approximate order from
-        most noise senstive to least noise sensitive: 'Ram-Lak', 'Shepp-Logan',
-        'Cosine', 'Hamming' and 'Hann'.
+    filter : string or array-like, optional
+        The filter to be used. The options are, approximately in order from
+        most noise senstive to least noise sensitive::
+
+            'Ram-Lak', 'Shepp-Logan', 'Cosine', 'Hamming', 'Hann'
+
+        If an array-like object is provided, it is used directly as
+        a filter defined in Fourier space.
+
     frequency_scaling : float, optional
         Relative cutoff frequency for the filter.
         The normalized frequencies are rescaled so that they fit into the range
@@ -346,13 +346,22 @@ def fbp_filter_op(ray_trafo, padding=True, filter_type='Ram-Lak',
     """
     impl = 'pyfftw' if PYFFTW_AVAILABLE else 'numpy'
     alen = ray_trafo.geometry.motion_params.length
+    try:
+        filter + ''
+    except TypeError:
+        filter_is_str = False
+        filter = np.asarray(filter, dtype=complex)
+    else:
+        filter_is_str = True
 
     if ray_trafo.domain.ndim == 2:
         # Define ramp filter
         def fourier_filter(x):
+            if not filter_is_str:
+                return filter[None, :]
             abs_freq = np.abs(x[1])
             norm_freq = abs_freq / np.max(abs_freq)
-            filt = _fbp_filter(norm_freq, filter_type, frequency_scaling)
+            filt = _fbp_filter(norm_freq, filter, frequency_scaling)
             scaling = 1 / (2 * alen)
             return filt * abs_freq * scaling
 
@@ -402,13 +411,19 @@ def fbp_filter_op(ray_trafo, padding=True, filter_type='Ram-Lak',
             # If axis is aligned to a coordinate axis, save some memory and
             # time by using broadcasting
             if not used_axes[0]:
+                if not filter_is_str:
+                    return filter[None, :, :]
                 abs_freq = np.abs(rot_dir[1] * x[2])
             elif not used_axes[1]:
+                if not filter_is_str:
+                    return filter[:, :, None]
                 abs_freq = np.abs(rot_dir[0] * x[1])
             else:
+                if not filter_is_str:
+                    return filter[None, :, :]
                 abs_freq = np.abs(rot_dir[0] * x[1] + rot_dir[1] * x[2])
             norm_freq = abs_freq / np.max(abs_freq)
-            filt = _fbp_filter(norm_freq, filter_type, frequency_scaling)
+            filt = _fbp_filter(norm_freq, filter, frequency_scaling)
             scaling = scale / (2 * alen)
             return filt * abs_freq * scaling
 
@@ -438,8 +453,7 @@ def fbp_filter_op(ray_trafo, padding=True, filter_type='Ram-Lak',
         raise NotImplementedError('FBP only implemented in 2d and 3d')
 
     # Create ramp in the detector direction
-    ramp_function = fourier.range.element(fourier_filter)
-
+    ramp_function = fourier.range.element(filter)
     weight = 1
     if not ray_trafo.range.is_weighted:
         # Compensate for potentially unweighted range of the ray transform
@@ -455,7 +469,7 @@ def fbp_filter_op(ray_trafo, padding=True, filter_type='Ram-Lak',
     return fourier.inverse * ramp_function * fourier
 
 
-def fbp_op(ray_trafo, padding=True, filter_type='Ram-Lak',
+def fbp_op(ray_trafo, padding=True, filter='Ram-Lak',
            frequency_scaling=1.0):
     """Create filtered back-projection operator from a `RayTransform`.
 
@@ -466,31 +480,30 @@ def fbp_op(ray_trafo, padding=True, filter_type='Ram-Lak',
     ----------
     ray_trafo : `RayTransform`
         The ray transform (forward operator) whose approximate inverse should
-        be computed. Its geometry has to be any of the following
+        be computed. Its geometry has to be any of the following:
 
-        `Parallel2DGeometry` : Exact reconstruction
-
-        `Parallel3dAxisGeometry` : Exact reconstruction
-
-        `FanFlatGeometry` : Approximate reconstruction, correct in limit of fan
-        angle = 0.
-
-        `ConeFlatGeometry`, pitch = 0 (circular) : Approximate reconstruction,
-        correct in the limit of fan angle = 0 and cone angle = 0.
-
-        `ConeFlatGeometry`, pitch > 0 (helical) : Very approximate unless a
-        `tam_danielson_window` is used. Accurate with the window.
-
-        Other geometries: Not supported
+        - `Parallel2DGeometry` : Exact reconstruction
+        - `Parallel3dAxisGeometry` : Exact reconstruction
+        - `FanFlatGeometry` : Approximate reconstruction, correct in limit
+          of zero fan angle
+        - `ConeFlatGeometry`, pitch 0 (circular) : Approximate
+          reconstruction, correct in the limit of zero fan and cone angles
+        - `ConeFlatGeometry`, pitch > 0 (helical) : Very approximate unless
+          a `tam_danielson_window` is used; accurate with the window
+        - Other geometries: Not supported
 
     padding : bool, optional
         If the data space should be zero padded. Without padding, the data may
         be corrupted due to the circular convolution used. Using padding makes
         the algorithm slower.
-    filter_type : string, optional
-        The type of filter to be used. The options are, approximate order from
-        most noise senstive to least noise sensitive: 'Ram-Lak', 'Shepp-Logan',
-        'Cosine', 'Hamming' and 'Hann'.
+    filter : string or array-like, optional
+        The filter to be used. The options are, approximately in order from
+        most noise senstive to least noise sensitive::
+
+            'Ram-Lak', 'Shepp-Logan', 'Cosine', 'Hamming', 'Hann'
+
+        If an array-like object is provided, it is used directly as
+        a filter defined in Fourier space.
     frequency_scaling : float, optional
         Relative cutoff frequency for the filter.
         The normalized frequencies are rescaled so that they fit into the range
@@ -506,7 +519,7 @@ def fbp_op(ray_trafo, padding=True, filter_type='Ram-Lak',
     --------
     tam_danielson_window : Windowing for helical data
     """
-    return ray_trafo.adjoint * fbp_filter_op(ray_trafo, padding, filter_type,
+    return ray_trafo.adjoint * fbp_filter_op(ray_trafo, padding, filter,
                                              frequency_scaling)
 
 
