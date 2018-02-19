@@ -415,9 +415,9 @@ def test_fspace_attributes():
     assert fspace_c.real_dtype_out == float
     assert fspace_c.complex_dtype_out == complex
     assert fspace_s.dtype_out == np.dtype('U1')
-    with pytest.raises(TypeError):
+    with pytest.raises(AttributeError):
         fspace_s.real_dtype_out
-    with pytest.raises(TypeError):
+    with pytest.raises(AttributeError):
         fspace_s.complex_dtype_out
 
     assert all(spc.scalar_dtype_out == spc.dtype_out for spc in scalar_spaces)

@@ -280,7 +280,9 @@ class FunctionSpace(LinearSpace):
     def real_dtype_out(self):
         """The real dtype corresponding to this space's `dtype_out`."""
         if self.__real_dtype_out is None:
-            raise TypeError('no real variant of output dtype defined')
+            raise AttributeError(
+                'no real variant of output dtype {} defined'
+                ''.format(dtype_repr(self.scalar_dtype_out)))
         else:
             return self.__real_dtype_out
 
@@ -288,7 +290,9 @@ class FunctionSpace(LinearSpace):
     def complex_dtype_out(self):
         """The complex dtype corresponding to this space's `dtype_out`."""
         if self.__complex_dtype_out is None:
-            raise TypeError('no complex variant of output dtype defined')
+            raise AttributeError(
+                'no complex variant of output dtype {} defined'
+                ''.format(dtype_repr(self.scalar_dtype_out)))
         else:
             return self.__complex_dtype_out
 
@@ -703,17 +707,23 @@ class FunctionSpace(LinearSpace):
         if dtype_out == self.dtype_out:
             return self
 
-        # Caching for real and complex versions (exact dtyoe mappings)
-        if dtype_out == self.real_dtype_out:
-            if self.__real_space is None:
-                self.__real_space = self._astype(dtype_out)
-            return self.__real_space
-        elif dtype_out == self.complex_dtype_out:
-            if self.__complex_space is None:
-                self.__complex_space = self._astype(dtype_out)
-            return self.__complex_space
-        else:
+        # Try to use caching for real and complex versions (exact dtype
+        # mappings). This may fail for certain dtype, in which case we
+        # just go to `_astype` directly.
+        real_dtype = getattr(self, 'real_dtype_out', None)
+        if real_dtype is None:
             return self._astype(dtype_out)
+        else:
+            if dtype_out == real_dtype:
+                if self.__real_space is None:
+                    self.__real_space = self._astype(dtype_out)
+                return self.__real_space
+            elif dtype_out == self.complex_dtype_out:
+                if self.__complex_space is None:
+                    self.__complex_space = self._astype(dtype_out)
+                return self.__complex_space
+            else:
+                return self._astype(dtype_out)
 
     def _lincomb(self, a, f1, b, f2, out):
         """Linear combination of ``f1`` and ``f2``.

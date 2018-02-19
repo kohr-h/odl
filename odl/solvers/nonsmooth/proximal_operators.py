@@ -380,16 +380,22 @@ def proximal_quadratic_perturbation(prox_factory, a, u=None):
             The proximal operator of ``sigma * (F(x) + a * \|x\|^2 + <u,x>)``,
             where ``sigma`` is the step size
         """
+        if np.isscalar(sigma):
+            sigma = float(sigma)
+        else:
+            sigma = np.asarray(sigma)
+
         const = 1.0 / np.sqrt(sigma * 2.0 * a + 1)
         prox = proximal_arg_scaling(prox_factory, const)(sigma)
         if u is not None:
-            return (const * prox *
-                    (MultiplyOperator(const,
-                                      domain=u.space,
-                                      range=u.space) -
+            return (MultiplyOperator(const, domain=u.space, range=u.space) *
+                    prox *
+                    (MultiplyOperator(const, domain=u.space, range=u.space) -
                      sigma * const * u))
         else:
-            return const * prox * const
+            space = prox.domain
+            return (MultiplyOperator(const, domain=space, range=space) *
+                    prox * MultiplyOperator(const, domain=space, range=space))
 
     return quadratic_perturbation_prox_factory
 
@@ -1686,6 +1692,8 @@ def proximal_convex_conj_kl_cross_entropy(space, lam=1, g=None):
 
             if not np.issubsctype(self.domain.dtype, np.complexfloating):
                 lambw = lambw.real
+
+            lambw = x.space.element(lambw)
 
             out.lincomb(1, x, -lam, lambw)
 

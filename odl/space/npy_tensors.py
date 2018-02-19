@@ -521,7 +521,7 @@ class NumpyTensorSpace(TensorSpace):
         # Need to add these manually since np.sctypes['others'] will only
         # contain one of them (depending on Python version)
         all_dtypes.extend([np.dtype('S'), np.dtype('U')])
-        return set(all_dtypes)
+        return tuple(sorted(set(all_dtypes)))
 
     @staticmethod
     def default_dtype(field=None):

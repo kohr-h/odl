@@ -31,7 +31,7 @@ from odl.solvers.functional.default_functionals import (
 scalar = simple_fixture('scalar', [0.01, 2.7, 10, -2, -0.2, -7.1, 0])
 sigma = simple_fixture('sigma', [0.001, 2.7, np.array(0.5), 10])
 
-space_params = ['r10', 'uniform_discr']
+space_params = ['r10', 'uniform_discr', 'power_space_unif_discr']
 space_ids = [' space={} '.format(p) for p in space_params]
 
 
@@ -44,12 +44,17 @@ def space(request, tspace_impl):
     elif name == 'uniform_discr':
         # Discretization parameters
         return odl.uniform_discr(0, 1, 7, impl=tspace_impl)
+    elif name == 'power_space_unif_discr':
+        # Discretization parameters
+        space = odl.uniform_discr(0, 1, 7, impl=tspace_impl)
+        return odl.ProductSpace(space, 2)
 
 
 func_params = ['l1 ', 'l2', 'l2^2', 'constant', 'zero', 'ind_unit_ball_1',
                'ind_unit_ball_2', 'ind_unit_ball_pi', 'ind_unit_ball_inf',
                'product', 'quotient', 'kl', 'kl_cc', 'kl_cross_ent',
-               'kl_cc_cross_ent', 'huber', 'groupl1']
+               'kl_cc_cross_ent', 'huber', 'groupl1', 'bregman_l2squared',
+               'bregman_l1']
 
 func_ids = [" functional='{}' ".format(p) for p in func_params]
 
@@ -95,8 +100,18 @@ def functional(request, space):
     elif name == 'huber':
         func = odl.solvers.Huber(space, gamma=0.1)
     elif name == 'groupl1':
+        if isinstance(space, odl.ProductSpace):
+            pytest.skip("The `GroupL1Norm` is not supported on `ProductSpace`")
         space = odl.ProductSpace(space, 3)
         func = odl.solvers.GroupL1Norm(space)
+    elif name == 'bregman_l2squared':
+        point = noise_element(space)
+        l2_squared = odl.solvers.L2NormSquared(space)
+        func = odl.solvers.BregmanDistance(l2_squared, point)
+    elif name == 'bregman_l1':
+        point = noise_element(space)
+        l1 = odl.solvers.L1Norm(space)
+        func = odl.solvers.BregmanDistance(l1, point)
     else:
         assert False
 
@@ -449,6 +464,31 @@ def test_translation_of_functional(space):
                         places=places)
 
 
+def test_translation_proximal_stepsizes():
+    """Test for stepsize types for proximal of a translated functional."""
+    # Set up space, functional and a point where to evaluate the proximal.
+    space = odl.rn(2)
+    functional = odl.solvers.L2NormSquared(space)
+    translation = functional.translated([0.5, 0.5])
+    x = space.one()
+
+    # Define different forms of the same stepsize.
+    stepsize = space.element([0.5, 2.0])
+    stepsize_list = [0.5, 2.0]
+    stepsize_array = np.asarray([0.5, 2.0])
+
+    # Calculate the proximals for each of the stepsizes.
+    y = translation.convex_conj.proximal(stepsize)(x)
+    y_list = translation.convex_conj.proximal(stepsize_list)(x)
+    y_array = translation.convex_conj.proximal(stepsize_array)(x)
+    expected_result = [0.6, 0.0]
+
+    # Now, all the results should be equal to the expected result.
+    assert all_almost_equal(y, expected_result)
+    assert all_almost_equal(y_list, expected_result)
+    assert all_almost_equal(y_array, expected_result)
+
+
 def test_multiplication_with_vector(space):
     """Test for multiplying a functional with a vector, both left and right."""
     # Less strict checking for single precision
@@ -567,6 +607,36 @@ def test_functional_quadratic_perturb(space, linear_term, quadratic_coeff):
         functional.convex_conj.proximal(sigma)(x),
         cconj_prox(sigma)(x),
         places=places)
+
+
+def test_bregman(functional):
+    """Test for the Bregman distance of a functional."""
+    if isinstance(functional, odl.solvers.functional.IndicatorLpUnitBall):
+        # IndicatorFunction has no derivative
+        with pytest.raises(NotImplementedError):
+            functional.derivative(functional.domain.zero())
+        return
+
+    y = noise_element(functional.domain)
+    x = noise_element(functional.domain)
+
+    if (isinstance(functional, odl.solvers.KullbackLeibler) or
+            isinstance(functional, odl.solvers.KullbackLeiblerCrossEntropy)):
+        # The functional is not defined for values <= 0
+        x = x.ufuncs.absolute()
+        y = y.ufuncs.absolute()
+
+    if isinstance(functional, KullbackLeiblerConvexConj):
+        # The functional is not defined for values >= 1
+        x = x - x.ufuncs.max() + 0.99
+        y = y - y.ufuncs.max() + 0.99
+
+    grad = functional.gradient(y)
+    quadratic_func = odl.solvers.QuadraticForm(
+        vector=-grad, constant=-functional(y) + grad.inner(y))
+    expected_func = functional + quadratic_func
+
+    assert almost_equal(functional.bregman(y)(x), expected_func(x))
 
 
 if __name__ == '__main__':
