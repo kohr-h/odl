@@ -19,7 +19,7 @@ from odl.util.utility import is_real_dtype
 __all__ = ('show_discrete_data',)
 
 
-def warning_free_pause():
+def warning_free_pause(seconds=0.0001):
     """Issue a matplotlib pause without the warning."""
     import matplotlib.pyplot as plt
 
@@ -28,7 +28,7 @@ def warning_free_pause():
                                 message="Using default event loop until "
                                         "function specific to this GUI is "
                                         "implemented")
-        plt.pause(0.0001)
+        plt.pause(seconds)
 
 
 def _safe_minmax(values):
