@@ -15,7 +15,7 @@ from odl.discr import uniform_partition
 from odl.tomo.geometry.detector import Flat1dDetector, Flat2dDetector
 from odl.tomo.geometry.geometry import Geometry, AxisOrientedGeometry
 from odl.tomo.util import euler_matrix, transform_system, is_inside_bounds
-from odl.util import signature_string, indent, array_str
+from odl.util import signature_string, indent, array_str, many_matvec
 
 
 __all__ = ('ParallelBeamGeometry',
@@ -306,19 +306,11 @@ class ParallelBeamGeometry(Geometry):
 
         normal = self.detector.surface_normal(dparam)  # shape (d, ndim)
 
-        # Perform matrix-vector multiplication along the last axis of both
-        # `matrix` and `normal` while "zipping" all axes that do not
-        # participate in the matrix-vector product. In other words, the axes
-        # are labelled
-        # [0, 1, ..., r-1, r, r+1] for `matrix` and
-        # [0, 1, ..., r-1, r+1] for `normal`, and the output axes are set to
-        # [0, 1, ..., r-1, r]. This automatically supports broadcasting
-        # along the axes 0, ..., r-1.
-        matrix_axes = list(range(matrix.ndim))
-        normal_axes = list(range(matrix.ndim - 2)) + [matrix_axes[-1]]
-        out_axes = list(range(matrix.ndim - 1))
-        det_to_src = np.einsum(matrix, matrix_axes, normal, normal_axes,
-                               out_axes)
+        # Multiply `matrix` with `normal` (many products at once, with
+        # broadcasting)
+        # Resulting shape is `broadcast(m, d) + (ndim,)`
+        det_to_src = many_matvec(matrix, normal)
+
         if squeeze_angle and squeeze_dparam:
             det_to_src = det_to_src.squeeze()
 

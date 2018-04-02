@@ -15,6 +15,7 @@ import numpy as np
 from odl.discr import RectPartition
 from odl.tomo.geometry.detector import Detector
 from odl.tomo.util import axis_rotation_matrix, is_inside_bounds
+from odl.util import many_matvec
 
 
 __all__ = ('Geometry', 'DivergentBeamGeometry', 'AxisOrientedGeometry')
@@ -375,18 +376,10 @@ class Geometry(object):
 
         surf = self.detector.surface(dparam)  # shape (d, ndim)
 
-        # Perform matrix-vector multiplication along the last axis of both
-        # `matrix` and `surf` while "zipping" all axes that do not
-        # participate in the matrix-vector product. In other words, the axes
-        # are labelled
-        # [0, 1, ..., r-1, r, r+1] for `matrix` and
-        # [0, 1, ..., r-1, r+1] for `surf`, and the output axes are set to
-        # [0, 1, ..., r-1, r]. This automatically supports broadcasting
-        # along the axes 0, ..., r-1.
-        matrix_axes = list(range(matrix.ndim))
-        surf_axes = list(range(matrix.ndim - 2)) + [matrix_axes[-1]]
-        out_axes = list(range(matrix.ndim - 1))
-        det_part = np.einsum(matrix, matrix_axes, surf, surf_axes, out_axes)
+        # Multiply `matrix` with `surf` (many products at once, with
+        # broadcasting)
+        # Resulting shape is `broadcast(m, d) + (ndim,)`
+        det_part = many_matvec(matrix, surf)
 
         refpt = self.det_refpoint(mparam)
         det_pt_pos = refpt + det_part

@@ -15,7 +15,7 @@ from odl.util.normalize import normalized_scalar_param_list, safe_int_conv
 
 
 __all__ = ('apply_on_boundary', 'fast_1d_tensor_mult', 'resize_array',
-           'zscore')
+           'zscore', 'many_matvec', 'many_matmul')
 
 
 _SUPPORTED_RESIZE_PAD_MODES = ('constant', 'symmetric', 'periodic',
@@ -834,6 +834,164 @@ def zscore(arr):
     if std != 0:
         arr /= std
     return arr
+
+
+def many_matvec(matrices, vectors):
+    """Perform many matrix-vector products at once.
+
+    This specialized function computes the matrix-vector product along
+    the last axis of an array of matrices and the last axis of an array
+    of vectors.
+
+    Parameters
+    ----------
+    matrices : array-like
+        Array of shape ``(n_1, ..., n_k, M, N)``, i.e., each matrix has
+        shape ``(M, N)``, and the "array shape" is ``n = (n_1, ..., n_k)``.
+    vectors : array-like
+        Array of shape ``(m_1, ..., m_k, N)``, i.e., each vector has
+        shape ``(N,)``, and the "array shape" is ``m = (m_1, ..., m_k)``.
+        The array shapes ``m`` and ``n`` must be broadcastable against
+        each other, i.e., each pair of entries must either be equal or one
+        of them must be equal to one.
+
+    Returns
+    -------
+    matrix_vector_products : `numpy.ndarray`
+        Array of shape ``broadcast(n, m) + (M,)`` consisting of the
+        many matrix-vector products of type ``(M, N) x (N,) --> (M,)``.
+
+    Examples
+    --------
+    Multiplying 2 matrices with 2 vectors, where each matrix-vector
+    product is of type ``(3, 4) x (4,) --> (3,)``:
+
+    >>> matrices = np.array([[[1, 1, 1, 1],
+    ...                       [0, 1, 0, 0],
+    ...                       [1, 0, 0, 0]],
+    ...
+    ...                      [[0, 0, 0, 0],
+    ...                       [1, 0, 0, 0],
+    ...                       [0, 0, 0, 1]]])
+    >>> matrices.shape
+    (2, 3, 4)
+    >>> vectors = np.array([[1, 2, 3, 4],
+    ...                     [0, 1, 0, -1]])
+    >>> vectors.shape
+    (2, 4)
+    >>> result = odl.util.many_matvec(matrices, vectors)
+    >>> result
+    array([[10,  2,  1],
+           [ 0,  0, -1]])
+    >>> result.shape
+    (2, 3)
+    """
+    matrices = np.asarray(matrices)
+    vectors = np.asarray(vectors)
+    if not all(nm == nv or nm == 1 or nv == 1
+               for nm, nv in zip(matrices.shape[:-2], vectors.shape[:-1])):
+        raise ValueError('"array shapes" of `matrices` ({}) and `vectors` '
+                         '({}) cannot be broadcast against each other'
+                         ''.format(matrices.shape[:-2], vectors.shape[:-1]))
+    if matrices.shape[-1] != vectors.shape[-1]:
+        raise ValueError('last axes of `matrices` and `vectors` must be '
+                         'equal, but {} != {}'
+                         ''.format(matrices.shape[-1], vectors.shape[-1]))
+
+    # Label axes:
+    # matrix [0, ..., nd-1, nd, nd+1]
+    # vector [0, ..., nd-1, nd+1]
+    # output [0, ..., nd-1, nd]
+    nd = matrices.ndim - 2
+    matrix_axes = list(range(nd)) + [nd, nd + 1]
+    vector_axes = list(range(nd)) + [nd + 1]
+    out_axes = list(range(nd)) + [nd]
+    return np.einsum(matrices, matrix_axes, vectors, vector_axes, out_axes)
+
+
+def many_matmul(matrices1, matrices2):
+    """Perform many matrix-matrix products at once.
+
+    This specialized function computes the matrix-matrix product along
+    the last two axes of two arrays of matrices.
+
+    Parameters
+    ----------
+    matrices1 : array-like
+        Array of shape ``(n_1, ..., n_k, M, N)``, i.e., each matrix has
+        shape ``(M, N)``, and the "array shape" is ``n = (n_1, ..., n_k)``.
+    matrices2 : array-like
+        Array of shape ``(m_1, ..., m_k, N, K)``, i.e., each matrix has
+        shape ``(N, K)``, and the "array shape" is ``m = (m_1, ..., m_k)``.
+        The array shapes ``m`` and ``n`` must be broadcastable against
+        each other, i.e., each pair of entries must either be equal or one
+        of them must be equal to one.
+
+    Returns
+    -------
+    matrix_matrix_products : `numpy.ndarray`
+        Array of shape ``broadcast(n, m) + (M, K)`` consisting of the
+        many matrix-matrix products of type ``(M, N) x (N, K) --> (M, K)``.
+
+    Examples
+    --------
+    Performing 2 matrix-matrix products of type ``(3, 4) x (4, 2) --> (3, 2)``:
+
+    >>> matrices1 = np.array([[[1, 1, 1, 1],
+    ...                        [0, 1, 0, 0],
+    ...                        [1, 0, 0, 0]],
+    ...
+    ...                       [[0, 0, 0, 0],
+    ...                        [1, 0, 0, 0],
+    ...                        [0, 0, 0, 1]]])
+    >>> matrices1.shape
+    (2, 3, 4)
+    >>> matrices2 = np.array([[[0, 1],
+    ...                        [1, 1],
+    ...                        [2, 0],
+    ...                        [3, 1]],
+    ...
+    ...                       [[4, 0],
+    ...                        [5, 1],
+    ...                        [6, 1],
+    ...                        [7, 0]]])
+    >>> matrices2.shape
+    (2, 4, 2)
+    >>> result = odl.util.many_matmul(matrices1, matrices2)
+    >>> result
+    array([[[6, 3],
+            [1, 1],
+            [0, 1]],
+
+           [[0, 0],
+            [4, 0],
+            [7, 0]]])
+    >>> result.shape
+    (2, 3, 2)
+    """
+    matrices1 = np.asarray(matrices1)
+    matrices2 = np.asarray(matrices2)
+    if not all(nm1 == nm2 or nm1 == 1 or nm2 == 1
+               for nm1, nm2 in zip(matrices1.shape[:-2],
+                                   matrices2.shape[:-2])):
+        raise ValueError('"array shapes" of `matrices1` ({}) and `matrices2` '
+                         '({}) cannot be broadcast against each other'
+                         ''.format(matrices1.shape[:-2], matrices2.shape[:-2]))
+    if matrices1.shape[-1] != matrices2.shape[-2]:
+        raise ValueError('last axis of `matrices1` and second to last axis of '
+                         '`matrices2` must be equal, but {} != {}'
+                         ''.format(matrices1.shape[-1], matrices2.shape[-2]))
+
+    # Label axes:
+    # matrix1 [0, ..., nd-1, nd, nd+1]
+    # matrix2 [0, ..., nd-1, nd+1, nd+2]
+    # output [0, ..., nd-1, nd, nd+2]
+    nd = matrices1.ndim - 2
+    matrix1_axes = list(range(nd)) + [nd, nd + 1]
+    matrix2_axes = list(range(nd)) + [nd + 1, nd + 2]
+    out_axes = list(range(nd)) + [nd, nd + 2]
+    return np.einsum(matrices1, matrix1_axes, matrices2, matrix2_axes,
+                     out_axes)
 
 
 if __name__ == '__main__':
