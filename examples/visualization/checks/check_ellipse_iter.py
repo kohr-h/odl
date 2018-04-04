@@ -11,9 +11,11 @@ ell1_vectors = [[1, 1], [-1, 1]]
 ell1_halfaxes = [1, 2]
 ell2_center = [-1, -1]
 ell2_vectors = [[1, 0], [0, 1]]
-ell2_halfaxes = [2, 1]
+ell2_halfaxes = [4, 0.1]
 
-# %% Preparation code
+# %% Preparation code, from the functions in `odl.phantom.util`
+
+# TODO: needs update
 
 c1 = np.asarray(ell1_center, dtype=float)
 U1T = np.asarray(ell1_vectors, dtype=float)
@@ -48,8 +50,8 @@ b1 = -many_matvec(A1, c1)
 A2 = many_matmul(U2 / e2[:, None, :] ** 2, U2T)
 b2 = -many_matvec(A2, c2)
 
-gamma1 = 1 / np.linalg.norm(A1, float('inf'), axis=(1, 2))
-gamma2 = 1 / np.linalg.norm(A2, float('inf'), axis=(1, 2))
+gamma1 = 1 / np.max(e1, axis=1) ** 2
+gamma2 = 1 / np.max(e2, axis=1) ** 2
 
 cent1, cent2 = c1, c2  # for backup
 
@@ -135,7 +137,7 @@ def ell2_curve(phi):
 
 # %% Make iteration plot
 
-niter = 10
+niter = 40
 phi = np.linspace(0, 2 * np.pi, 181)
 ell1 = ell1_curve(phi)
 ell2 = ell2_curve(phi)

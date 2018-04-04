@@ -12,6 +12,8 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 
 from odl.discr.lp_discr import uniform_discr_fromdiscr
+from odl.phantom.util import closest_points_ellipsoids
+from odl.tomo.util.utility import euler_matrix
 from odl.util.numerics import resize_array
 
 __all__ = ('cuboid', 'defrise', 'ellipsoid_phantom', 'random_ellipsoids',
@@ -765,7 +767,7 @@ def smooth_cuboid(space, min_pt=None, max_pt=None, axis=0):
 
 
 def random_ellipsoids(space, num, allow_overlap=True, min_axis=None,
-                      max_axis=None, max_elongation=float('inf')):
+                      max_axis=None, max_elongation=10):
     """Generate a phantom of random ellipsoids in a given 2D or 3D space.
 
     The values of the individual ellipsoids are random between 0 and 1.
@@ -791,7 +793,7 @@ def random_ellipsoids(space, num, allow_overlap=True, min_axis=None,
         Minimum/maximum values for the ellipsoid axes, given as a fraction
         of the total space extent. A sequence of min/max is applied per
         axis, a float is applied for all axes.
-        Default: 2 pixels/voxel for ``min_axis``, 0.4 for ``max_axis``.
+        Default: 4 pixels/voxels for ``min_axis``, 0.4 for ``max_axis``.
     max_elongation : positive float, optional
         Reject ellipsoids whose elongation, i.e., the ratio of the longest
         and shortest axes, is larger than this value.
@@ -808,7 +810,7 @@ def random_ellipsoids(space, num, allow_overlap=True, min_axis=None,
                          'with ndim = {}'.format(ndim))
 
     if min_axis is None:
-        min_axis = [2.0 / space.shape[i] for i in range(ndim)]
+        min_axis = [8.0 / space.shape[i] for i in range(ndim)]
     else:
         min_axis = np.array(min_axis, dtype=float, ndmin=1)
         min_axis = np.broadcast_to(min_axis, shape=(2,))
@@ -819,10 +821,9 @@ def random_ellipsoids(space, num, allow_overlap=True, min_axis=None,
         max_axis = np.array(max_axis, dtype=float, ndmin=1)
         max_axis = np.broadcast_to(max_axis, shape=(2,))
 
-    tmp = space.zero()
     ellipsoids = []
     ell_count = 0
-    while True:
+    while ell_count < num:
         # Note: Space is normalized to extent [-1, 1]^n
         center = [np.random.uniform(-0.9, 0.9) for i in range(ndim)]
         axis = [np.random.uniform(min_axis[i], max_axis[i])
@@ -841,24 +842,71 @@ def random_ellipsoids(space, num, allow_overlap=True, min_axis=None,
             continue
 
         if allow_overlap:
-            ell_count += 1
             ellipsoids.append(value + axis + center + rot)
+            ell_count += 1
         else:
-            # Test for overlap by constructing a temporary phantom that has
-            # value 1 in all current ellipsoids. Adding the new ellipsoid
-            # should not result in a value larger than 1 anywhere.
-            tmp_ell = [1.0] + axis + center + rot
-            phan_next = tmp + ellipsoid_phantom(space, [tmp_ell])
-            if np.any(phan_next.asarray() > 1):
-                # Reject overlapping ellipsoid
-                continue
-            else:
-                tmp = phan_next
+            if ell_count == 0:
                 ellipsoids.append(value + axis + center + rot)
                 ell_count += 1
+                continue
 
-        if ell_count >= num:
-            break
+            # Filter ellipsoids for candidates for overlap
+            cent_slc = slice(3, 5) if ndim == 2 else slice(4, 7)
+            ax_slc = slice(1, 3) if ndim == 2 else slice(1, 4)
+            rot_slc = slice(5, None) if ndim == 2 else slice(7, None)
+
+            def cannot_overlap(other):
+                """Filter function, ``True`` for impossible overlap."""
+                return (np.linalg.norm(np.array(center) - other[cent_slc]) >
+                        max(axis) + max(other[ax_slc]))
+
+            def certainly_overlaps(other):
+                """Filter function, ``True`` for certain overlap."""
+                return (np.linalg.norm(np.array(center) - other[cent_slc]) <=
+                        min(axis) + min(other[ax_slc]))
+
+            if list(filter(certainly_overlaps, ellipsoids)):
+                # Overlap certain, reject new ellipsoid
+                continue
+
+            if (len(list(filter(cannot_overlap, ellipsoids))) ==
+                    len(ellipsoids)):
+                # Guaranteed no overlap, take ellipsoid
+                ellipsoids.append(value + axis + center + rot)
+                ell_count += 1
+                continue
+
+            # For potentially overlapping ellipsoids, run an iterative method
+            # to find closest points and determine the distances between the
+            # ellipsoids (vectorized)
+            might_overlap = [
+                ell for ell in ellipsoids
+                if not (certainly_overlaps(ell) or cannot_overlap(ell))]
+
+            # TODO: check not working properly, maybe something with rotation??
+
+            # Symmetry axes of current ellipsoid and the potentially
+            # overlapping ones
+            vectors = euler_matrix(*rot)
+            other_centers = [ell[cent_slc] for ell in might_overlap]
+            other_vectors = [euler_matrix(*ell[rot_slc])
+                             for ell in might_overlap]
+            other_halfaxes = [ell[ax_slc] for ell in might_overlap]
+
+            z1, z2 = closest_points_ellipsoids(
+                center, vectors, axis,
+                other_centers, other_vectors, other_halfaxes,
+                max_iter=50)
+
+            # Ellipsoids should at least be one pixel/voxel diagonal apart
+            # from each other, since otherwise discretization might make
+            # them overlap
+            min_dist = np.sqrt(sum((2 / n) ** 2 for n in space.shape))
+            if np.any(np.linalg.norm(z1 - z2, axis=1)) <= min_dist:
+                continue
+            else:
+                ellipsoids.append(value + axis + center + rot)
+                ell_count += 1
 
     return ellipsoid_phantom(space, ellipsoids)
 
