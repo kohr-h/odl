@@ -10,7 +10,7 @@
 
 import numpy as np
 
-from odl.util import many_matvec, many_matmul
+from odl.util import many_dot, many_matvec, many_matmul
 
 
 def closest_points_ellipsoid_plane(ell_center, ell_vectors, ell_halfaxes,
@@ -169,15 +169,14 @@ def closest_points_ellipsoid_plane(ell_center, ell_vectors, ell_halfaxes,
     # --- Compute the points --- #
 
     alpha = many_matvec(UT, n)
-    dist = (np.abs(np.tensordot(p - c, n, axes=[1, 1])) -
-            np.linalg.norm(e * alpha, axis=1))
+    dist = np.abs(many_dot(p - c, n)) - np.linalg.norm(e * alpha, axis=1)
     dist = dist.ravel()
     isect = (dist <= 0)
 
     # TODO: check if this is always the closest or if it depends
     x = -e ** 2 * alpha / np.linalg.norm(e * alpha, axis=1, keepdims=True)
     z = c + many_matvec(U, x)
-    y = z - n * np.tensordot(n, z - p, axes=[1, 1])
+    y = z - n * many_dot(n, z - p)
 
     z[isect] = y[isect]
     if squeeze:
@@ -382,6 +381,7 @@ def closest_points_ellipsoids(ell1_center, ell1_vectors, ell1_halfaxes,
         c2 = c2[None, :]
         U2T = U2T[None, :, :]
         e2 = e2[None, :]
+        N = 1
         squeeze = True
     else:
         raise ValueError('`ell2_center` must have shape `(d,)` or `(N, d)`, '
@@ -398,18 +398,18 @@ def closest_points_ellipsoids(ell1_center, ell1_vectors, ell1_halfaxes,
     if eps <= 0:
         raise ValueError('`angle_tol` must be positive, got {}'.format(eps))
 
+    # --- Blow up `1` arrays to size of the `2` arrays
+
+    U1T = np.repeat(U1T[None, :, :], N, axis=0)
+    e1 = np.repeat(e1[None, :], N, axis=0)
+    c1 = np.repeat(c1[None, :], N, axis=0)
+
     # --- Re-normalize and transpose the U matrices --- #
 
-    U1T = U1T / np.linalg.norm(U1T, axis=1, keepdims=True)
-    U1T = U1T[None, :, :]
+    U1T = U1T / np.linalg.norm(U1T, axis=2, keepdims=True)
     U1 = np.transpose(U1T, (0, 2, 1))
     U2T = U2T / np.linalg.norm(U2T, axis=2, keepdims=True)
     U2 = np.transpose(U2T, (0, 2, 1))
-
-    # Add empty axes for the vectors to match the "many" type arrays of
-    # ellipsoid 2
-    c1 = c1[None, :]
-    e1 = e1[None, :]
 
     # --- Compute level set representation parts --- #
 
@@ -418,8 +418,9 @@ def closest_points_ellipsoids(ell1_center, ell1_vectors, ell1_halfaxes,
     A2 = many_matmul(U2 / e2[:, None, :] ** 2, U2T)
     b2 = -many_matvec(A2, c2)
 
-    gamma1 = 1 / np.linalg.norm(A1, float('inf'), axis=(1, 2))
-    gamma2 = 1 / np.linalg.norm(A2, float('inf'), axis=(1, 2))
+    # Reciprocal of the spectral radii of `A1` and `A2`
+    gamma1 = np.min(e1, axis=1) ** 2
+    gamma2 = np.min(e2, axis=1) ** 2
 
     # --- Define helpers --- #
 
@@ -431,13 +432,13 @@ def closest_points_ellipsoids(ell1_center, ell1_vectors, ell1_halfaxes,
         ang = np.zeros(u.shape[0])
         inner = np.zeros_like(ang)
         inner[nonzero] = (
-            np.tensordot(u[nonzero], v[nonzero], axes=[1, 1]) /
+            many_dot(u[nonzero], v[nonzero]) /
             (norm_u[nonzero] * norm_v[nonzero])
         ).ravel()
-        ang[nonzero] = np.arccos(np.clip(inner, -1, 1))
+        ang[nonzero] = np.arccos(np.clip(inner[nonzero], -1, 1))
         return ang
 
-    def find_t_in_0_1(u, v):
+    def find_t_param(u, v):
         r"""Helper to find a t value for the iteration.
 
         This function solves the quadratic equation
@@ -445,10 +446,7 @@ def closest_points_ellipsoids(ell1_center, ell1_vectors, ell1_halfaxes,
         .. math::
             \|v\|^2\, t^2 + 2 u^{\mathrm{T}}v\, t + (\|u\|^2 - 1) = 0
 
-        for :math:`t \in [0, 1]`. Due to the way the vectors :math:`u`
-        and :math:`v` are defined, such a solution always exists.
-
-        The two possible solutions are
+        for :math:`t`. The two possible solutions are
 
         .. math::
             t_\pm = \frac{
@@ -457,14 +455,21 @@ def closest_points_ellipsoids(ell1_center, ell1_vectors, ell1_halfaxes,
                 }{
                     \|v\|^2
                 }.
+
+        We prefer a solution in :math:`[0, 1]` if it exists, since it's
+        the parameter where the segment between two ellipsoid centers
+        intersect the ellipsoid boundary.
         """
         u_norm2 = np.linalg.norm(u, axis=1) ** 2
         v_norm2 = np.linalg.norm(v, axis=1) ** 2
-        u_dot_v = np.tensordot(u, v, axes=[1, 1]).ravel()
-        sqrt = np.sqrt(u_dot_v ** 2 - v_norm2 * (u_norm2 - 1))
+        u_dot_v = many_dot(u, v)
+        sqrt = np.sqrt(np.maximum(u_dot_v ** 2 - v_norm2 * (u_norm2 - 1), 0))
         tplus = (sqrt - u_dot_v) / v_norm2
         tminus = (-sqrt - u_dot_v) / v_norm2
-        # Make sure that not finding a root in [0, 1] breaks subsequent code
+
+        # One solution is always > 1, the other one is either in [0, 1]
+        # or negative. We choose the one in [0, 1] if possible, otherwise
+        # `NaN`
         t = np.full_like(tplus, fill_value=float('nan'))
         plus = (tplus >= 0) & (tplus <= 1)
         minus = (tminus >= 0) & (tminus <= 1)
@@ -475,26 +480,34 @@ def closest_points_ellipsoids(ell1_center, ell1_vectors, ell1_halfaxes,
     # --- Perform the iteration --- #
 
     isect = np.zeros(c2.shape[0], dtype=bool)  # which ones intersect
-    converged = np.zeros(c2.shape[0], dtype=bool)  # done iterating
     cent1, cent2 = c1, c2  # for backup
+    closest_ell1 = z1 = np.empty_like(c1)
+    closest_ell2 = z2 = np.empty_like(c2)
 
-    for _ in range(max_iter):
+    for i in range(max_iter):
         # Compute the parameter values for which the segment connecting the
         # current centers intersects the ellipsoids
         u1 = many_matvec(U1T, c1 - cent1) / e1
         v1 = many_matvec(U1T, c2 - c1) / e1
-        t1 = find_t_in_0_1(u1, v1)
+        t1 = find_t_param(u1, v1)
         u2 = many_matvec(U2T, c1 - cent2) / e2
         v2 = many_matvec(U2T, c2 - c1) / e2
-        t2 = find_t_in_0_1(u2, v2)
+        t2 = find_t_param(u2, v2)
 
-        isect[t2 <= t1] = True
+        # Where one of the segments from `c1` to `c2` does not intersect both
+        # ellipsoid boundaries, we have intersection
+        invalid = np.isnan(t1) | np.isnan(t2)
+        isect[invalid] = True
+        # The same if the "foreign" boundary comes before the own boundary
+        isect[~invalid][t2[~invalid] <= t1[~invalid]] = True
+        # Choose point from ellipsoid 1 for intersecting ones
+        closest_ell2[isect] = closest_ell1[isect]
         if np.all(isect):
             break
 
-        # New intersection points with the ellipsoid boundaries
-        z1 = c1 + t1 * (c2 - c1)
-        z2 = c1 + t2 * (c2 - c1)
+        # Compute new boundary points
+        z1[~isect] = (c1 + t1[:, None] * (c2 - c1))[~isect]
+        z2[~isect] = (c1 + t2[:, None] * (c2 - c1))[~isect]
 
         # Compute angles with surface normals to test convergence
         normal1 = many_matvec(A1, z1) + b1
@@ -502,34 +515,36 @@ def closest_points_ellipsoids(ell1_center, ell1_vectors, ell1_halfaxes,
         theta1 = angle(z2 - z1, normal1)
         theta2 = angle(z1 - z2, normal2)
 
-        converged = (theta1 <= eps) & (theta2 <= eps)
-        if np.all(converged):
+        converged1 = (theta1 <= eps)
+        converged2 = (theta2 <= eps)
+        if np.all(converged1 & converged2):
             break
 
         # Compute new centers
-        c1 = z1 - gamma1 * normal1
-        c2 = z2 - gamma2 * normal2
+        c1[~isect & ~converged1] = (
+            z1 - gamma1[:, None] * normal1
+        )[~isect & ~converged1]
+        c2[~isect & ~converged2] = (
+            z2 - gamma2[:, None] * normal2
+        )[~isect & ~converged2]
 
-    # Choose point from ellipsoid 1 for intersecting ones
-    z2[isect] = z1[isect]
+    # Set non-intersecting parts of the final vectors
+    closest_ell1[~isect] = z1[~isect]
+    closest_ell2[~isect] = z2[~isect]
 
     if squeeze:
-        z1 = z1.squeeze(axis=0)
-        z2 = z2.squeeze(axis=0)
+        closest_ell1 = closest_ell1.squeeze(axis=0)
+        closest_ell2 = closest_ell2.squeeze(axis=0)
 
-    return z1, z2
+    return closest_ell1, closest_ell2
 
 
-def closest_points_ellipsoids_bbox(ell1_center, ell1_vectors, ell1_halfaxes,
-                                   ell2_center, ell2_vectors, ell2_halfaxes):
-    """Return the closest points of ellipsoids using a bounding box for one.
+def closest_point_ellipsoids_bbox(ell1_center, ell1_vectors, ell1_halfaxes,
+                                  ell2_center, ell2_vectors, ell2_halfaxes):
+    r"""Return the closest point in an ellipsoid's bbox to another ellipsoid.
 
-    This function is a "quick and dirty" variant of
-    `closest_points_ellipsoids` that computes the distance of the first
-    elliposoid to the bounding box of the second ellipsoid, making use of
-    `closes_points_ellipsoid_plane`. It can be used either as a means to
-    compute good start values for `closest_points_ellipsoids`, or even as
-    replacement in cases where convergence can be expected to be slow.
+    This function is mainly intended to yield good start values for
+    `closest_points_ellipsoids`.
 
     Parameters
     ----------
@@ -558,10 +573,7 @@ def closest_points_ellipsoids_bbox(ell1_center, ell1_vectors, ell1_halfaxes,
 
     Returns
     -------
-    ell1_closest_point : `numpy.ndarray`, shape ``(d,)`` or ``(N, d)``
-        Point in the first ellipsoid that is closest to the second
-        ellipsoid's bounding box.
-    ell2_closest_point : `numpy.ndarray`, shape ``(d,)`` or ``(N, d)``
+    ell2_bbox_closest_point : `numpy.ndarray`, shape ``(d,)`` or ``(N, d)``
         Point in the second ellipsoid's bounding box that is closest to the
         first ellipsoid.
 
@@ -584,7 +596,7 @@ def closest_points_ellipsoids_bbox(ell1_center, ell1_vectors, ell1_halfaxes,
     .. math::
         H_j^\pm &= \big\{x\ \big|
             \ \big( x - p_j^\pm \big)^{\mathrm{T}}n_j = 0\}, \\
-        n_j &= u_j,\ p_j^\pm = c \pm e_j u_j.
+        n_j &= u_j,\quad p_j^\pm = c \pm e_j u_j.
 
     These hyperplanes are the tangent planes at the intersections of the
     ellipsoid boundary with the symmetry axes.
@@ -594,4 +606,102 @@ def closest_points_ellipsoids_bbox(ell1_center, ell1_vectors, ell1_halfaxes,
     .. math::
         (x - p_j^\pm)^{\mathrm{T}} u_i \in [-e_i, e_i] \quad
         \text{for all } i \neq j.
+
+    Thus, the procedure to determine the closest points between an ellipsoid
+    :math:`E_1` and the bounding box of a second ellipsoid :math:`E`
+    (with vector notation as above for :math:`E`) are as follows:
+
+    For each of the :math:`2d` hyperplanes :math:`H_j^\pm`:
+
+    - Compute the closest points :math:`z_j^\pm, y` between :math:`E_1` and
+      :math:`H_j^\pm` using `closest_points_ellipsoid_plane`.
+    - Transform :math:`y` into local coordinates of :math:`H_j^\pm` via
+      :math:`x = U^{\mathrm{T}}(y - p_j^\pm)`.
+    - Clip :math:`x` to :math:`[-e, e]`.
+    - Set :math:`y_j^\pm = c + Ux`.
+
+    The pair of closest points is the :math:`(z_j^\pm, y_j^\pm)` pair
+    with minimum distance.
     """
+    c1 = np.asarray(ell1_center, dtype=float)
+    c2 = np.asarray(ell2_center, dtype=float)
+    U2T = np.asarray(ell2_vectors, dtype=float)
+    e2 = np.asarray(ell2_halfaxes, dtype=float)
+
+    # --- Check inputs --- #
+
+    squeeze = False
+    if c1.ndim != 1:
+        raise ValueError('`ell1_center` must be 1-dimensional, but '
+                         '`ell1_center.ndim == {}`'.format(c1.ndim))
+    d = c1.size
+
+    if c2.ndim == 2 and c2.shape[1] == d:
+        N = c2.shape[0]
+        if U2T.shape != (N, d, d):
+            raise ValueError('`ell2_vectors` must have shape `(N, d, d)`, but '
+                             '`(N, d, d) == {}` and `ell2_vectors.shape == {}`'
+                             ''.format((N, d, d), U2T.shape))
+        if e2.shape != (N, d):
+            raise ValueError('`ell2_halfaxes` must have shape `(N, d)`, but '
+                             '`(N, d) == {}` and `ell2_halfaxes.shape == {}`'
+                             ''.format((N, d), e2.shape))
+    elif c2.shape == (d,):
+        if U2T.shape != (d, d):
+            raise ValueError('`ell2_vectors` must have shape `(d, d)`, but '
+                             '`(d, d) == {}` and `ell2_vectors.shape == {}`'
+                             ''.format((d, d), U2T.shape))
+        if e2.shape != (d,):
+            raise ValueError('`ell2_halfaxes` must have shape `(d,)`, but '
+                             '`d == {}` and `ell2_halfaxes.shape == {}`'
+                             ''.format(d, c2.shape))
+        c2 = c2[None, :]
+        U2T = U2T[None, :, :]
+        e2 = e2[None, :]
+        squeeze = True
+    else:
+        raise ValueError('`ell2_center` must have shape `(d,)` or `(N, d)`, '
+                         'but `d == {}` and `ell2_center.shape == {}`'
+                         ''.format(d, c2.shape))
+
+    if not np.all(e2 > 0):
+        raise ValueError('`ell2_halfaxes` must be all positive, got '
+                         '{}'.format(e2))
+
+    # --- Re-normalize and transpose U2 --- #
+
+    U2T = U2T / np.linalg.norm(U2T, axis=2, keepdims=True)
+    U2 = np.transpose(U2T, (0, 2, 1))
+
+    # --- Find the closest points --- #
+
+    zmin = np.empty_like(c2)
+    ymin = np.empty_like(c2)
+    dmin = np.full(c2.shape[0], fill_value=float('inf'))
+    for j in range(d):
+        for sign in (-1, 1):
+            u = U2[:, :, j]
+            e = e2[:, j]
+
+            # Point in plane
+            p = c2 + sign * e[:, None] * u
+
+            # Get closest points and clip coordinates of `y`
+            z, y = closest_points_ellipsoid_plane(
+                ell1_center, ell1_vectors, ell1_halfaxes, p, u)
+            x = many_matvec(U2T, y - p)
+            x = np.clip(x, -e2, e2)
+            y = p + many_matvec(U2, x)
+
+            # Take `y` and `z` if distance is smaller
+            dist = np.linalg.norm(z - y, axis=1)
+            update = (dist < dmin)
+            dmin[update] = dist[update]
+            zmin[update, :] = z[update, :]
+            ymin[update, :] = y[update, :]
+
+    if squeeze:
+        zmin = zmin.squeeze(axis=0)
+        ymin = ymin.squeeze(axis=0)
+
+    return zmin, ymin
