@@ -15,7 +15,7 @@ from odl.util.normalize import normalized_scalar_param_list, safe_int_conv
 
 
 __all__ = ('apply_on_boundary', 'fast_1d_tensor_mult', 'resize_array',
-           'zscore', 'many_matvec', 'many_matmul')
+           'zscore', 'many_dot', 'many_matvec', 'many_matmul')
 
 
 _SUPPORTED_RESIZE_PAD_MODES = ('constant', 'symmetric', 'periodic',
@@ -834,6 +834,71 @@ def zscore(arr):
     if std != 0:
         arr /= std
     return arr
+
+
+def many_dot(vectors1, vectors2):
+    """Perform many dot products at once.
+
+    This specialized function computes the dot product along the last axis
+    of an two arrays of vectors.
+
+    Parameters
+    ----------
+    vectors1 : array-like
+        Array of shape ``(n_1, ..., n_k, N)``, i.e., each vector has
+        shape ``(N,)``, and the "array shape" is ``n = (n_1, ..., n_k)``.
+    vectors2 : array-like
+        Array of shape ``(m_1, ..., m_k, N)``, i.e., each vector has
+        shape ``(N,)``, and the "array shape" is ``m = (m_1, ..., m_k)``.
+        The array shapes ``m`` and ``n`` must be broadcastable against
+        each other, i.e., each pair of entries must either be equal or one
+        of them must be equal to one.
+
+    Returns
+    -------
+    dot_products : `numpy.ndarray`
+        Array of shape ``broadcast(n, m)`` consisting of the many dot
+        products.
+
+    Examples
+    --------
+    Dot product of 2 arrays of vectors, each of length 3:
+
+    >>> vectors1 = np.array([[1, 1, 1],
+    ...                      [0, 1, 0]])
+    >>> vectors1.shape
+    (2, 3)
+    >>> vectors2 = np.array([[1, 2, 3],
+    ...                      [0, -1, 0]])
+    >>> vectors2.shape
+    (2, 3)
+    >>> result = odl.util.many_dot(vectors1, vectors2)
+    >>> result
+    array([ 6, -1])
+    >>> result.shape
+    (2,)
+    """
+    vectors1 = np.asarray(vectors1)
+    vectors2 = np.asarray(vectors2)
+    if not all(n1 == n2 or n1 == 1 or n2 == 1
+               for n1, n2 in zip(vectors1.shape[:-1], vectors2.shape[:-1])):
+        raise ValueError('"array shapes" of `vectors1` ({}) and `vectors2` '
+                         '({}) cannot be broadcast against each other'
+                         ''.format(vectors1.shape[:-1], vectors2.shape[:-1]))
+    if vectors1.shape[-1] != vectors2.shape[-1]:
+        raise ValueError('last axes of `vectors1` and `vectors2` must be '
+                         'equal, but {} != {}'
+                         ''.format(vectors1.shape[-1], vectors2.shape[-1]))
+
+    # Label axes:
+    # vectors1 [0, ..., nd-1, nd]
+    # vectors2 [0, ..., nd-1, nd]
+    # output [0, ..., nd-1]
+    nd = vectors1.ndim - 1
+    vector1_axes = vector2_axes = list(range(nd)) + [nd]
+    out_axes = list(range(nd))
+    return np.einsum(vectors1, vector1_axes, vectors2, vector2_axes,
+                     out_axes)
 
 
 def many_matvec(matrices, vectors):
