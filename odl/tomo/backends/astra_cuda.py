@@ -117,8 +117,16 @@ class AstraCudaProjectorImpl(object):
                     self.proj_space.shape)
 
             # Fix scaling to weight by pixel size
-            if (isinstance(self.geometry, Parallel2dGeometry) and
-                    parse_version(ASTRA_VERSION) < parse_version('1.9.9.dev')):
+            if (
+                parse_version(ASTRA_VERSION) < parse_version('1.9.9.dev')
+                and (
+                    isinstance(self.geometry, Parallel2dGeometry)
+                    or (
+                        isinstance(self.geometry, ParallelVecGeometry)
+                        and self.geometry.ndim == 2
+                    )
+                )
+            ):
                 # parallel2d scales with pixel stride
                 out *= 1 / float(self.geometry.det_partition.cell_volume)
 
@@ -368,7 +376,7 @@ def astra_cuda_bp_scaling_factor(proj_space, reco_space, geometry):
         num_angles = geometry.motion_partition.shape
         # TODO: this gives the wrong factor for Parallel3dEulerGeometry with
         # 2 angles
-        scaling_factor = (angle_extent / num_angles).prod()
+        angle_weighting = (angle_extent / num_angles).prod()
 
     # Correct in case of non-weighted spaces
     proj_extent = float(proj_space.partition.extent.prod())
@@ -514,8 +522,8 @@ def astra_cuda_bp_scaling_factor(proj_space, reco_space, geometry):
             det_px_area = geometry.det_partition.cell_volume
             scaling_factor *= (src_radius ** 2 * det_px_area ** 2)
         elif isinstance(geometry, VecGeometry):
-            scaling_factor = (geometry.det_partition.cell_volume /
-                              reco_space.cell_volume)
+            # TODO: correct in 1.8? With differently weighted spaces as well?
+            scaling_factor = reco_space.cell_volume
         elif isinstance(geometry, ParallelVecGeometry):
             if geometry.ndim == 2:
                 # Scales with 1 / cell_volume
