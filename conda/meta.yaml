@@ -1,13 +1,10 @@
 package:
     name: odl
-    version: "0.6.1"
+    version: "0.7.0"
 
 source:
     git_url: https://github.com/odlgroup/odl
-    git_rev: master  # for testing, put any branch here
-    # git_rev: v0.6.0  # release
-    # git_rev: a542c12d23da7fa5b92b360a51ea14e4804c58f6  # intermediate bugfix revision
-    # path: ..  # for builds from local source (no download)
+    git_rev: v0.7.0
 
 build:
     number: 0
@@ -17,18 +14,20 @@ requirements:
     build:
         - python
         - setuptools
+
+    host:
         - nomkl # [not win]
         - future >=0.14
         - numpy >=1.10
         - scipy >=0.14
+        - pytest >=3.0.3,<=3.7
+
     run:
         - python
         - future >=0.14
-        - nomkl # [not win]
         - numpy >=1.10
         - scipy >=0.14
         - matplotlib
-        - pytest >=3.0.3
 
 test:
     imports:
