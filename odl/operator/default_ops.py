@@ -16,6 +16,7 @@ import numpy as np
 
 from odl.operator.operator import Operator
 from odl.set import LinearSpace, Field, RealNumbers, ComplexNumbers
+from odl.set.sets import FieldElement
 from odl.set.space import LinearSpaceElement
 from odl.space import ProductSpace
 
@@ -819,7 +820,8 @@ class ConstantOperator(Operator):
         """
 
         if ((domain is None or range is None) and
-                not isinstance(constant, LinearSpaceElement)):
+            not isinstance(constant, (LinearSpaceElement, FieldElement))
+        ):
             raise TypeError('If either domain or range is unspecified '
                             '`constant` must be LinearSpaceVector, got '
                             '{!r}.'.format(constant))

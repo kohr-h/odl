@@ -13,7 +13,7 @@ from itertools import product
 from numbers import Integral
 import numpy as np
 
-from odl.set import LinearSpace
+from odl.set import LinearSpace, Field
 from odl.set.space import LinearSpaceElement
 from odl.space.weighting import (
     Weighting, ArrayWeighting, ConstWeighting,
@@ -218,7 +218,7 @@ class ProductSpace(LinearSpace):
             spaces = [spaces[0]] * spaces[1]
 
         # Validate the space arguments
-        if not all(isinstance(spc, LinearSpace) for spc in spaces):
+        if not all(isinstance(spc, (LinearSpace, Field)) for spc in spaces):
             raise TypeError(
                 'all arguments must be `LinearSpace` instances, or the '
                 'first argument must be `LinearSpace` and the second '

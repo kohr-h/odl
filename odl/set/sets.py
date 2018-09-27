@@ -299,6 +299,26 @@ class Field(Set):
     further information.
     """
 
+    @classmethod
+    def from_pytype(cls, pytype):
+        """Construct a `Field` instance from a Python type.
+
+        Type inference is done using `numpy.issubsctype` with the
+        following mapping (tested in this order):
+
+        - ``issubsctype(pytype, numpy.integer)`` -> `Integers`
+        - ``issubsctype(pytype, numpy.floating)`` -> `RealNumbers`
+        - ``issubsctype(pytype, numpy.complexfloating)`` -> `ComplexNumbers`
+        """
+        if np.issubsctype(pytype, np.integer):
+            return Integers()
+        elif np.issubsctype(pytype, np.floating):
+            return RealNumbers()
+        elif np.issubsctype(pytype, np.complexfloating):
+            return ComplexNumbers()
+        else:
+            raise ValueError('type {} not recognized'.format(pytype))
+
     @property
     def field(self):
         """Field of scalars for a field is itself.
@@ -309,6 +329,10 @@ class Field(Set):
         `LinearSpace`'s.
         """
         return self
+
+
+class FieldElement(object):
+    pass
 
 
 class ComplexNumbers(Field):
@@ -385,7 +409,7 @@ class RealNumbers(Field):
 
     def __contains__(self, other):
         """Return ``other in self``."""
-        return isinstance(other, Real)
+        return isinstance(other, (Real, RealNumber))
 
     def contains_set(self, other):
         """Return ``True`` if ``other`` is a subset of the real numbers.
@@ -429,15 +453,112 @@ class RealNumbers(Field):
     def element(self, inp=None):
         """Return a real number from ``inp`` or from scratch."""
         if inp is not None:
-            return float(inp)
+            return RealNumber(self, float(inp))
         else:
-            return 0.0
+            return self.zero()
+
+    def zero(self):
+        return RealNumber(self, 0.0)
+
+    def one(self):
+        return RealNumber(self, 1.0)
+
+    def norm(self, x):
+        return abs(x)
+
+    def _lincomb(self, a, x1, b, x2, out):
+        val = a * x1.data + b * x2.data
+        out[:] = val
+
+    lincomb = _lincomb
 
     @property
     def examples(self):
         """Return examples of real numbers."""
         numbers = [-1.0, 0.5, 0.0, 0.01, 1.0]
         return [(str(x), x) for x in numbers]
+
+
+class RealNumber(FieldElement):
+    def __init__(self, space, data):
+        assert isinstance(space, RealNumbers)
+        self.space = space
+        self.data = float(data)
+
+    @property
+    def real(self):
+        return self
+
+    @property
+    def imag(self):
+        return self.space.zero()
+
+    def norm(self):
+        return self.space.norm(self)
+
+    def __getitem__(self, indices):
+        if (isinstance(indices, slice) and indices == slice(None) or
+            indices is Ellipsis
+        ):
+            return self.data
+        else:
+            raise ValueError('bad indices {!r}'.format(indices))
+
+    def __setitem__(self, indices, values):
+        scalar = float(values)
+        if (isinstance(indices, slice) and indices == slice(None) or
+            indices is Ellipsis
+        ):
+            self.data = scalar
+        else:
+            raise ValueError('bad indices {!r}'.format(indices))
+
+    def __array__(self, dtype=None):
+        return np.array(self.data, dtype=dtype)
+
+    def __array_wrap__(self, array):
+        return self.space.element(array)
+
+    def __float__(self):
+        return self.data
+
+    def __abs__(self):
+        return abs(self.data)
+
+    # Arithmetic methods: unwrap scalar and bounce back
+
+    def __add__(self, other):
+        return self.data + other
+
+    def __radd__(self, other):
+        return other + self.data
+
+    def __sub__(self, other):
+        return self.data - other
+
+    def __rsub__(self, other):
+        return other - self.data
+
+    def __mul__(self, other):
+        return self.data * other
+
+    def __rmul__(self, other):
+        return other * self.data
+
+    def __truediv__(self, other):
+        return self.data / other
+
+    def __rtruediv__(self, other):
+        return other / self.data
+
+    __div__ = __truediv__
+    __rdiv__ = __rtruediv__
+
+    def __repr__(self):
+        return repr(self.data)
+
+    def __str__(self):
+        return str(self.data)
 
 
 class Integers(Set):

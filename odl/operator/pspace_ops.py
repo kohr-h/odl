@@ -12,6 +12,7 @@ from __future__ import print_function, division, absolute_import
 from numbers import Integral
 import numpy as np
 
+from odl.set import Field
 from odl.operator.operator import Operator
 from odl.operator.default_ops import ZeroOperator
 from odl.space import ProductSpace
@@ -299,7 +300,11 @@ class ProductSpaceOperator(Operator):
             has_evaluated_row = np.zeros(len(self.range), dtype=bool)
             for i, j, op in zip(self.ops.row, self.ops.col, self.ops.data):
                 if not has_evaluated_row[i]:
-                    op(x[j], out=out[i])
+                    if isinstance(op.range, Field):
+                        # Can't use `out`
+                        out[i] = op(x[j])
+                    else:
+                        op(x[j], out=out[i])
                 else:
                     # TODO: optimize
                     out[i] += op(x[j])

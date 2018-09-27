@@ -1241,12 +1241,12 @@ class OperatorVectorSum(Operator):
         rn(3).element([ 5.,  7.,  9.])
         """
         if not isinstance(operator, Operator):
-            raise TypeError('`op` {!r} not a Operator instance'
+            raise TypeError('`op` must be an `Operator`, got {!r}'
                             ''.format(operator))
 
-        if not isinstance(operator.range, LinearSpace):
-            raise TypeError('`op.range` {!r} not a LinearSpace instance'
-                            ''.format(operator.range))
+        if not isinstance(operator.range, (LinearSpace, Field)):
+            raise TypeError('`op.range` must be a `LinearSpace` or `Field`, '
+                            'got {!r}'.format(operator.range))
 
         super(OperatorVectorSum, self).__init__(
             operator.domain, operator.range)
