@@ -445,8 +445,11 @@ class FileReaderRawBinaryWithHeader(object):
                 # \x00 characters with whitespace so the final length is
                 # correct
                 packed_value = packed_value.replace(b'\x00', b' ')
-                value = np.fromiter(packed_value.decode().ljust(size_bytes),
-                                    dtype=dtype)
+                try:
+                    decoded_value = packed_value.decode().ljust(size_bytes)
+                except UnicodeDecodeError:
+                    decoded_value = b' ' * size_bytes
+                value = np.fromiter(decoded_value, dtype=dtype)
                 entry['value'] = value.reshape(shape)
             else:
                 value = np.array(struct.unpack_from(fmt, packed_value),
