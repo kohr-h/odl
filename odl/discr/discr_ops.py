@@ -16,8 +16,6 @@ from odl.discr.lp_discr import DiscreteLp, uniform_partition
 from odl.discr.discr_utils import (
     point_collocation, per_axis_interpolator, _SUPPORTED_INTERP_SCHEMES)
 from odl.operator import Operator
-from odl.set import IntervalProd
-from odl.space.fspace import FunctionSpace
 from odl.space.space_utils import tensor_space
 from odl.util import (
     is_string, normalized_scalar_param_list, resize_array, safe_int_conv,
@@ -555,8 +553,6 @@ def _resize_discr(discr, newshp, offset, discr_kwargs):
         else:
             new_maxpt.append(grid_max[axis] + (num_r + 0.5) * cell_size[axis])
 
-    fspace = FunctionSpace(IntervalProd(new_minpt, new_maxpt),
-                           out_dtype=dtype)
     tspace = tensor_space(newshp, dtype=dtype, impl=impl, exponent=exponent,
                           weighting=weighting)
 
@@ -571,7 +567,7 @@ def _resize_discr(discr, newshp, offset, discr_kwargs):
         else:
             part = part.append(discr.partition.byaxis[i])
 
-    return DiscreteLp(fspace, part, tspace, interp=interp)
+    return DiscreteLp(part, tspace, interp=interp)
 
 
 if __name__ == '__main__':
