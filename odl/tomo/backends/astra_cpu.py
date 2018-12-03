@@ -15,7 +15,7 @@ try:
 except ImportError:
     pass
 
-from odl.discr import DiscreteLp, DiscreteLpElement
+from odl.discr import DiscreteLp
 from odl.tomo.backends.astra_setup import (
     astra_projection_geometry, astra_volume_geometry, astra_data,
     astra_projector, astra_algorithm)
@@ -50,7 +50,7 @@ def astra_cpu_forward_projector(vol_data, geometry, proj_space, out=None):
         Projection data resulting from the application of the projector.
         If ``out`` was provided, the returned object is a reference to it.
     """
-    if not isinstance(vol_data, DiscreteLpElement):
+    if not isinstance(vol_data, np.ndarray):
         raise TypeError('volume data {!r} is not a `DiscreteLpElement` '
                         'instance.'.format(vol_data))
     if vol_data.space.impl != 'numpy':
@@ -137,7 +137,7 @@ def astra_cpu_back_projector(proj_data, geometry, reco_space, out=None):
         projector. If ``out`` was provided, the returned object is a
         reference to it.
     """
-    if not isinstance(proj_data, DiscreteLpElement):
+    if not isinstance(proj_data, np.ndarray):
         raise TypeError('projection data {!r} is not a DiscreteLpElement '
                         'instance'.format(proj_data))
     if proj_data.space.impl != 'numpy':

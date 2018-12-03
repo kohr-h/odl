@@ -278,16 +278,18 @@ def ufunc_class_factory(name, nargin, nargout, docstring):
         vec = space.element([-1, 1, 2])
         arg = '{}'.format(vec)
         with np.errstate(all='ignore'):
-            result = getattr(vec.ufuncs, name)()
+            result = getattr(np, name)(vec)
     else:
         vec = space.element([-1, 1, 2])
         vec2 = space.element([3, 4, 5])
         arg = '[{}, {}]'.format(vec, vec2)
         with np.errstate(all='ignore'):
-            result = getattr(vec.ufuncs, name)(vec2)
+            result = getattr(np, name)(vec, vec2)
 
     if nargout == 2:
-        result_space = ProductSpace(vec.space, 2)
+        res1_spc = space.astype(result[0].dtype)
+        res2_spc = space.astype(result[1].dtype)
+        result_space = ProductSpace(res1_spc, res2_spc)
         result = repr(result_space.element(result))
 
     examples_docstring = RAW_EXAMPLES_DOCSTRING.format(space=space, name=name,

@@ -356,21 +356,20 @@ class NumpyTensorSpace(TensorSpace):
         >>> empty = space.element()
         >>> empty.shape
         (3,)
-        >>> empty.space
-        rn(3)
         >>> x = space.element([1, 2, 3])
         >>> x
-        rn(3).element([ 1.,  2.,  3.])
+        array([ 1.,  2.,  3.])
 
         If the input already is a `numpy.ndarray` of correct `dtype`, it
-        will merely be wrapped, i.e., both array and space element access
-        the same memory, such that mutations will affect both:
+        will be returned as-is:
 
         >>> arr = np.array([1, 2, 3], dtype=float)
         >>> elem = odl.rn(3).element(arr)
+        >>> elem is arr  # TODO: maybe we don't want this
+        True
         >>> elem[0] = 0
         >>> elem
-        rn(3).element([ 0.,  2.,  3.])
+        array([ 0.,  2.,  3.])
         >>> arr
         array([ 0.,  2.,  3.])
 
@@ -383,10 +382,8 @@ class NumpyTensorSpace(TensorSpace):
         >>> ptr = arr.ctypes.data
         >>> y = int_space.element(data_ptr=ptr, order='F')
         >>> y
-        tensor_space((2, 3), dtype=int).element(
-            [[1, 2, 3],
-             [4, 5, 6]]
-        )
+        array([[1, 2, 3],
+               [4, 5, 6]])
         >>> y[0, 1] = -1
         >>> arr
         array([[ 1, -1,  3],
@@ -422,9 +419,12 @@ class NumpyTensorSpace(TensorSpace):
                 return inp
 
             # Try to not copy but require dtype and order if given
-            # (`order=None` is ok as np.array argument)
+            # (`order=None` is okay as np.array argument)
             arr = np.array(inp, copy=False, dtype=self.dtype, ndmin=self.ndim,
                            order=order)
+
+            # TODO(kohr-h): remove this?
+            #
             # Make sure the result is writeable, if not make copy.
             # This happens for e.g. results of `np.broadcast_to()`.
             if not arr.flags.writeable:
@@ -442,10 +442,8 @@ class NumpyTensorSpace(TensorSpace):
 
         Examples
         --------
-        >>> space = odl.rn(3)
-        >>> x = space.zero()
-        >>> x
-        rn(3).element([ 0.,  0.,  0.])
+        >>> odl.rn(3).zero()
+        array([ 0.,  0.,  0.])
         """
         return np.zeros(self.shape, dtype=self.dtype, order=self.default_order)
 
@@ -454,10 +452,8 @@ class NumpyTensorSpace(TensorSpace):
 
         Examples
         --------
-        >>> space = odl.rn(3)
-        >>> x = space.one()
-        >>> x
-        rn(3).element([ 1.,  1.,  1.])
+        >>> odl.rn(3).one()
+        array([ 1.,  1.,  1.])
         """
         return np.ones(self.shape, dtype=self.dtype, order=self.default_order)
 
@@ -512,16 +508,6 @@ class NumpyTensorSpace(TensorSpace):
         True
         >>> x in spc2
         True
-
-        Of course, random garbage is not in the space:
-
-        >>> spc = odl.tensor_space((2, 3), dtype='uint64')
-        >>> None in spc
-        False
-        >>> object in spc
-        False
-        >>> False in spc
-        False
         """
         if not isinstance(other, np.ndarray):
             return False
@@ -603,7 +589,7 @@ class NumpyTensorSpace(TensorSpace):
         >>> out = space.element()
         >>> result = space.lincomb(1, x, 2, y, out)
         >>> result
-        rn(3).element([ 0.,  1.,  3.])
+        array([ 0.,  1.,  3.])
         >>> result is out
         True
         """
@@ -723,64 +709,6 @@ class NumpyTensorSpace(TensorSpace):
         """
         return self.weighting.inner(x1, x2)
 
-    def _multiply(self, x1, x2, out):
-        """Compute the entry-wise product ``out = x1 * x2``.
-
-        This function is part of the subclassing API. Do not
-        call it directly.
-
-        Parameters
-        ----------
-        x1, x2 : `NumpyTensor`
-            Factors in the product.
-        out : `NumpyTensor`
-            Element to which the result is written.
-
-        Examples
-        --------
-        >>> space = odl.rn(3)
-        >>> x = space.element([1, 0, 3])
-        >>> y = space.element([-1, 1, -1])
-        >>> space.multiply(x, y)
-        rn(3).element([-1.,  0., -3.])
-        >>> out = space.element()
-        >>> result = space.multiply(x, y, out=out)
-        >>> result
-        rn(3).element([-1.,  0., -3.])
-        >>> result is out
-        True
-        """
-        np.multiply(x1, x2, out=out)
-
-    def _divide(self, x1, x2, out):
-        """Compute the entry-wise quotient ``x1 / x2``.
-
-        This function is part of the subclassing API. Do not
-        call it directly.
-
-        Parameters
-        ----------
-        x1, x2 : `NumpyTensor`
-            Dividend and divisor in the quotient.
-        out : `NumpyTensor`
-            Element to which the result is written.
-
-        Examples
-        --------
-        >>> space = odl.rn(3)
-        >>> x = space.element([2, 0, 4])
-        >>> y = space.element([1, 1, 2])
-        >>> space.divide(x, y)
-        rn(3).element([ 2.,  0.,  2.])
-        >>> out = space.element()
-        >>> result = space.divide(x, y, out=out)
-        >>> result
-        rn(3).element([ 2.,  0.,  2.])
-        >>> result is out
-        True
-        """
-        np.divide(x1, x2, out=out)
-
     def __eq__(self, other):
         """Return ``self == other``.
 
@@ -872,6 +800,8 @@ class NumpyTensorSpace(TensorSpace):
                 return repr(space) + '.byaxis'
 
         return NpyTensorSpacebyaxis()
+
+    # TODO(kohr-h): get `examples` back
 
     def __repr__(self):
         """Return ``repr(self)``."""
@@ -1389,16 +1319,7 @@ class NumpyTensorSpaceConstWeighting(ConstWeighting):
         inner : float or complex
             The inner product of the two provided tensors.
         """
-        if self.exponent != 2.0:
-            raise NotImplementedError('no inner product defined for '
-                                      'exponent != 2 (got {})'
-                                      ''.format(self.exponent))
-        else:
-            inner = self.const * _inner_default(x1, x2)
-            if x1.space.field is None:
-                return inner
-            else:
-                return x1.space.field.element(inner)
+        return self.const * _inner_default(x1, x2)
 
     def norm(self, x):
         """Return the weighted norm of ``x``.

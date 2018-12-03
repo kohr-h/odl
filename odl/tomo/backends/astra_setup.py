@@ -34,7 +34,7 @@ except ImportError:
 else:
     ASTRA_AVAILABLE = True
 
-from odl.discr import DiscreteLp, DiscreteLpElement
+from odl.discr import DiscreteLp
 from odl.tomo.geometry import (
     Geometry, DivergentBeamGeometry, ParallelBeamGeometry,
     Flat1dDetector, Flat2dDetector)
@@ -529,7 +529,7 @@ def astra_data(astra_geom, datatype, data=None, ndim=2, allow_copy=False):
         Handle for the new ASTRA internal data object.
     """
     if data is not None:
-        if isinstance(data, (DiscreteLpElement, np.ndarray)):
+        if isinstance(data, np.ndarray):
             ndim = data.ndim
         else:
             raise TypeError('`data` {!r} is neither DiscreteLpElement '

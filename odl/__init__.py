@@ -44,31 +44,30 @@ np.set_printoptions(linewidth=71)
 
 # Propagate names defined in` __all__` of all "core" subpackages into
 # the top-level namespace
-if False:
-    from .set import *
-    __all__ += set.__all__
+from .set import *
+__all__ += set.__all__
 
-    from .space import *
-    __all__ += space.__all__
+from .space import *
+__all__ += space.__all__
 
-    from .operator import *
-    __all__ += operator.__all__
+from .operator import *
+__all__ += operator.__all__
 
-    from .discr import *
-    __all__ += discr.__all__
+from .discr import *
+__all__ += discr.__all__
 
-    # More "advanced" subpackages keep their namespaces separate from top-level,
-    # we only import the modules themselves
-    from . import contrib
-    from . import deform
-    from . import diagnostics
-    from . import phantom
-    from . import solvers
-    from . import tomo
-    from . import trafos
-    from . import ufunc_ops
-    from . import util
+# More "advanced" subpackages keep their namespaces separate from top-level,
+# we only import the modules themselves
+from . import contrib
+from . import deform
+from . import diagnostics
+from . import phantom
+from . import solvers
+from . import tomo
+from . import trafos
+from . import ufunc_ops
+from . import util
 
-    # Add `test` function to global namespace so users can run `odl.test()`
-    from .util import test
-    __all__ += ('test',)
+# Add `test` function to global namespace so users can run `odl.test()`
+from .util import test
+__all__ += ('test',)
