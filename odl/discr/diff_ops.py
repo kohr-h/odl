@@ -1,4 +1,4 @@
-﻿# Copyright 2014-2017 The ODL contributors
+﻿# Copyright 2014-2018 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -8,16 +8,22 @@
 
 """Operators defined for tensor fields."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
 from odl.discr.lp_discr import DiscreteLp
 from odl.operator.tensor_ops import PointwiseTensorFieldOperator
 from odl.space.pspace import ProductSpace
-from odl.util import writable_array, signature_string, indent
+from odl.util import indent, signature_string, writable_array
 
+__all__ = (
+    'PartialDerivative',
+    'Gradient',
+    'Divergence',
+    'Laplacian',
+)
 
-__all__ = ('PartialDerivative', 'Gradient', 'Divergence', 'Laplacian')
 
 _SUPPORTED_DIFF_METHODS = ('central', 'forward', 'backward')
 _SUPPORTED_PAD_MODES = ('constant',
@@ -96,15 +102,13 @@ class PartialDerivative(PointwiseTensorFieldOperator):
 
         Examples
         --------
-        >>> f = np.array([[ 0.,  1.,  2.,  3.,  4.],
+        >>> x = np.array([[ 0.,  1.,  2.,  3.,  4.],
         ...               [ 0.,  2.,  4.,  6.,  8.]])
-        >>> discr = odl.uniform_discr([0, 0], [2, 1], f.shape)
-        >>> par_deriv = PartialDerivative(discr, axis=0, pad_mode='order1')
-        >>> par_deriv(f)
-        uniform_discr([ 0.,  0.], [ 2.,  1.], (2, 5)).element(
-            [[ 0.,  1.,  2.,  3.,  4.],
-             [ 0.,  1.,  2.,  3.,  4.]]
-        )
+        >>> space = odl.uniform_discr([0, 0], [2, 1], x.shape)
+        >>> par_deriv = odl.PartialDerivative(space, axis=0, pad_mode='order1')
+        >>> par_deriv(x)
+        array([[ 0.,  1.,  2.,  3.,  4.],
+               [ 0.,  1.,  2.,  3.,  4.]])
         """
         if not isinstance(domain, DiscreteLp):
             raise TypeError('`domain` {!r} is not a DiscreteLp instance'
@@ -137,9 +141,8 @@ class PartialDerivative(PointwiseTensorFieldOperator):
         if out is None:
             out = self.range.element()
 
-        # TODO: this pipes CUDA arrays through NumPy. Write native operator.
         with writable_array(out) as out_arr:
-            finite_diff(x.asarray(), axis=self.axis, dx=self.dx,
+            finite_diff(x, axis=self.axis, dx=self.dx,
                         method=self.method, pad_mode=self.pad_mode,
                         pad_const=self.pad_const, out=out_arr)
         return out
@@ -253,13 +256,13 @@ class Gradient(PointwiseTensorFieldOperator):
 
         >>> dom = odl.uniform_discr([0, 0], [1, 1], (10, 20))
         >>> ran = odl.ProductSpace(dom, dom.ndim)  # 2-dimensional
-        >>> grad_op = Gradient(dom)
+        >>> grad_op = odl.Gradient(dom)
         >>> grad_op.range == ran
         True
-        >>> grad_op2 = Gradient(range=ran)
+        >>> grad_op2 = odl.Gradient(range=ran)
         >>> grad_op2.domain == dom
         True
-        >>> grad_op3 = Gradient(domain=dom, range=ran)
+        >>> grad_op3 = odl.Gradient(domain=dom, range=ran)
         >>> grad_op3.domain == dom
         True
         >>> grad_op3.range == ran
@@ -267,26 +270,20 @@ class Gradient(PointwiseTensorFieldOperator):
 
         Calling the operator:
 
-        >>> data = np.array([[ 0., 1., 2., 3., 4.],
-        ...                  [ 0., 2., 4., 6., 8.]])
-        >>> discr = odl.uniform_discr([0, 0], [2, 5], data.shape)
-        >>> f = discr.element(data)
-        >>> grad = Gradient(discr)
-        >>> grad_f = grad(f)
-        >>> grad_f[0]
-        uniform_discr([ 0.,  0.], [ 2.,  5.], (2, 5)).element(
-            [[ 0.,  1.,  2.,  3.,  4.],
-             [ 0., -2., -4., -6., -8.]]
-        )
-        >>> grad_f[1]
-        uniform_discr([ 0.,  0.], [ 2.,  5.], (2, 5)).element(
-            [[ 1.,  1.,  1.,  1., -4.],
-             [ 2.,  2.,  2.,  2., -8.]]
-        )
+        >>> x = np.array([[ 0., 1., 2., 3., 4.],
+        ...               [ 0., 2., 4., 6., 8.]])
+        >>> space = odl.uniform_discr([0, 0], [2, 5], x.shape)
+        >>> grad = odl.Gradient(space)
+        >>> grad(x)
+        array([[[ 0.,  1.,  2.,  3.,  4.],
+                [ 0., -2., -4., -6., -8.]],
+
+               [[ 1.,  1.,  1.,  1., -4.],
+                [ 2.,  2.,  2.,  2., -8.]]])
 
         Verify adjoint:
 
-        >>> g = grad.range.element((data, data ** 2))
+        >>> g = grad.range.element((x, x ** 2))
         >>> adj_g = grad.adjoint(g)
         >>> adj_g
         uniform_discr([ 0.,  0.], [ 2.,  5.], (2, 5)).element(
@@ -472,8 +469,8 @@ class Divergence(PointwiseTensorFieldOperator):
         Initialize a Divergence opeator:
 
         >>> ran = odl.uniform_discr([0, 0], [3, 5], (3, 5))
-        >>> dom = odl.ProductSpace(ran, ran.ndim)  # 2-dimensional
-        >>> div = Divergence(dom)
+        >>> dom = ran ** 2
+        >>> div = odl.Divergence(dom)
         >>> div.range == ran
         True
         >>> div2 = Divergence(range=ran)
@@ -487,21 +484,19 @@ class Divergence(PointwiseTensorFieldOperator):
 
         Call the operator:
 
-        >>> data = np.array([[0., 1., 2., 3., 4.],
-        ...                  [1., 2., 3., 4., 5.],
-        ...                  [2., 3., 4., 5., 6.]])
-        >>> f = div.domain.element([data, data])
-        >>> div_f = div(f)
-        >>> print(div_f)
-        [[  2.,   2.,   2.,   2.,  -3.],
-         [  2.,   2.,   2.,   2.,  -4.],
-         [ -1.,  -2.,  -3.,  -4., -12.]]
+        >>> a = np.array([[0., 1., 2., 3., 4.],
+        ...               [1., 2., 3., 4., 5.],
+        ...               [2., 3., 4., 5., 6.]])
+        >>> x = dom.element([a, a])
+        >>> div(x)
+        array([[  2.,   2.,   2.,   2.,  -3.],
+               [  2.,   2.,   2.,   2.,  -4.],
+               [ -1.,  -2.,  -3.,  -4., -12.]])
 
         Verify adjoint:
 
-        >>> g = div.range.element(data ** 2)
-        >>> adj_div_g = div.adjoint(g)
-        >>> g.inner(div_f) / f.inner(adj_div_g)
+        >>> y = ran.element(a ** 2)
+        >>> dom.inner(x, div.adjoint(y)) / ran.inner(div(x), y)
         1.0
         """
         if domain is None and range is None:
@@ -558,13 +553,20 @@ class Divergence(PointwiseTensorFieldOperator):
         ndim = self.range.ndim
         dx = self.range.cell_sides
 
-        tmp = np.empty(out.shape, out.dtype, order=out.space.default_order)
+        tmp = np.empty(
+            self.range.shape, self.range.dtype, order=self.range.default_order
+        )
         with writable_array(out) as out_arr:
             for axis in range(ndim):
-                finite_diff(x[axis], axis=axis, dx=dx[axis],
-                            method=self.method, pad_mode=self.pad_mode,
-                            pad_const=self.pad_const,
-                            out=tmp)
+                finite_diff(
+                    x[axis],
+                    axis=axis,
+                    dx=dx[axis],
+                    method=self.method,
+                    pad_mode=self.pad_mode,
+                    pad_const=self.pad_const,
+                    out=tmp
+                )
                 if axis == 0:
                     out_arr[:] = tmp
                 else:
@@ -881,6 +883,7 @@ def finite_diff(f, axis, dx=1.0, method='forward', out=None, **kwargs):
     >>> out is finite_diff(f, axis=0, out=out)
     True
     """
+    # TODO(kohr-h): write NumPy-agnostic version
     f_arr = np.asarray(f)
     ndim = f_arr.ndim
 

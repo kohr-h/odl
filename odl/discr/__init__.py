@@ -1,4 +1,4 @@
-﻿# Copyright 2014-2017 The ODL contributors
+﻿# Copyright 2014-2018 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -17,9 +17,6 @@ __all__ += grid.__all__
 
 from .partition import *
 __all__ += partition.__all__
-
-from .discretization import *
-__all__ += discretization.__all__
 
 from .lp_discr import *
 __all__ += lp_discr.__all__

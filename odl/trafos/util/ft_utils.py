@@ -11,9 +11,9 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 
-from odl.discr import (
-    uniform_grid, DiscreteLp, uniform_partition_fromgrid,
-    uniform_discr_frompartition)
+from odl.discr import uniform_grid, DiscreteLp
+from odl.discr.lp_discr import uniform_discr_frompartition
+from odl.discr.partition import uniform_partition_fromgrid
 from odl.set import RealNumbers
 from odl.util import (
     fast_1d_tensor_mult, conj_exponent,

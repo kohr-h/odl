@@ -14,7 +14,7 @@ from numbers import Integral
 
 import numpy as np
 
-from odl.discr.discr_utils import point_collocation, make_vec_func_for_sampling
+from odl.discr.discr_utils import make_vec_func_for_sampling, point_collocation
 from odl.discr.partition import (
     RectPartition, uniform_partition, uniform_partition_fromintv)
 from odl.set import IntervalProd, RealNumbers
@@ -29,10 +29,7 @@ from odl.util import (
 
 __all__ = (
     'DiscreteLp',
-    'uniform_discr_frompartition',
-    'uniform_discr_fromintv',
     'uniform_discr',
-    'uniform_discr_fromdiscr',
 )
 
 
@@ -305,58 +302,53 @@ class DiscreteLp(TensorSpace):
 
         >>> space = odl.uniform_discr(-1, 1, 4)
         >>> space.element([1, 2, 3, 4])
-        uniform_discr(-1.0, 1.0, 4).element([ 1.,  2.,  3.,  4.])
+        array([ 1.,  2.,  3.,  4.])
         >>> vector = odl.rn(4).element([0, 1, 2, 3])
         >>> space.element(vector)
-        uniform_discr(-1.0, 1.0, 4).element([ 0.,  1.,  2.,  3.])
+        array([ 0.,  1.,  2.,  3.])
 
         On the other hand, non-discretized objects like Python functions
         can be discretized "on the fly":
 
         >>> space.element(lambda x: x * 2)
-        uniform_discr(-1.0, 1.0, 4).element([-1.5, -0.5, 0.5, 1.5])
+        array([-1.5, -0.5,  0.5,  1.5])
 
         This works also with parameterized functions, however only
-        through keyword arguments (not positional arguments with
-        defaults):
+        through keyword arguments or positional arguments with defaults:
 
         >>> def f(x, c=0.0):
         ...     return np.maximum(x, c)
         ...
         >>> space = odl.uniform_discr(-1, 1, 4)
         >>> space.element(f, c=0.5)
-        uniform_discr(-1.0, 1.0, 4).element([ 0.5 ,  0.5 ,  0.5 ,  0.75])
+        array([ 0.5 ,  0.5 ,  0.5 ,  0.75])
 
         See Also
         --------
         sampling : create a discrete element from a non-discretized one
         """
         if inp is None:
-            return self.element_type(self, self.tspace.element(order=order))
-        elif inp in self and order is None:
+            return self.tspace.element(order=order)
+        elif (inp in self or inp in self.tspace) and order is None:
             return inp
-        elif inp in self.tspace and order is None:
-            return self.element_type(self, inp)
         elif callable(inp):
             vectorized = kwargs.pop('vectorized', True)
             func = make_vec_func_for_sampling(
                 inp, self.domain, out_dtype=self.dtype, vectorized=vectorized
             )
             sampled = point_collocation(func, self.meshgrid, **kwargs)
-            return self.element_type(
-                self, self.tspace.element(sampled, order=order))
+            return self.tspace.element(sampled, order=order)
         else:
             # Sequence-type input
-            return self.element_type(
-                self, self.tspace.element(inp, order=order))
+            return self.tspace.element(inp, order=order)
 
     def zero(self):
         """Return the element of all zeros."""
-        return self.element_type(self, self.tspace.zero())
+        return self.tspace.zero()
 
     def one(self):
         """Return the element of all ones."""
-        return self.element_type(self, self.tspace.one())
+        return self.tspace.one()
 
     # --- Casting
 
@@ -819,7 +811,7 @@ def uniform_discr_frompartition(partition, dtype=None, impl='numpy', **kwargs):
     Examples
     --------
     >>> part = odl.uniform_partition(0, 1, 10)
-    >>> uniform_discr_frompartition(part)
+    >>> odl.discr.lp_discr.uniform_discr_frompartition(part)
     uniform_discr(0.0, 1.0, 10)
 
     See Also
@@ -882,8 +874,8 @@ def uniform_discr_fromintv(intv_prod, shape, dtype=None, impl='numpy',
 
     Examples
     --------
-    >>> intv = IntervalProd(0, 1)
-    >>> uniform_discr_fromintv(intv, 10)
+    >>> intv = odl.IntervalProd(0, 1)
+    >>> odl.discr.lp_discr.uniform_discr_fromintv(intv, 10)
     uniform_discr(0.0, 1.0, 10)
 
     See Also
@@ -951,7 +943,7 @@ def uniform_discr(min_pt, max_pt, shape, dtype=None, impl='numpy', **kwargs):
     --------
     Create real space:
 
-    >>> space = uniform_discr([0, 0], [1, 1], (10, 10))
+    >>> space = odl.uniform_discr([0, 0], [1, 1], (10, 10))
     >>> space
     uniform_discr([ 0.,  0.], [ 1.,  1.], (10, 10))
     >>> space.cell_sides
@@ -963,7 +955,7 @@ def uniform_discr(min_pt, max_pt, shape, dtype=None, impl='numpy', **kwargs):
 
     Create complex space by giving a dtype:
 
-    >>> space = uniform_discr([0, 0], [1, 1], (10, 10), dtype=complex)
+    >>> space = odl.uniform_discr([0, 0], [1, 1], (10, 10), dtype=complex)
     >>> space
     uniform_discr([ 0.,  0.], [ 1.,  1.], (10, 10), dtype=complex)
     >>> space.is_complex
@@ -1064,24 +1056,26 @@ def uniform_discr_fromdiscr(discr, min_pt=None, max_pt=None,
     If no additional argument is given, a copy of ``discr`` is
     returned:
 
-    >>> odl.uniform_discr_fromdiscr(discr) == discr
+    >>> odl.discr.lp_discr.uniform_discr_fromdiscr(discr) == discr
     True
-    >>> odl.uniform_discr_fromdiscr(discr) is discr
+    >>> odl.discr.lp_discr.uniform_discr_fromdiscr(discr) is discr
     False
 
     Giving ``min_pt`` or ``max_pt`` results in a
     translation, while for the other two options, the domain
     is kept but re-partitioned:
 
-    >>> odl.uniform_discr_fromdiscr(discr, min_pt=[1, 1])
+    >>> odl.discr.lp_discr.uniform_discr_fromdiscr(discr, min_pt=[1, 1])
     uniform_discr([ 1.,  1.], [ 2.,  3.], (10, 5))
-    >>> odl.uniform_discr_fromdiscr(discr, max_pt=[0, 0])
+    >>> odl.discr.lp_discr.uniform_discr_fromdiscr(discr, max_pt=[0, 0])
     uniform_discr([-1., -2.], [ 0.,  0.], (10, 5))
-    >>> odl.uniform_discr_fromdiscr(discr, cell_sides=[1, 1])
+    >>> odl.discr.lp_discr.uniform_discr_fromdiscr(discr, cell_sides=[1, 1])
     uniform_discr([ 0.,  0.], [ 1.,  2.], (1, 2))
-    >>> odl.uniform_discr_fromdiscr(discr, shape=[5, 5])
+    >>> odl.discr.lp_discr.uniform_discr_fromdiscr(discr, shape=[5, 5])
     uniform_discr([ 0.,  0.], [ 1.,  2.], (5, 5))
-    >>> odl.uniform_discr_fromdiscr(discr, shape=[5, 5]).cell_sides
+    >>> odl.discr.lp_discr.uniform_discr_fromdiscr(
+    ...     discr, shape=[5, 5]
+    ... ).cell_sides
     array([ 0.2,  0.4])
 
     The cases with 2 or more additional arguments and the syntax
@@ -1090,9 +1084,9 @@ def uniform_discr_fromdiscr(discr, min_pt=None, max_pt=None,
     # axis 0: translate to match max_pt = 3
     # axis 1: recompute max_pt using the original shape with the
     # new min_pt and cell_sides
-    >>> new_discr = odl.uniform_discr_fromdiscr(discr, min_pt=[None, 1],
-    ...                                         max_pt=[3, None],
-    ...                                         cell_sides=[None, 0.25])
+    >>> new_discr = odl.discr.lp_discr.uniform_discr_fromdiscr(
+    ...     discr, min_pt=[None, 1], max_pt=[3, None], cell_sides=[None, 0.25]
+    ... )
     >>> new_discr
     uniform_discr([ 2.,  1.], [ 3.  ,  2.25], (10, 5))
     >>> new_discr.cell_sides
@@ -1101,10 +1095,10 @@ def uniform_discr_fromdiscr(discr, min_pt=None, max_pt=None,
     # axis 0: recompute min_pt from old cell_sides and new
     # max_pt and shape
     # axis 1: use new min_pt, shape and cell_sides only
-    >>> new_discr = odl.uniform_discr_fromdiscr(discr, min_pt=[None, 1],
-    ...                                         max_pt=[3, None],
-    ...                                         shape=[5, 5],
-    ...                                         cell_sides=[None, 0.25])
+    >>> new_discr = odl.discr.lp_discr.uniform_discr_fromdiscr(
+    ...     discr, min_pt=[None, 1], max_pt=[3, None], shape=[5, 5],
+    ...     cell_sides=[None, 0.25]
+    ... )
     >>> new_discr
     uniform_discr([ 2.5,  1. ], [ 3.  ,  2.25], (5, 5))
     >>> new_discr.cell_sides

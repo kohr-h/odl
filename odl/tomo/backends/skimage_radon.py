@@ -16,7 +16,8 @@ try:
 except ImportError:
     SKIMAGE_AVAILABLE = False
 
-from odl.discr import uniform_discr_frompartition, uniform_partition
+from odl.discr import uniform_partition
+from odl.discr.lp_discr import uniform_discr_frompartition
 
 __all__ = ('skimage_radon_forward', 'skimage_radon_back_projector',
            'SKIMAGE_AVAILABLE')

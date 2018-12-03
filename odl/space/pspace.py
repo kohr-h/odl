@@ -9,7 +9,6 @@
 """Cartesian products of `LinearSpace` instances."""
 
 from __future__ import print_function, division, absolute_import
-from itertools import product
 from numbers import Integral
 import numpy as np
 
@@ -484,7 +483,7 @@ class ProductSpace(LinearSpace):
         if inp is None:
             inp = [space.element() for space in self.spaces]
 
-        if inp in self:
+        elif inp in self:
             return inp
 
         if len(inp) != len(self):
@@ -499,10 +498,10 @@ class ProductSpace(LinearSpace):
             raise TypeError('input {!r} not a sequence of elements of the '
                             'component spaces'.format(inp))
 
-        return np.array(parts, dtype=object)
+        return np.array(parts, copy=False)
 
     def __contains__(self, other):
-        if not isinstance(other, np.ndarray) or other.dtype is not object:
+        if not isinstance(other, np.ndarray):
             return False
         return all(p in spc for p, spc in zip(other, self.spaces))
 
@@ -833,94 +832,150 @@ def show(self, title=None, indices=None, **kwargs):
     return tuple(figs)
 
 
-# --- Add arithmetic operators that broadcast --- #
+from functools import wraps
 
 
-class ProductSpaceArrayWeighting(ArrayWeighting):
+def protocol(dispatcher):
 
+    def proto_deco(pfun):  # decorator for the protocol function
+        _proto_impls = {}
+
+        @wraps(pfun)
+        def proto_fun_and_deco(*args, **kwargs):  # function and decorator
+            try:
+                retval = kwargs['retval']
+            except KeyError:
+                i_am_deco = False
+            else:
+                i_am_deco = True
+
+            if i_am_deco:
+
+                def deco(handler):
+                    # Register handler with retval
+                    _proto_impls[retval] = handler
+                    return handler
+
+                return deco
+            else:
+                # Normal execution, run dispatch logic
+                dispval = dispatcher(*args, **kwargs)
+                try:
+                    handler = _proto_impls[dispval]
+                except KeyError:
+                    raise RuntimeError(
+                        'no handler registered for dispatch value {}'
+                        ''.format(dispval)
+                    )
+                else:
+                    return handler(*args, **kwargs)
+
+
+        return proto_fun_and_deco
+    return proto_deco
+
+
+@protocol(dispatcher=type)
+def myfun(x):
+    pass
+
+
+@myfun(retval=tuple)
+def _myfun_tuple(x):
+    print(len(x))
+
+
+@myfun(retval=int)
+def _myfun_int(x):
+    print(x)
+
+
+def _array_weighted_inner(x1, x2, weights, subspaces):
+    r"""Array weighting for `ProductSpace`.
+
+    Parameters
+    ----------
+    x1, x2 : `ProductSpaceElement`
+        Elements whose inner product is calculated.
+    weights : 1-dim. `array-like`
+        Weighting array of the inner product.
+    subspaces : sequence of `LinearSpace`
+        Spaces in which the parts of ``x1`` and ``x2`` live.
+
+    Returns
+    -------
+    inner : scalar
+        The weighted inner product.
+
+    Notes
+    -----
+    The weighted inner product with array :math:`w` is defined as
+
+    .. math::
+        \langle x, y \rangle_w = \langle w \odot x, y \rangle
+
+    with component-wise multiplication :math:`w \odot x`.
+
+    The weights :math:`w` may only have positive entries. This is not checked
+    during initialization.
+    """
+    inners = np.array(
+        [spc.inner(x1i, x2i) for x1i, x2i, spc in zip(x1, x2, subspaces)]
+    )
+    inner = np.dot(inners, weights)
+    if is_real_dtype(inners.dtype):
+        return float(inner)
+    else:
+        return complex(inner)
+
+
+def _array_weighted_norm(x, weights, subspaces):
     """Array weighting for `ProductSpace`.
 
-    This class defines a weighting that has a different value for
-    each index defined in a given space.
-    See ``Notes`` for mathematical details.
+    Parameters
+    ----------
+    x : `ProductSpaceElement`
+        Element whose norm is calculated.
+    weights : 1-dim. `array-like`
+        Weighting array of the inner product.
+    subspaces : sequence of `LinearSpace`
+        Spaces in which the parts of ``x1`` and ``x2`` live.
+
+    Notes
+    -----
+    - For exponent 2.0, a new weighted inner product with array
+      :math:`w` is defined as
+
+      .. math::
+          \\langle x, y \\rangle_w = \\langle w \odot x, y \\rangle
+
+      with component-wise multiplication :math:`w \odot x`. For other
+      exponents, only ``norm`` and ``dist`` are defined. In the case
+      of exponent ``inf``, the weighted norm is
+
+      .. math::
+          \|x\|_{w,\infty} = \|w \odot x\|_\infty,
+
+      otherwise it is
+
+      .. math::
+          \|x\|_{w,p} = \|w^{1/p} \odot x\|_p.
+
+    - Note that this definition does **not** fulfill the limit property
+      in :math:`p`, i.e.,
+
+      .. math::
+          \|x\|_{w,p} \\not\\to \|x\|_{w,\infty}
+          \quad\\text{for } p \\to \infty
+
+      unless :math:`w = (1,...,1)`. The reason for this choice
+      is that the alternative with the limit property consists in
+      ignoring the weights altogether.
+
+    - The array may only have positive entries, otherwise it does not
+      define an inner product or norm, respectively. This is not checked
+      during initialization.
     """
-
-    def __init__(self, array, exponent=2.0):
-        """Initialize a new instance.
-
-        Parameters
-        ----------
-        array : 1-dim. `array-like`
-            Weighting array of the inner product.
-        exponent : positive float, optional
-            Exponent of the norm. For values other than 2.0, no inner
-            product is defined.
-
-        Notes
-        -----
-        - For exponent 2.0, a new weighted inner product with array
-          :math:`w` is defined as
-
-          .. math::
-              \\langle x, y \\rangle_w = \\langle w \odot x, y \\rangle
-
-          with component-wise multiplication :math:`w \odot x`. For other
-          exponents, only ``norm`` and ``dist`` are defined. In the case
-          of exponent ``inf``, the weighted norm is
-
-          .. math::
-              \|x\|_{w,\infty} = \|w \odot x\|_\infty,
-
-          otherwise it is
-
-          .. math::
-              \|x\|_{w,p} = \|w^{1/p} \odot x\|_p.
-
-        - Note that this definition does **not** fulfill the limit property
-          in :math:`p`, i.e.,
-
-          .. math::
-              \|x\|_{w,p} \\not\\to \|x\|_{w,\infty}
-              \quad\\text{for } p \\to \infty
-
-          unless :math:`w = (1,...,1)`. The reason for this choice
-          is that the alternative with the limit property consists in
-          ignoring the weights altogether.
-
-        - The array may only have positive entries, otherwise it does not
-          define an inner product or norm, respectively. This is not checked
-          during initialization.
-        """
-        super(ProductSpaceArrayWeighting, self).__init__(
-            array, impl='numpy', exponent=exponent)
-
-    def inner(self, x1, x2):
-        """Calculate the array-weighted inner product of two elements.
-
-        Parameters
-        ----------
-        x1, x2 : `ProductSpaceElement`
-            Elements whose inner product is calculated.
-
-        Returns
-        -------
-        inner : float or complex
-            The inner product of the two provided elements.
-        """
-        if self.exponent != 2.0:
-            raise NotImplementedError('no inner product defined for '
-                                      'exponent != 2 (got {})'
-                                      ''.format(self.exponent))
-
-        inners = np.fromiter(
-            (x1i.inner(x2i) for x1i, x2i in zip(x1, x2)),
-            dtype=x1[0].space.dtype, count=len(x1))
-
-        inner = np.dot(inners, self.array)
-        if is_real_dtype(x1[0].dtype):
-            return float(inner)
-        else:
-            return complex(inner)
 
     def norm(self, x):
         """Calculate the array-weighted norm of an element.

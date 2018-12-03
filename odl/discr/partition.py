@@ -14,21 +14,24 @@ considered here are based on hypercubes, i.e. the tensor products
 of partitions of intervals.
 """
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 from builtins import object
+
 import numpy as np
 
 from odl.discr.grid import RectGrid, uniform_grid_fromintv
 from odl.set import IntervalProd
 from odl.util import (
-    normalized_index_expression, normalized_nodes_on_bdry,
-    normalized_scalar_param_list, safe_int_conv,
-    signature_string, indent, array_str, npy_printoptions)
+    array_str, indent, normalized_index_expression, normalized_nodes_on_bdry,
+    normalized_scalar_param_list, npy_printoptions, safe_int_conv,
+    signature_string)
 
-
-__all__ = ('RectPartition', 'uniform_partition_fromintv',
-           'uniform_partition_fromgrid', 'uniform_partition',
-           'nonuniform_partition')
+__all__ = (
+    'RectPartition',
+    'uniform_partition',
+    'nonuniform_partition'
+)
 
 
 class RectPartition(object):

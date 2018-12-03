@@ -12,16 +12,20 @@ Sampling grids are collections of points in an n-dimensional coordinate
 space with a certain structure which is exploited to minimize storage.
 """
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
-from odl.set import Set, IntervalProd
+from odl.set import IntervalProd, Set
 from odl.util import (
-    normalized_index_expression, normalized_scalar_param_list, safe_int_conv,
-    array_str, signature_string, indent, npy_printoptions)
+    array_str, indent, normalized_index_expression,
+    normalized_scalar_param_list, npy_printoptions, safe_int_conv,
+    signature_string)
 
-
-__all__ = ('RectGrid', 'uniform_grid', 'uniform_grid_fromintv')
+__all__ = (
+    'RectGrid',
+    'uniform_grid',
+)
 
 
 def sparse_meshgrid(*x):

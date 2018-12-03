@@ -11,7 +11,7 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 
-from odl.discr import DiscreteLp, discr_sequence_space
+from odl.discr import DiscreteLp
 from odl.operator import Operator
 from odl.set import RealNumbers, ComplexNumbers
 from odl.trafos.backends.pyfftw_bindings import (
