@@ -103,6 +103,8 @@ def landweber(op, x, rhs, niter, omega=None, projection=None, callback=None):
     if omega is None:
         omega = 1 / op.norm(estimate=True) ** 2
 
+    dom = op.domain
+
     # Reusable temporaries
     tmp_ran = op.range.element()
     tmp_dom = op.domain.element()
@@ -111,7 +113,7 @@ def landweber(op, x, rhs, niter, omega=None, projection=None, callback=None):
         op(x, out=tmp_ran)
         tmp_ran -= rhs
         op.derivative(x).adjoint(tmp_ran, out=tmp_dom)
-        x.lincomb(1, x, -omega, tmp_dom)
+        dom.lincomb(1, x, -omega, tmp_dom, x)
 
         if projection is not None:
             projection(x)

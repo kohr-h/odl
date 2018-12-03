@@ -14,7 +14,8 @@ import numpy as np
 from odl.discr import DiscreteLp, uniform_partition
 from odl.operator import Operator
 from odl.set import IntervalProd
-from odl.space import FunctionSpace, tensor_space
+from odl.space.fspace import FunctionSpace
+from odl.space.space_utils import tensor_space
 from odl.util import (
     normalized_scalar_param_list, safe_int_conv, writable_array, resize_array)
 from odl.util.numerics import _SUPPORTED_RESIZE_PAD_MODES

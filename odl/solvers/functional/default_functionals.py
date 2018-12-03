@@ -14,7 +14,7 @@ import numpy as np
 
 from odl.solvers.functional.functional import (Functional,
                                                FunctionalQuadraticPerturb)
-from odl.space import ProductSpace
+from odl.space.pspace import ProductSpace
 from odl.operator import (Operator, ConstantOperator, ZeroOperator,
                           ScalingOperator, DiagonalOperator, PointwiseNorm)
 from odl.solvers.nonsmooth.proximal_operators import (

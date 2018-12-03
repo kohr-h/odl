@@ -20,7 +20,7 @@ import numpy as np
 from odl.operator import Operator
 from odl.discr.partition import RectPartition
 from odl.space.base_tensors import TensorSpace
-from odl.space import FunctionSpace
+from odl.space.fspace import FunctionSpace
 from odl.util import (
     is_valid_input_meshgrid, out_shape_from_array, out_shape_from_meshgrid,
     is_string, is_numeric_dtype, signature_string, indent, dtype_repr,

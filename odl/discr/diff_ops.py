@@ -13,7 +13,7 @@ import numpy as np
 
 from odl.discr.lp_discr import DiscreteLp
 from odl.operator.tensor_ops import PointwiseTensorFieldOperator
-from odl.space import ProductSpace
+from odl.space.pspace import ProductSpace
 from odl.util import writable_array, signature_string, indent
 
 
@@ -347,16 +347,14 @@ class Gradient(PointwiseTensorFieldOperator):
         if out is None:
             out = self.range.element()
 
-        x_arr = x.asarray()
         ndim = self.domain.ndim
         dx = self.domain.cell_sides
 
         for axis in range(ndim):
-            with writable_array(out[axis]) as out_arr:
-                finite_diff(x_arr, axis=axis, dx=dx[axis], method=self.method,
-                            pad_mode=self.pad_mode,
-                            pad_const=self.pad_const,
-                            out=out_arr)
+            finite_diff(x, axis=axis, dx=dx[axis], method=self.method,
+                        pad_mode=self.pad_mode,
+                        pad_const=self.pad_const,
+                        out=out[axis])
         return out
 
     def derivative(self, point=None):

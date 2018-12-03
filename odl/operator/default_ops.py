@@ -16,8 +16,7 @@ import numpy as np
 
 from odl.operator.operator import Operator
 from odl.set import LinearSpace, Field, RealNumbers, ComplexNumbers
-from odl.set.space import LinearSpaceElement
-from odl.space import ProductSpace
+from odl.space.pspace import ProductSpace
 
 
 __all__ = ('ScalingOperator', 'ZeroOperator', 'IdentityOperator',
@@ -76,7 +75,7 @@ class ScalingOperator(Operator):
         if out is None:
             out = self.scalar * x
         else:
-            out.lincomb(self.scalar, x)
+            self.domain.lincomb(self.scalar, x, 0, out, out)
         return out
 
     @property
@@ -378,8 +377,10 @@ class MultiplyOperator(Operator):
             elif isinstance(self.domain, ComplexNumbers):
                 return InnerProductOperator(self.multiplicand.conjugate())
             else:
-                raise NotImplemented('adjoint not implemented for domain{!r}'
-                                     ''.format(self.domain))
+                raise NotImplementedError(
+                    'adjoint not implemented for domain{!r}'
+                    ''.format(self.domain)
+                )
         elif self.domain.is_complex:
             return MultiplyOperator(np.conj(self.multiplicand),
                                     domain=self.range, range=self.domain)

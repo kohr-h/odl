@@ -318,7 +318,7 @@ def noise_array(space):
     odl.set.space.LinearSpace.examples : Examples of elements
         typical to the space.
     """
-    from odl.space import ProductSpace
+    from odl.space.pspace import ProductSpace
     if isinstance(space, ProductSpace):
         return np.array([noise_array(si) for si in space])
     else:

@@ -13,7 +13,7 @@ from future.utils import native
 import numpy as np
 
 from odl.space.base_tensors import TensorSpace
-from odl.space import ProductSpace
+from odl.space.pspace import ProductSpace
 from odl.util import nd_iterator
 from odl.util.testutils import noise_element
 
@@ -209,7 +209,8 @@ def power_method_opnorm(op, xstart=None, maxiter=100, rtol=1e-05, atol=1e-08,
         x = op.domain.element(xstart).copy()
 
     # Take first iteration step to normalize input
-    x_norm = x.norm()
+    dom = op.domain
+    x_norm = dom.norm(x)
     if x_norm == 0:
         raise ValueError('``xstart`` must be nonzero')
     x /= x_norm
@@ -237,7 +238,7 @@ def power_method_opnorm(op, xstart=None, maxiter=100, rtol=1e-05, atol=1e-08,
             x, tmp = tmp, x
 
         # Calculate x norm and verify it is valid
-        x_norm = x.norm()
+        x_norm = dom.norm(x)
         if x_norm == 0:
             raise ValueError('reached ``x=0`` after {} iterations'.format(i))
         if not np.isfinite(x_norm):

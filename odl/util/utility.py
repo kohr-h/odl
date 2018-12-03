@@ -14,6 +14,7 @@ import inspect
 import sys
 from builtins import object
 from collections import OrderedDict
+from contextlib import contextmanager
 from functools import wraps
 from future.moves.itertools import zip_longest
 from itertools import product
@@ -44,6 +45,16 @@ if sys.version_info.major < 3:
     getargspec = inspect.getargspec
 else:
     getargspec = inspect.getfullargspec
+
+
+@contextmanager
+def npy_warnings_fatal(which='all'):
+    try:
+        old_err = np.geterr()
+        np.seterr(**{which: 'raise'})
+        yield
+    finally:
+        np.seterr(**old_err)
 
 
 def indent(string, indent_str='    '):

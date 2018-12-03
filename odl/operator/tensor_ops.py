@@ -15,7 +15,8 @@ from packaging.version import parse as parse_version
 
 from odl.operator.operator import Operator
 from odl.set import RealNumbers, ComplexNumbers
-from odl.space import ProductSpace, tensor_space
+from odl.space.pspace import ProductSpace
+from odl.space.space_utils import tensor_space
 from odl.space.base_tensors import TensorSpace
 from odl.space.weighting import ArrayWeighting
 from odl.util import (

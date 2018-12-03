@@ -14,7 +14,7 @@ import numpy as np
 
 from odl.operator.operator import Operator
 from odl.operator.default_ops import ZeroOperator
-from odl.space import ProductSpace
+from odl.space.pspace import ProductSpace
 
 
 __all__ = ('ProductSpaceOperator',

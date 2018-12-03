@@ -12,7 +12,7 @@ from __future__ import print_function, division, absolute_import
 
 from odl.operator import Operator
 from odl.set.sets import Set
-from odl.space.base_tensors import TensorSpace, Tensor
+from odl.space.base_tensors import TensorSpace
 from odl.space.entry_points import tensor_space_impl
 from odl.set import RealNumbers, ComplexNumbers
 from odl.util import (
@@ -229,11 +229,11 @@ class DiscretizedSpace(TensorSpace):
 
     def zero(self):
         """Return the element of all zeros."""
-        return self.element_type(self, self.tspace.zero())
+        return self.tspace.zero()
 
     def one(self):
         """Return the element of all ones."""
-        return self.element_type(self, self.tspace.one())
+        return self.tspace.one()
 
     @property
     def weighting(self):
@@ -252,27 +252,27 @@ class DiscretizedSpace(TensorSpace):
 
     def _lincomb(self, a, x1, b, x2, out):
         """Raw linear combination."""
-        self.tspace._lincomb(a, x1.tensor, b, x2.tensor, out.tensor)
+        self.tspace._lincomb(a, x1, b, x2, out)
 
     def _dist(self, x1, x2):
         """Raw distance between two elements."""
-        return self.tspace._dist(x1.tensor, x2.tensor)
+        return self.tspace._dist(x1, x2)
 
     def _norm(self, x):
         """Raw norm of an element."""
-        return self.tspace._norm(x.tensor)
+        return self.tspace._norm(x)
 
     def _inner(self, x1, x2):
         """Raw inner product of two elements."""
-        return self.tspace._inner(x1.tensor, x2.tensor)
+        return self.tspace._inner(x1, x2)
 
     def _multiply(self, x1, x2, out):
         """Raw pointwise multiplication of two elements."""
-        self.tspace._multiply(x1.tensor, x2.tensor, out.tensor)
+        self.tspace._multiply(x1, x2, out)
 
     def _divide(self, x1, x2, out):
         """Raw pointwise multiplication of two elements."""
-        self.tspace._divide(x1.tensor, x2.tensor, out.tensor)
+        self.tspace._divide(x1, x2, out)
 
     @property
     def examples(self):
@@ -287,197 +287,6 @@ class DiscretizedSpace(TensorSpace):
         """
         for name, elem in self.fspace.examples:
             yield (name, self.element(elem))
-
-    @property
-    def element_type(self):
-        """Type of elements in this space: `DiscretizedSpaceElement`."""
-        return DiscretizedSpaceElement
-
-
-class DiscretizedSpaceElement(Tensor):
-
-    """Representation of a `DiscretizedSpace` element.
-
-    Basically only a wrapper class for tspace's element class."""
-
-    def __init__(self, space, tensor):
-        """Initialize a new instance."""
-        super(DiscretizedSpaceElement, self).__init__(space)
-        self.__tensor = tensor
-
-    @property
-    def tensor(self):
-        """Structure for data storage."""
-        return self.__tensor
-
-    @property
-    def dtype(self):
-        """Type of data storage."""
-        return self.tensor.dtype
-
-    @property
-    def size(self):
-        """Size of data storage."""
-        return self.tensor.size
-
-    def __len__(self):
-        """Return ``len(self)``.
-
-        Size of data storage.
-        """
-        return self.size
-
-    def copy(self):
-        """Create an identical (deep) copy of this element."""
-        return self.space.element(self.tensor.copy())
-
-    def asarray(self, out=None):
-        """Extract the data of this array as a numpy array.
-
-        Parameters
-        ----------
-        out : `numpy.ndarray`, optional
-            Array in which the result should be written in-place.
-            Has to be contiguous and of the correct dtype.
-        """
-        return self.tensor.asarray(out=out)
-
-    def astype(self, dtype):
-        """Return a copy of this element with new ``dtype``.
-
-        Parameters
-        ----------
-        dtype :
-            Scalar data type of the returned space. Can be provided
-            in any way the `numpy.dtype` constructor understands, e.g.
-            as built-in type or as a string. Data types with non-trivial
-            shapes are not allowed.
-
-        Returns
-        -------
-        newelem : `DiscretizedSpaceElement`
-            Version of this element with given data type.
-        """
-        return self.space.astype(dtype).element(self.tensor.astype(dtype))
-
-    def __eq__(self, other):
-        """Return ``self == other``.
-
-        Returns
-        -------
-        equals : bool
-            ``True`` if all entries of ``other`` are equal to this
-            element's entries, ``False`` otherwise.
-        """
-        return (other in self.space and
-                self.tensor == other.tensor)
-
-    def __getitem__(self, indices):
-        """Return ``self[indices]``.
-
-        Parameters
-        ----------
-        indices : int or `slice`
-            The position(s) that should be accessed.
-
-        Returns
-        -------
-        values : `Tensor`
-            The value(s) at the index (indices).
-        """
-        if isinstance(indices, type(self)):
-            indices = indices.tensor
-        return self.tensor[indices]
-
-    def __setitem__(self, indices, values):
-        """Implement ``self[indices] = values``.
-
-        Parameters
-        ----------
-        indices : int or `slice`
-            The position(s) that should be set
-        values : scalar, `array-like` or `Tensor`
-            The value(s) that are to be assigned.
-
-            If ``index`` is an int, ``value`` must be single value.
-
-            If ``index`` is a slice, ``value`` must be broadcastable
-            to the size of the slice (same size, shape (1,)
-            or single value).
-        """
-        if isinstance(indices, type(self)):
-            indices = indices.tensor
-        if isinstance(values, type(self)):
-            values = values.tensor
-        self.tensor.__setitem__(indices, values)
-
-    def sampling(self, ufunc, **kwargs):
-        """Sample a continuous function and assign to this element.
-
-        Parameters
-        ----------
-        ufunc : ``self.space.fspace`` element
-            The continuous function that should be samplingicted.
-        kwargs :
-            Additional arugments for the sampling operator implementation
-
-        Examples
-        --------
-        >>> space = odl.uniform_discr(0, 1, 5)
-        >>> x = space.element()
-
-        Assign x according to a continuous function:
-
-        >>> x.sampling(lambda t: t)
-        >>> x  # Print values at grid points (which are centered)
-        uniform_discr(0.0, 1.0, 5).element([ 0.1,  0.3,  0.5,  0.7,  0.9])
-
-        See Also
-        --------
-        DiscretizedSpace.sampling : For full description
-        """
-        self.space.sampling(ufunc, out=self.tensor, **kwargs)
-
-    @property
-    def interpolation(self):
-        """Interpolation operator associated with this element.
-
-        Returns
-        -------
-        interpolation_op : `FunctionSpaceMapping`
-            Operatior representing a continuous interpolation of this
-            element.
-
-        Examples
-        --------
-        Create continuous version of a discrete 1d function with nearest
-        neighbour interpolation:
-
-        >>> X = odl.uniform_discr(0, 1, 3, nodes_on_bdry=True)
-        >>> x = X.element([0, 1, 0])
-        >>> x.interpolation(np.array([0.24, 0.26]))
-        array([ 0.,  1.])
-
-        Linear interpolation:
-
-        >>> X = odl.uniform_discr(0, 1, 3, nodes_on_bdry=True, interp='linear')
-        >>> x = X.element([0, 1, 0])
-        >>> x.interpolation(np.array([0.24, 0.26]))
-        array([ 0.48,  0.52])
-
-        See Also
-        --------
-        DiscretizedSpace.interpolation : For full description
-        """
-        return self.space.interpolation(self.tensor)
-
-    def __ipow__(self, p):
-        """Implement ``self **= p``."""
-        # The concrete `tensor` can specialize `__ipow__` for non-integer
-        # `p` so we want to use it here. Otherwise we get the default
-        # `LinearSpaceElement.__ipow__` which only works for integer `p`.
-        self.tensor.__ipow__(p)
-        return self
 
 
 def tspace_type(space, impl, dtype=None):

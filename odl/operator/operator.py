@@ -15,7 +15,6 @@ from numbers import Number, Integral
 import sys
 
 from odl.set import LinearSpace, Set, Field
-from odl.set.space import LinearSpaceElement
 from odl.util import cache_arguments
 
 
@@ -859,7 +858,7 @@ class Operator(object):
                 return other * self
             else:
                 return OperatorRightScalarMult(self, other)
-        elif isinstance(other, LinearSpaceElement) and other in self.domain:
+        elif other in self.domain:
             return OperatorRightVectorMult(self, other.copy())
         else:
             return NotImplemented
