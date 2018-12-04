@@ -1518,6 +1518,184 @@ def unique(seq):
         return unique_values
 
 
+from functools import wraps
+
+
+def protocol(dispatcher):
+    """Decorator that defines a protocol with a dispatching function.
+
+    The general idea is this:
+
+    - There should be a single function that performs some operation on
+      inputs, but depending on some property of the input, the behavior
+      of the function may vary. For instance, if different types require
+      different implementation of the logically same operation.
+    - The function should *not* dispatch internally with
+      ``if ... elif ... else``, since that construction is not extensible.
+    - Instead, the function should try to look up a handler for a given
+      case of input in a global registry. However, instead of using a global
+      (e.g., module-level) registry, decorators are used for the win since
+      they allow both nice syntax and encapsulation of the registry at the
+      right level.
+
+    The current decorator is an implementation of that idea. See Examples
+    for details.
+
+    Parameters
+    ----------
+    dispatcher : callable
+        Function that takes the input to the decorated function and returns
+        a dispatch value. If a handler for that value has been registered,
+        that handler is called with the input.
+        The returned value of ``dispatcher`` must be hashable and support
+        comparison with ``==``.
+
+    Examples
+    --------
+    First, one defines a protocol by decorating a function with
+    the dispatch decorator. This function is the one intended for later use,
+    but since it delegates execution entirely to dedicated handlers, its body
+    should be empty.
+
+    In the following example, we write a function that creates a list from
+    its inputs, and the different handlers are invoked based on the type
+    of the input, indicated by ``dispatcher=type``:
+
+    >>> @protocol(dispatcher=type)
+    ... def make_list(x):
+    ...     pass
+
+    Next, we register handlers with the protocol by decorating functions
+    that implement the intended functionality for a specific return value
+    of the dispatcher. The decorator to be used for that is the function that
+    was decorated with ``@protocol`` in the first step. The argument to
+    this decorator is the dispatched value that should be handled by the
+    decorated function, given by keyword ``dispatch_value_`` (the trailing
+    underscore is to prevent name clashes).
+
+    In our case, we dispatch on type, i.e., we register handlers for
+    different by decorating with ``@make_list(dispatch_value_=<some_val>)``:
+
+    >>> @make_list.register(list)
+    ... def _from_list(lst):
+    ...     return lst
+    ...
+    >>> @make_list.register(tuple)
+    ... def _from_tuple(tpl):
+    ...     return list(tpl)
+    ...
+    >>> @make_list.register(int, float)
+    ... def _from_real(i):
+    ...     return [i]
+
+    After that, the original function will delegate its work to the
+    registered handlers:
+
+    >>> make_list([1, 2, 3])  # invokes `_from_list`
+    [1, 2, 3]
+    >>> make_list((1, 2, 3))  # invokes `_from_tuple`
+    [1, 2, 3]
+    >>> make_list(4)  # invokes `_from_real`
+    [4]
+    >>> make_list(4.0)  # invokes `_from_real`
+    [4.0]
+
+    If no handler is registered for a certain dispatch value, and input is
+    given that triggers an unhandled case, a ``RuntimeError`` is raised:
+
+    >>> try:
+    ...     make_list(1j)  # no handler defined for `complex`
+    ... except RuntimeError:
+    ...     print("Unhandled!")
+    Unhandled!
+
+    To avoid this case, a default handler for unhandled cases can be
+    registered by using the decorator without ``dispatch_value_`` argument:
+
+    >>> @make_list.register()
+    ... def _from_any(x):
+    ...     try:
+    ...         return list(x)
+    ...     except TypeError:
+    ...         return [x]
+    >>>
+    >>> make_list(1j)
+    [1j]
+    """
+
+    def proto_deco(pfun):  # decorator for the protocol function
+        _proto_handlers = {}
+        default_key = '__' + pfun.__name__ + '__default'
+
+        @wraps(pfun)
+        def proto_fun(*args, **kwargs):
+            """Function that dispatches to different handlers."""
+            # When the function is called
+            dispval = dispatcher(*args, **kwargs)
+
+            # Try to find a dedicated handler
+            try:
+                handler = _proto_handlers[dispval]
+            except KeyError:
+                pass
+            else:
+                return handler(*args, **kwargs)
+
+            # Try to find a default handler
+            try:
+                handler = _proto_handlers[default_key]
+            except KeyError:
+                # No default handler, give up
+                raise RuntimeError(
+                    'no handler registered for dispatch value {}'
+                    ''.format(dispval)
+                )
+            else:
+                return handler(*args, **kwargs)
+
+        def register(*args):
+            """Return decorator that registers a handler.
+
+            Without arguments, register a default handler. With 1 or more
+            arguments, register the handler with all provided dispatch values.
+            """
+            if len(args) == 0:
+
+                def reg_default(handler):
+                    _proto_handlers[default_key] = handler
+                    return handler
+
+                return reg_default
+
+            def reg_specific(handler):
+                for dispval in args:
+                    _proto_handlers[dispval] = handler
+                return handler
+
+            return reg_specific
+
+        proto_fun.register = register
+
+        return proto_fun
+
+    return proto_deco
+
+
+@protocol(dispatcher=type)
+def myfun(x):
+    pass
+
+
+@myfun.register(tuple)
+def _myfun_tuple(x):
+    print(len(x))
+
+
+@myfun.register(list)
+def _myfun_list(x):
+    print(x)
+
+
 if __name__ == '__main__':
     from odl.util.testutils import run_doctests
     run_doctests()
