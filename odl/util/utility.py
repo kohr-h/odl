@@ -606,15 +606,6 @@ def writable_array(obj, **kwargs):
     >>> lst
     [2, 4, 6]
 
-    Usage with ODL vectors:
-
-    >>> space = odl.uniform_discr(0, 1, 3)
-    >>> x = space.element([1, 2, 3])
-    >>> with writable_array(x) as arr:
-    ...     arr += [1, 1, 1]
-    >>> x
-    uniform_discr(0.0, 1.0, 3).element([ 2.,  3.,  4.])
-
     Additional keyword arguments are passed to `numpy.asarray`:
 
     >>> lst = [1, 2, 3]

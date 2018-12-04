@@ -13,10 +13,8 @@ from numbers import Integral
 import numpy as np
 
 from odl.set import LinearSpace
-from odl.space.weighting import (
-    Weighting, ArrayWeighting, ConstWeighting,
-    CustomInner, CustomNorm, CustomDist)
 from odl.util import is_real_dtype, signature_string, indent
+from odl.util.utility import protocol
 
 
 __all__ = ('ProductSpace',)
@@ -240,35 +238,15 @@ class ProductSpace(LinearSpace):
         super(ProductSpace, self).__init__(field)
 
         # Assign weighting
-        if weighting is not None:
-            if isinstance(weighting, Weighting):
-                self.__weighting = weighting
-            elif np.isscalar(weighting):
-                self.__weighting = ProductSpaceConstWeighting(
-                    weighting, exponent)
-            elif weighting is None:
-                # Need to wait until dist, norm and inner are handled
-                pass
-            else:  # last possibility: make a product space element
-                arr = np.asarray(weighting)
-                if arr.dtype == object:
-                    raise ValueError('invalid weighting argument {}'
-                                     ''.format(weighting))
-                if arr.ndim == 1:
-                    self.__weighting = ProductSpaceArrayWeighting(
-                        arr, exponent)
-                else:
-                    raise ValueError('weighting array has {} dimensions, '
-                                     'expected 1'.format(arr.ndim))
+        if weighting is None:
+            weighting = 1.0
 
-        elif dist is not None:
-            self.__weighting = ProductSpaceCustomDist(dist)
-        elif norm is not None:
-            self.__weighting = ProductSpaceCustomNorm(norm)
-        elif inner is not None:
-            self.__weighting = ProductSpaceCustomInner(inner)
-        else:  # all None -> no weighing
-            self.__weighting = ProductSpaceConstWeighting(1.0, exponent)
+        if np.isscalar(weighting):
+            self.__weighting = float(weighting)
+            self.__weighting_type = 'const'
+        else:
+            self.__weighting = np.asarray(weighting)
+            self.__weighting_type = 'array'
 
     def __len__(self):
         """Return ``len(self)``.
@@ -359,11 +337,14 @@ class ProductSpace(LinearSpace):
         return self.__weighting
 
     @property
+    def weighting_type(self):
+        """This space's type of weighting."""
+        return self.__weighting_type
+
+    @property
     def is_weighted(self):
         """Return ``True`` if the space is not weighted by constant 1.0."""
-        return not (
-            isinstance(self.weighting, ProductSpaceConstWeighting) and
-            self.weighting.const == 1.0)
+        return not (self.weighting_type == 'const' and self.weighting == 1.0)
 
     @property
     def dtype(self):
@@ -459,25 +440,22 @@ class ProductSpace(LinearSpace):
         --------
         >>> r2, r3 = odl.rn(2), odl.rn(3)
         >>> vec_2, vec_3 = r2.element(), r3.element()
-        >>> r2x3 = ProductSpace(r2, r3)
+        >>> r2x3 = odl.ProductSpace(r2, r3)
         >>> vec_2x3 = r2x3.element()
-        >>> vec_2.space == vec_2x3[0].space
+        >>> vec_2x3[0] in r2x3[0]
         True
-        >>> vec_3.space == vec_2x3[1].space
+        >>> vec_2x3[1] in r2x3[1]
         True
 
         Create an element of the product space
 
         >>> r2, r3 = odl.rn(2), odl.rn(3)
-        >>> prod = ProductSpace(r2, r3)
+        >>> prod = odl.ProductSpace(r2, r3)
         >>> x2 = r2.element([1, 2])
         >>> x3 = r3.element([1, 2, 3])
         >>> x = prod.element([x2, x3])
         >>> x
-        ProductSpace(rn(2), rn(3)).element([
-            [ 1.,  2.],
-            [ 1.,  2.,  3.]
-        ])
+        array([array([ 1.,  2.]), array([ 1.,  2.,  3.])], dtype=object)
         """
         # If data is given as keyword arg, prefer it over arg list
         if inp is None:
@@ -498,7 +476,18 @@ class ProductSpace(LinearSpace):
             raise TypeError('input {!r} not a sequence of elements of the '
                             'component spaces'.format(inp))
 
-        return np.array(parts, copy=False)
+        # If we are a power space, use the space dtype for the array
+        if self.is_power_space:
+            return np.array(parts, dtype=self.dtype)
+
+        # Otherwise, we use an object array. Note that it must be created in
+        # advance, since otherwise NumPy may still try to loop over the
+        # inputs. See https://github.com/numpy/numpy/issues/12479
+        # TODO(kohr-h): remove when above issue is resolved
+        ret = np.empty(len(parts), dtype=object)
+        for i, p in enumerate(parts):
+            ret[i] = p
+        return ret
 
     def __contains__(self, other):
         if not isinstance(other, np.ndarray):
@@ -511,29 +500,13 @@ class ProductSpace(LinearSpace):
                                        out.parts):
             space._lincomb(a, xp, b, yp, outp)
 
-    def _dist(self, x1, x2):
-        """Distance between two elements."""
-        return self.weighting.dist(x1, x2)
+    def _inner(self, x1, x2):
+        """Inner product of two elements."""
+        return weighted_inner(x1, x2, self.weighting, self.spaces)
 
     def _norm(self, x):
         """Norm of an element."""
-        return self.weighting.norm(x)
-
-    def _inner(self, x1, x2):
-        """Inner product of two elements."""
-        return self.weighting.inner(x1, x2)
-
-    def _multiply(self, x1, x2, out):
-        """Product ``out = x1 * x2``."""
-        for spc, xp, yp, outp in zip(self.spaces, x1.parts, x2.parts,
-                                     out.parts):
-            spc._multiply(xp, yp, outp)
-
-    def _divide(self, x1, x2, out):
-        """Quotient ``out = x1 / x2``."""
-        for spc, xp, yp, outp in zip(self.spaces, x1.parts, x2.parts,
-                                     out.parts):
-            spc._divide(xp, yp, outp)
+        return weighted_norm(x, self.weighting, self.exponent, self.spaces)
 
     def __eq__(self, other):
         """Return ``self == other``.
@@ -548,13 +521,13 @@ class ProductSpace(LinearSpace):
         --------
         >>> r2, r3 = odl.rn(2), odl.rn(3)
         >>> rn, rm = odl.rn(2), odl.rn(3)
-        >>> r2x3, rnxm = ProductSpace(r2, r3), ProductSpace(rn, rm)
+        >>> r2x3, rnxm = odl.ProductSpace(r2, r3), odl.ProductSpace(rn, rm)
         >>> r2x3 == rnxm
         True
-        >>> r3x2 = ProductSpace(r3, r2)
+        >>> r3x2 = odl.ProductSpace(r3, r2)
         >>> r2x3 == r3x2
         False
-        >>> r5 = ProductSpace(*[odl.rn(1)]*5)
+        >>> r5 = odl.ProductSpace(*[odl.rn(1)]*5)
         >>> r2x3 == r5
         False
         >>> r5 = odl.rn(5)
@@ -667,6 +640,117 @@ class ProductSpace(LinearSpace):
             raise TypeError('`indices` must be integer, slice, tuple or '
                             'list, got {!r}'.format(indices))
 
+    # TODO: fix
+    def show(sel, x, title=None, indices=None, **kwargs):
+        """Display the parts of this product space element graphically.
+
+        Parameters
+        ----------
+        title : string, optional
+            Title of the figures
+
+        indices : int, slice, tuple or list, optional
+            Display parts of ``self`` in the way described in the following.
+
+            A single list of integers selects the corresponding parts
+            of this vector.
+
+            For other tuples or lists, the first entry indexes the parts of
+            this vector, and the remaining entries (if any) are used to
+            slice into the parts. Handling those remaining indices is
+            up to the ``show`` methods of the parts to be displayed.
+
+            The types of the first entry trigger the following behaviors:
+
+                - ``int``: take the part corresponding to this index
+                - ``slice``: take a subset of the parts
+                - ``None``: equivalent to ``slice(None)``, i.e., everything
+
+            Typical use cases are displaying of selected parts, which can
+            be achieved with a list, e.g., ``indices=[0, 2]`` for parts
+            0 and 2, and plotting of all parts sliced in a certain way,
+            e.g., ``indices=[None, 20, None]`` for showing all parts
+            sliced with indices ``[20, None]``.
+
+            A single ``int``, ``slice``, ``list`` or ``None`` object
+            indexes the parts only, i.e., is treated roughly as
+            ``(indices, Ellipsis)``. In particular, for ``None``, all
+            parts are shown with default slicing.
+
+        in_figs : sequence of `matplotlib.figure.Figure`, optional
+            Update these figures instead of creating new ones. Typically
+            the return value of an earlier call to ``show`` is used
+            for this parameter.
+
+        kwargs
+            Additional arguments passed on to the ``show`` methods of
+            the parts.
+
+        Returns
+        -------
+        figs : tuple of `matplotlib.figure.Figure`
+            The resulting figures. In an interactive shell, they are
+            automatically displayed.
+
+        See Also
+        --------
+        odl.discr.lp_discr.DiscreteLpElement.show :
+            Display of a discretized function
+        odl.space.base_tensors.Tensor.show :
+            Display of sequence type data
+        odl.util.graphics.show_discrete_data :
+            Underlying implementation
+        """
+        if title is None:
+            title = 'ProductSpaceElement'
+
+        if indices is None:
+            if len(self) < 5:
+                indices = list(range(len(self)))
+            else:
+                indices = list(np.linspace(0, len(self) - 1, 4, dtype=int))
+        else:
+            if (isinstance(indices, tuple) or
+                    (isinstance(indices, list) and
+                     not all(isinstance(idx, Integral) for idx in indices))):
+                # Tuples or lists containing non-integers index by axis.
+                # We use the first index for the current pspace and pass
+                # on the rest.
+                indices, kwargs['indices'] = indices[0], indices[1:]
+
+            # Support `indices=[None, 0, None]` like syntax (`indices` is
+            # the first entry as of now in that case)
+            if indices is None:
+                indices = slice(None)
+
+            if isinstance(indices, slice):
+                indices = list(range(*indices.indices(len(self))))
+            elif isinstance(indices, Integral):
+                indices = [indices]
+            else:
+                # Use `indices` as-is
+                pass
+
+        in_figs = kwargs.pop('fig', None)
+        in_figs = [None] * len(indices) if in_figs is None else in_figs
+
+        figs = []
+        parts = self[indices]
+        if len(parts) == 0:
+            return ()
+        elif len(parts) == 1:
+            # Don't extend the title if there is only one plot
+            fig = parts[0].show(title=title, fig=in_figs[0], **kwargs)
+            figs.append(fig)
+        else:
+            # Extend titles by indexed part to make them distinguishable
+            for i, part, fig in zip(indices, parts, in_figs):
+                fig = part.show(title='{}. Part {}'.format(title, i), fig=fig,
+                                **kwargs)
+                figs.append(fig)
+
+        return tuple(figs)
+
     def __str__(self):
         """Return ``str(self)``."""
         if len(self) == 0:
@@ -678,7 +762,6 @@ class ProductSpace(LinearSpace):
 
     def __repr__(self):
         """Return ``repr(self)``."""
-        weight_str = self.weighting.repr_part
         edgeitems = np.get_printoptions()['edgeitems']
         if len(self) == 0:
             posargs = []
@@ -695,8 +778,7 @@ class ProductSpace(LinearSpace):
             posmod = '!r'
             optargs = []
             argstr = ', '.join(repr(s) for s in self.spaces)
-            oneline = (len(argstr + weight_str) <= 40 and
-                       '\n' not in argstr + weight_str)
+            oneline = (len(argstr) <= 40 and '\n' not in argstr)
         else:
             posargs = (self.spaces[:edgeitems] +
                        ('...',) +
@@ -708,217 +790,58 @@ class ProductSpace(LinearSpace):
         if oneline:
             inner_str = signature_string(posargs, optargs, sep=', ',
                                          mod=[posmod, '!r'])
-            if weight_str:
-                inner_str = ', '.join([inner_str, weight_str])
             return '{}({})'.format(self.__class__.__name__, inner_str)
         else:
             inner_str = signature_string(posargs, optargs, sep=',\n',
                                          mod=[posmod, '!r'])
-            if weight_str:
-                inner_str = ',\n'.join([inner_str, weight_str])
             return '{}(\n{}\n)'.format(self.__class__.__name__,
                                        indent(inner_str))
 
 
-# TODO: replace `self`
-def show(self, title=None, indices=None, **kwargs):
-    """Display the parts of this product space element graphically.
+def weight_type(w):
+    """Dispatch function for the type of weight."""
+    return 'constant' if np.isscalar(w) else 'array'
+
+
+@protocol(dispatcher=weight_type)
+def weighted_inner(x1, x2, weights, subspaces):
+    r"""Weighted inner product on product spaces.
 
     Parameters
     ----------
-    title : string, optional
-        Title of the figures
-
-    indices : int, slice, tuple or list, optional
-        Display parts of ``self`` in the way described in the following.
-
-        A single list of integers selects the corresponding parts
-        of this vector.
-
-        For other tuples or lists, the first entry indexes the parts of
-        this vector, and the remaining entries (if any) are used to
-        slice into the parts. Handling those remaining indices is
-        up to the ``show`` methods of the parts to be displayed.
-
-        The types of the first entry trigger the following behaviors:
-
-            - ``int``: take the part corresponding to this index
-            - ``slice``: take a subset of the parts
-            - ``None``: equivalent to ``slice(None)``, i.e., everything
-
-        Typical use cases are displaying of selected parts, which can
-        be achieved with a list, e.g., ``indices=[0, 2]`` for parts
-        0 and 2, and plotting of all parts sliced in a certain way,
-        e.g., ``indices=[None, 20, None]`` for showing all parts
-        sliced with indices ``[20, None]``.
-
-        A single ``int``, ``slice``, ``list`` or ``None`` object
-        indexes the parts only, i.e., is treated roughly as
-        ``(indices, Ellipsis)``. In particular, for ``None``, all
-        parts are shown with default slicing.
-
-    in_figs : sequence of `matplotlib.figure.Figure`, optional
-        Update these figures instead of creating new ones. Typically
-        the return value of an earlier call to ``show`` is used
-        for this parameter.
-
-    kwargs
-        Additional arguments passed on to the ``show`` methods of
-        the parts.
-
-    Returns
-    -------
-    figs : tuple of `matplotlib.figure.Figure`
-        The resulting figures. In an interactive shell, they are
-        automatically displayed.
-
-    See Also
-    --------
-    odl.discr.lp_discr.DiscreteLpElement.show :
-        Display of a discretized function
-    odl.space.base_tensors.Tensor.show :
-        Display of sequence type data
-    odl.util.graphics.show_discrete_data :
-        Underlying implementation
-    """
-    if title is None:
-        title = 'ProductSpaceElement'
-
-    if indices is None:
-        if len(self) < 5:
-            indices = list(range(len(self)))
-        else:
-            indices = list(np.linspace(0, len(self) - 1, 4, dtype=int))
-    else:
-        if (isinstance(indices, tuple) or
-                (isinstance(indices, list) and
-                 not all(isinstance(idx, Integral) for idx in indices))):
-            # Tuples or lists containing non-integers index by axis.
-            # We use the first index for the current pspace and pass
-            # on the rest.
-            indices, kwargs['indices'] = indices[0], indices[1:]
-
-        # Support `indices=[None, 0, None]` like syntax (`indices` is
-        # the first entry as of now in that case)
-        if indices is None:
-            indices = slice(None)
-
-        if isinstance(indices, slice):
-            indices = list(range(*indices.indices(len(self))))
-        elif isinstance(indices, Integral):
-            indices = [indices]
-        else:
-            # Use `indices` as-is
-            pass
-
-    in_figs = kwargs.pop('fig', None)
-    in_figs = [None] * len(indices) if in_figs is None else in_figs
-
-    figs = []
-    parts = self[indices]
-    if len(parts) == 0:
-        return ()
-    elif len(parts) == 1:
-        # Don't extend the title if there is only one plot
-        fig = parts[0].show(title=title, fig=in_figs[0], **kwargs)
-        figs.append(fig)
-    else:
-        # Extend titles by indexed part to make them distinguishable
-        for i, part, fig in zip(indices, parts, in_figs):
-            fig = part.show(title='{}. Part {}'.format(title, i), fig=fig,
-                            **kwargs)
-            figs.append(fig)
-
-    return tuple(figs)
-
-
-from functools import wraps
-
-
-def protocol(dispatcher):
-
-    def proto_deco(pfun):  # decorator for the protocol function
-        _proto_impls = {}
-
-        @wraps(pfun)
-        def proto_fun_and_deco(*args, **kwargs):  # function and decorator
-            try:
-                retval = kwargs['retval']
-            except KeyError:
-                i_am_deco = False
-            else:
-                i_am_deco = True
-
-            if i_am_deco:
-
-                def deco(handler):
-                    # Register handler with retval
-                    _proto_impls[retval] = handler
-                    return handler
-
-                return deco
-            else:
-                # Normal execution, run dispatch logic
-                dispval = dispatcher(*args, **kwargs)
-                try:
-                    handler = _proto_impls[dispval]
-                except KeyError:
-                    raise RuntimeError(
-                        'no handler registered for dispatch value {}'
-                        ''.format(dispval)
-                    )
-                else:
-                    return handler(*args, **kwargs)
-
-
-        return proto_fun_and_deco
-    return proto_deco
-
-
-@protocol(dispatcher=type)
-def myfun(x):
-    pass
-
-
-@myfun(retval=tuple)
-def _myfun_tuple(x):
-    print(len(x))
-
-
-@myfun(retval=int)
-def _myfun_int(x):
-    print(x)
-
-
-def _array_weighted_inner(x1, x2, weights, subspaces):
-    r"""Array weighting for `ProductSpace`.
-
-    Parameters
-    ----------
-    x1, x2 : `ProductSpaceElement`
-        Elements whose inner product is calculated.
-    weights : 1-dim. `array-like`
-        Weighting array of the inner product.
+    x1, x2
+        Space elements whose inner product should be calculated.
+    weights : numpy.ndarray or scalar
+        One-dimensional array or scalar constant. All weights must be
+        positive, but for arrays this is not checked.
     subspaces : sequence of `LinearSpace`
         Spaces in which the parts of ``x1`` and ``x2`` live.
 
     Returns
     -------
     inner : scalar
-        The weighted inner product.
+        The weighted inner product of ``x1`` and ``x2``.
 
     Notes
     -----
-    The weighted inner product with array :math:`w` is defined as
+    - If :math:`w` is an array, the weighted inner product is defined as
 
-    .. math::
-        \langle x, y \rangle_w = \langle w \odot x, y \rangle
+      .. math::
+          \langle x, y \rangle_w = \langle w \odot x, y \rangle
 
-    with component-wise multiplication :math:`w \odot x`.
+      with component-wise multiplication :math:`w \odot x`.
 
-    The weights :math:`w` may only have positive entries. This is not checked
-    during initialization.
+    - If :math:`w` is a scalar constant, the weighted inner product is given
+      as
+
+      .. math::
+          \langle x, y \rangle_w = w\, \langle x, y \rangle.
     """
+
+
+@weighted_inner.register('array')
+def _array_weighted_inner(x1, x2, weights, subspaces):
+    r"""Inner product on product spaces, weighted by an array."""
     inners = np.array(
         [spc.inner(x1i, x2i) for x1i, x2i, spc in zip(x1, x2, subspaces)]
     )
@@ -929,284 +852,97 @@ def _array_weighted_inner(x1, x2, weights, subspaces):
         return complex(inner)
 
 
-def _array_weighted_norm(x, weights, subspaces):
-    """Array weighting for `ProductSpace`.
+@weighted_inner.register('const')
+def _const_weighted_inner(x1, x2, weight, subspaces):
+    r"""Inner product on product spaces, weighted by a constant."""
+    inners = np.array(
+        [spc.inner(x1i, x2i) for x1i, x2i, spc in zip(x1, x2, subspaces)]
+    )
+    inner = weight * np.sum(inners)
+    if is_real_dtype(inners.dtype):
+        return float(inner)
+    else:
+        return complex(inner)
+
+
+@protocol(dispatcher=weight_type)
+def weighted_norm(x, weights, exponent, subspaces):
+    r"""Weighted norm on product spaces.
 
     Parameters
     ----------
-    x : `ProductSpaceElement`
+    x
         Element whose norm is calculated.
-    weights : 1-dim. `array-like`
-        Weighting array of the inner product.
+    weights : numpy.ndarray or scalar
+        One-dimensional array or scalar constant. All weights must be
+        positive, but for arrays this is not checked.
+    exponent : float
+        Exponent of the norm.
     subspaces : sequence of `LinearSpace`
         Spaces in which the parts of ``x1`` and ``x2`` live.
 
+    Returns
+    -------
+    norm : float
+        The weighted norm of ``x``.
+
     Notes
     -----
-    - For exponent 2.0, a new weighted inner product with array
-      :math:`w` is defined as
+    - If :math:`w` is an array, the weighted norm is defined as
 
       .. math::
-          \\langle x, y \\rangle_w = \\langle w \odot x, y \\rangle
+          \|x\|_{w,p} = \|w^{1/p} \odot x\|_p,\quad & p < \infty,
 
-      with component-wise multiplication :math:`w \odot x`. For other
-      exponents, only ``norm`` and ``dist`` are defined. In the case
-      of exponent ``inf``, the weighted norm is
+          \|x\|_{w,\infty} = \|w \odot x\|_\infty,\quad & p = \infty,
 
-      .. math::
-          \|x\|_{w,\infty} = \|w \odot x\|_\infty,
+      with component-wise multiplication :math:`w \odot x`.
 
-      otherwise it is
+    - If :math:`w` is a scalar constant, the weighted norm is given as
 
       .. math::
-          \|x\|_{w,p} = \|w^{1/p} \odot x\|_p.
+          \|x\|_{w,p} = w^{1/p} \|x\|_p,\quad & p < \infty,
 
-    - Note that this definition does **not** fulfill the limit property
-      in :math:`p`, i.e.,
-
-      .. math::
-          \|x\|_{w,p} \\not\\to \|x\|_{w,\infty}
-          \quad\\text{for } p \\to \infty
-
-      unless :math:`w = (1,...,1)`. The reason for this choice
-      is that the alternative with the limit property consists in
-      ignoring the weights altogether.
-
-    - The array may only have positive entries, otherwise it does not
-      define an inner product or norm, respectively. This is not checked
-      during initialization.
+          \|x\|_{w,\infty} = w \|x\|_\infty,\quad & p = \infty.
     """
 
-    def norm(self, x):
-        """Calculate the array-weighted norm of an element.
 
-        Parameters
-        ----------
-        x : `ProductSpaceElement`
-            Element whose norm is calculated.
+@weighted_norm.register('array')
+def _array_weighted_norm(x, weights, exponent, subspaces):
+    """Norm on product spaces, weighted by an array."""
+    if exponent == 2.0:
+        norm_squared = _array_weighted_inner(x, x, weights, subspaces).real
+        return float(np.sqrt(norm_squared))
 
-        Returns
-        -------
-        norm : float
-            The norm of the provided element.
-        """
-        if self.exponent == 2.0:
-            norm_squared = self.inner(x, x).real  # TODO: optimize?!
-            return np.sqrt(norm_squared)
-        else:
-            norms = np.fromiter(
-                (xi.norm() for xi in x), dtype=np.float64, count=len(x))
-            if self.exponent in (1.0, float('inf')):
-                norms *= self.array
-            else:
-                norms *= self.array ** (1.0 / self.exponent)
+    norms = np.array(
+        [spc.norm(xi) for xi, spc in zip(x, subspaces)],
+        dtype=float
+    )
+    if exponent in (1.0, float('inf')):
+        norms *= weights
+    else:
+        norms *= weights ** (1.0 / exponent)
 
-            return float(np.linalg.norm(norms, ord=self.exponent))
+    return float(np.linalg.norm(norms, ord=exponent))
 
 
-class ProductSpaceConstWeighting(ConstWeighting):
+@weighted_norm.register('const')
+def _const_weighted_norm(x, weight, exponent, subspaces):
+    r"""Norm on product spaces, weighted by a constant."""
+    if exponent == 2.0:
+        norm_squared = _const_weighted_inner(x, x, weight, subspaces).real
+        return float(np.sqrt(norm_squared))
 
-    """Constant weighting for `ProductSpace`.
+    norms = np.array(
+        [spc.norm(xi) for xi, spc in zip(x, subspaces)],
+        dtype=float
+    )
+    norm = np.linalg.norm(norms, ord=exponent)
+    if exponent in (1.0, float('inf')):
+        norm *= weight
+    else:
+        norm *= weight ** (1.0 / exponent)
 
-    """
-
-    def __init__(self, constant, exponent=2.0):
-        """Initialize a new instance.
-
-        Parameters
-        ----------
-        constant : positive float
-            Weighting constant of the inner product
-        exponent : positive float, optional
-            Exponent of the norm. For values other than 2.0, no inner
-            product is defined.
-
-        Notes
-        -----
-        - For exponent 2.0, a new weighted inner product with constant
-          :math:`c` is defined as
-
-          .. math::
-            \\langle x, y \\rangle_c = c\, \\langle x, y \\rangle.
-
-          For other exponents, only ``norm`` and ```dist`` are defined.
-          In the case of exponent ``inf``, the weighted norm is
-
-          .. math::
-              \|x\|_{c,\infty} = c\, \|x\|_\infty,
-
-          otherwise it is
-
-          .. math::
-              \|x\|_{c,p} = c^{1/p} \, \|x\|_p.
-
-        - Note that this definition does **not** fulfill the limit property
-          in :math:`p`, i.e.,
-
-          .. math::
-              \|x\|_{c,p} \\not\\to \|x\|_{c,\infty}
-              \quad \\text{for } p \\to \infty
-
-          unless :math:`c = 1`. The reason for this choice
-          is that the alternative with the limit property consists in
-          ignoring the weight altogether.
-
-        - The constant must be positive, otherwise it does not define an
-          inner product or norm, respectively.
-        """
-        super(ProductSpaceConstWeighting, self).__init__(
-            constant, impl='numpy', exponent=exponent)
-
-    def inner(self, x1, x2):
-        """Calculate the constant-weighted inner product of two elements.
-
-        Parameters
-        ----------
-        x1, x2 : `ProductSpaceElement`
-            Elements whose inner product is calculated.
-
-        Returns
-        -------
-        inner : float or complex
-            The inner product of the two provided elements.
-        """
-        if self.exponent != 2.0:
-            raise NotImplementedError('no inner product defined for '
-                                      'exponent != 2 (got {})'
-                                      ''.format(self.exponent))
-
-        inners = np.fromiter(
-            (x1i.inner(x2i) for x1i, x2i in zip(x1, x2)),
-            dtype=x1[0].space.dtype, count=len(x1))
-
-        inner = self.const * np.sum(inners)
-        return x1.space.field.element(inner)
-
-    def norm(self, x):
-        """Calculate the constant-weighted norm of an element.
-
-        Parameters
-        ----------
-        x1 : `ProductSpaceElement`
-            Element whose norm is calculated.
-
-        Returns
-        -------
-        norm : float
-            The norm of the element.
-        """
-        if self.exponent == 2.0:
-            norm_squared = self.inner(x, x).real  # TODO: optimize?!
-            return np.sqrt(norm_squared)
-        else:
-            norms = np.fromiter(
-                (xi.norm() for xi in x), dtype=np.float64, count=len(x))
-
-            if self.exponent in (1.0, float('inf')):
-                return (self.const *
-                        float(np.linalg.norm(norms, ord=self.exponent)))
-            else:
-                return (self.const ** (1 / self.exponent) *
-                        float(np.linalg.norm(norms, ord=self.exponent)))
-
-    def dist(self, x1, x2):
-        """Calculate the constant-weighted distance between two elements.
-
-        Parameters
-        ----------
-        x1, x2 : `ProductSpaceElement`
-            Elements whose mutual distance is calculated.
-
-        Returns
-        -------
-        dist : float
-            The distance between the elements.
-        """
-        dnorms = np.fromiter(
-            ((x1i - x2i).norm() for x1i, x2i in zip(x1, x2)),
-            dtype=np.float64, count=len(x1))
-
-        if self.exponent == float('inf'):
-            return self.const * np.linalg.norm(dnorms, ord=self.exponent)
-        else:
-            return (self.const ** (1 / self.exponent) *
-                    np.linalg.norm(dnorms, ord=self.exponent))
-
-
-class ProductSpaceCustomInner(CustomInner):
-
-    """Class for handling a user-specified inner products."""
-
-    def __init__(self, inner):
-        """Initialize a new instance.
-
-        Parameters
-        ----------
-        inner : callable
-            The inner product implementation. It must accept two
-            `ProductSpaceElement` arguments, return a element from
-            the field of the space (real or complex number) and
-            satisfy the following conditions for all space elements
-            ``x, y, z`` and scalars ``s``:
-
-            - ``<x, y> = conj(<y, x>)``
-            - ``<s*x + y, z> = s * <x, z> + <y, z>``
-            - ``<x, x> = 0``  if and only if  ``x = 0``
-        """
-        super(ProductSpaceCustomInner, self).__init__(
-            impl='numpy', inner=inner)
-
-
-class ProductSpaceCustomNorm(CustomNorm):
-
-    """Class for handling a user-specified norm on `ProductSpace`.
-
-    Note that this removes ``inner``.
-    """
-
-    def __init__(self, norm):
-        """Initialize a new instance.
-
-        Parameters
-        ----------
-        norm : callable
-            The norm implementation. It must accept a
-            `ProductSpaceElement` argument, return a float and satisfy
-            the following conditions for all space elements
-            ``x, y`` and scalars ``s``:
-
-            - ``||x|| >= 0``
-            - ``||x|| = 0``  if and only if  ``x = 0``
-            - ``||s * x|| = |s| * ||x||``
-            - ``||x + y|| <= ||x|| + ||y||``
-        """
-        super(ProductSpaceCustomNorm, self).__init__(norm, impl='numpy')
-
-
-class ProductSpaceCustomDist(CustomDist):
-
-    """Class for handling a user-specified distance on `ProductSpace`.
-
-    Note that this removes ``inner`` and ``norm``.
-    """
-
-    def __init__(self, dist):
-        """Initialize a new instance.
-
-        Parameters
-        ----------
-        dist : callable
-            The distance function defining a metric on
-            `ProductSpace`. It must accept two `ProductSpaceElement`
-            arguments and fulfill the following mathematical conditions
-            for any three space elements ``x, y, z``:
-
-            - ``dist(x, y) >= 0``
-            - ``dist(x, y) = 0``  if and only if  ``x = y``
-            - ``dist(x, y) = dist(y, x)``
-            - ``dist(x, y) <= dist(x, z) + dist(z, y)``
-        """
-        super(ProductSpaceCustomDist, self).__init__(dist, impl='numpy')
+    return float(norm)
 
 
 def _strip_space(x):
