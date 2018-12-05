@@ -277,20 +277,19 @@ class Gradient(PointwiseTensorFieldOperator):
         >>> grad(x)
         array([[[ 0.,  1.,  2.,  3.,  4.],
                 [ 0., -2., -4., -6., -8.]],
-
+        <BLANKLINE>
                [[ 1.,  1.,  1.,  1., -4.],
                 [ 2.,  2.,  2.,  2., -8.]]])
 
         Verify adjoint:
 
-        >>> g = grad.range.element((x, x ** 2))
+        >>> gspace = grad.range
+        >>> g = gspace.element((x, x ** 2))
         >>> adj_g = grad.adjoint(g)
         >>> adj_g
-        uniform_discr([ 0.,  0.], [ 2.,  5.], (2, 5)).element(
-            [[  0.,  -2.,  -5.,  -8., -11.],
-             [  0.,  -5., -14., -23., -32.]]
-        )
-        >>> g.inner(grad_f) / f.inner(adj_g)
+        array([[ -0.,  -2.,  -5.,  -8., -11.],
+               [ -0.,  -5., -14., -23., -32.]])
+        >>> gspace.inner(grad(x), g) / space.inner(x, adj_g)
         1.0
         """
         if domain is None and range is None:
@@ -672,18 +671,15 @@ class Laplacian(PointwiseTensorFieldOperator):
 
         Examples
         --------
-        >>> data = np.array([[ 0., 0., 0.],
-        ...                  [ 0., 1., 0.],
-        ...                  [ 0., 0., 0.]])
+        >>> x = np.array([[ 0., 0., 0.],
+        ...               [ 0., 1., 0.],
+        ...               [ 0., 0., 0.]])
         >>> space = odl.uniform_discr([0, 0], [3, 3], [3, 3])
-        >>> f = space.element(data)
         >>> lap = Laplacian(space)
-        >>> lap(f)
-        uniform_discr([ 0.,  0.], [ 3.,  3.], (3, 3)).element(
-            [[ 0.,  1.,  0.],
-             [ 1., -4.,  1.],
-             [ 0.,  1.,  0.]]
-        )
+        >>> lap(x)
+        array([[ 0.,  1.,  0.],
+               [ 1., -4.,  1.],
+               [ 0.,  1.,  0.]])
         """
         if not isinstance(domain, DiscreteLp):
             raise TypeError('`domain` {!r} is not a DiscreteLp instance'
@@ -712,11 +708,11 @@ class Laplacian(PointwiseTensorFieldOperator):
         if out is None:
             out = self.range.zero()
         else:
-            out.set_zero()
+            out[:] = 0
 
-        x_arr = x.asarray()
-        out_arr = out.asarray()
-        tmp = np.empty(out.shape, out.dtype, order=out.space.default_order)
+        tmp = np.empty(
+            self.range.shape, self.range.dtype, order=self.range.default_order
+        )
 
         ndim = self.domain.ndim
         dx = self.domain.cell_sides
@@ -724,14 +720,14 @@ class Laplacian(PointwiseTensorFieldOperator):
         with writable_array(out) as out_arr:
             for axis in range(ndim):
                 # TODO: this can be optimized
-                finite_diff(x_arr, axis=axis, dx=dx[axis] ** 2,
+                finite_diff(x, axis=axis, dx=dx[axis] ** 2,
                             method='forward',
                             pad_mode=self.pad_mode,
                             pad_const=self.pad_const, out=tmp)
 
                 out_arr += tmp
 
-                finite_diff(x_arr, axis=axis, dx=dx[axis] ** 2,
+                finite_diff(x, axis=axis, dx=dx[axis] ** 2,
                             method='backward',
                             pad_mode=self.pad_mode,
                             pad_const=self.pad_const, out=tmp)

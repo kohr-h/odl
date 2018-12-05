@@ -491,34 +491,28 @@ class DiscreteLp(TensorSpace):
             # TODO: implement without copying x
             bdry_fracs = self.partition.boundary_cell_fractions
             func_list = _scaling_func_list(bdry_fracs, exponent=1.0)
-            x_arr = apply_on_boundary(x, func=func_list, only_once=False)
-            return super(DiscreteLp, self)._inner(self.element(x_arr), y)
-        else:
-            return super(DiscreteLp, self)._inner(x, y)
+            x = apply_on_boundary(x, func=func_list, only_once=False)
+
+        return self.tspace.inner(x, y)
 
     def _norm(self, x):
         """Return ``self.norm(x)``."""
         if self.is_uniform and not self.is_uniformly_weighted:
-            # TODO: implement without copying x
             bdry_fracs = self.partition.boundary_cell_fractions
             func_list = _scaling_func_list(bdry_fracs, exponent=self.exponent)
-            x_arr = apply_on_boundary(x, func=func_list, only_once=False)
-            return super(DiscreteLp, self)._norm(self.element(x_arr))
-        else:
-            return super(DiscreteLp, self)._norm(x)
+            x = apply_on_boundary(x, func=func_list, only_once=False)
+
+        return self.tspace.norm(x)
 
     def _dist(self, x, y):
         """Return ``self.dist(x, y)``."""
         if self.is_uniform and not self.is_uniformly_weighted:
             bdry_fracs = self.partition.boundary_cell_fractions
             func_list = _scaling_func_list(bdry_fracs, exponent=self.exponent)
-            arrs = [apply_on_boundary(vec, func=func_list, only_once=False)
-                    for vec in (x, y)]
+            x, y = [apply_on_boundary(v, func=func_list, only_once=False)
+                    for v in (x, y)]
 
-            return super(DiscreteLp, self)._dist(
-                self.element(arrs[0]), self.element(arrs[1]))
-        else:
-            return super(DiscreteLp, self)._dist(x, y)
+        return self.tspace.dist(x, y)
 
     def __repr__(self):
         """Return ``repr(self)``."""
