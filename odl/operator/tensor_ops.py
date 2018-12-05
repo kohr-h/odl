@@ -18,7 +18,6 @@ from odl.set import RealNumbers, ComplexNumbers
 from odl.space.pspace import ProductSpace
 from odl.space.space_utils import tensor_space
 from odl.space.base_tensors import TensorSpace
-from odl.space.weighting import ArrayWeighting
 from odl.util import (
     signature_string, indent, dtype_repr, moveaxis, writable_array)
 

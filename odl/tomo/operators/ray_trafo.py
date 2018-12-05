@@ -16,7 +16,6 @@ from odl.discr import DiscreteLp
 from odl.operator import Operator
 from odl.tomo.geometry import (
     Geometry, Parallel2dGeometry, Parallel3dAxisGeometry)
-from odl.space.weighting import ConstWeighting
 from odl.tomo.backends import (
     ASTRA_AVAILABLE, ASTRA_CUDA_AVAILABLE, SKIMAGE_AVAILABLE,
     astra_supports, ASTRA_VERSION,

@@ -63,10 +63,6 @@ class ProductSpace(LinearSpace):
 
             ``None`` : no weighting (default)
 
-            `Weighting` : weighting class, used directly. Such a
-            class instance can be retrieved from the space by the
-            `ProductSpace.weighting` property.
-
             `array-like` : weigh each component with one entry from the
             array. The array must be one-dimensional and have the same
             length as the number of spaces.
@@ -241,6 +237,7 @@ class ProductSpace(LinearSpace):
         if weighting is None:
             weighting = 1.0
 
+        # FIXME: use _weight_type
         if np.isscalar(weighting):
             self.__weighting = float(weighting)
             self.__weighting_type = 'const'
@@ -329,6 +326,7 @@ class ProductSpace(LinearSpace):
     @property
     def exponent(self):
         """Exponent of the product space norm/dist, ``None`` for custom."""
+        # FIXME: replace and add to init
         return self.weighting.exponent
 
     @property
@@ -536,16 +534,12 @@ class ProductSpace(LinearSpace):
         """
         if other is self:
             return True
-        else:
-            return (isinstance(other, ProductSpace) and
-                    len(self) == len(other) and
-                    self.weighting == other.weighting and
-                    all(x == y for x, y in zip(self.spaces,
-                                               other.spaces)))
 
-    def __hash__(self):
-        """Return ``hash(self)``."""
-        return hash((type(self), self.spaces, self.weighting))
+        return (
+            isinstance(other, ProductSpace) and
+            len(self) == len(other) and
+            all(x == y for x, y in zip(self.spaces, other.spaces))
+        )
 
     def __getitem__(self, indices):
         """Return ``self[indices]``.
@@ -798,12 +792,20 @@ class ProductSpace(LinearSpace):
                                        indent(inner_str))
 
 
-def weight_type(w):
+def _weight_type(w):
     """Dispatch function for the type of weight."""
-    return 'constant' if np.isscalar(w) else 'array'
+    if np.isscalar(w) or (isinstance(w, np.ndarray) and w.size == 1):
+        return 'const'
+    elif isinstance(w, np.ndarray) and w.ndim == 1:
+        return 'array'
+    else:
+        return 'unknown'
 
 
-@protocol(dispatcher=weight_type)
+_dispatcher = lambda x1, x2, weights, subspaces: _weight_type(weights)
+
+
+@protocol(dispatcher=_dispatcher)
 def weighted_inner(x1, x2, weights, subspaces):
     r"""Weighted inner product on product spaces.
 
@@ -812,8 +814,8 @@ def weighted_inner(x1, x2, weights, subspaces):
     x1, x2
         Space elements whose inner product should be calculated.
     weights : numpy.ndarray or scalar
-        One-dimensional array or scalar constant. All weights must be
-        positive, but for arrays this is not checked.
+        One-dimensional array or scalar constant. All weights should be
+        positive, but this is not checked.
     subspaces : sequence of `LinearSpace`
         Spaces in which the parts of ``x1`` and ``x2`` live.
 
@@ -841,7 +843,7 @@ def weighted_inner(x1, x2, weights, subspaces):
 
 @weighted_inner.register('array')
 def _array_weighted_inner(x1, x2, weights, subspaces):
-    r"""Inner product on product spaces, weighted by an array."""
+    """Inner product on a product space, weighted by an array."""
     inners = np.array(
         [spc.inner(x1i, x2i) for x1i, x2i, spc in zip(x1, x2, subspaces)]
     )
@@ -854,7 +856,7 @@ def _array_weighted_inner(x1, x2, weights, subspaces):
 
 @weighted_inner.register('const')
 def _const_weighted_inner(x1, x2, weight, subspaces):
-    r"""Inner product on product spaces, weighted by a constant."""
+    """Inner product on a product space, weighted by a constant."""
     inners = np.array(
         [spc.inner(x1i, x2i) for x1i, x2i, spc in zip(x1, x2, subspaces)]
     )
@@ -865,7 +867,10 @@ def _const_weighted_inner(x1, x2, weight, subspaces):
         return complex(inner)
 
 
-@protocol(dispatcher=weight_type)
+_dispatcher = lambda x, weights, exponent, subspaces: _weight_type(weights)
+
+
+@protocol(dispatcher=_dispatcher)
 def weighted_norm(x, weights, exponent, subspaces):
     r"""Weighted norm on product spaces.
 
@@ -874,12 +879,12 @@ def weighted_norm(x, weights, exponent, subspaces):
     x
         Element whose norm is calculated.
     weights : numpy.ndarray or scalar
-        One-dimensional array or scalar constant. All weights must be
-        positive, but for arrays this is not checked.
+        One-dimensional array or scalar constant. All weights should be
+        positive, but this is not checked.
     exponent : float
         Exponent of the norm.
     subspaces : sequence of `LinearSpace`
-        Spaces in which the parts of ``x1`` and ``x2`` live.
+        Spaces in which the parts of ``x`` live.
 
     Returns
     -------
@@ -908,7 +913,7 @@ def weighted_norm(x, weights, exponent, subspaces):
 
 @weighted_norm.register('array')
 def _array_weighted_norm(x, weights, exponent, subspaces):
-    """Norm on product spaces, weighted by an array."""
+    """Norm on a product space, weighted by an array."""
     if exponent == 2.0:
         norm_squared = _array_weighted_inner(x, x, weights, subspaces).real
         return float(np.sqrt(norm_squared))
@@ -927,7 +932,7 @@ def _array_weighted_norm(x, weights, exponent, subspaces):
 
 @weighted_norm.register('const')
 def _const_weighted_norm(x, weight, exponent, subspaces):
-    r"""Norm on product spaces, weighted by a constant."""
+    r"""Norm on a product space, weighted by a constant."""
     if exponent == 2.0:
         norm_squared = _const_weighted_inner(x, x, weight, subspaces).real
         return float(np.sqrt(norm_squared))
@@ -943,23 +948,6 @@ def _const_weighted_norm(x, weight, exponent, subspaces):
         norm *= weight ** (1.0 / exponent)
 
     return float(norm)
-
-
-def _strip_space(x):
-    """Strip the SPACE.element( ... ) part from a repr."""
-    r = repr(x)
-    space_repr = '{!r}.element('.format(x.space)
-    if r.startswith(space_repr) and r.endswith(')'):
-        r = r[len(space_repr):-1]
-    return r
-
-
-def _indent(x):
-    """Indent a string by 4 characters."""
-    lines = x.splitlines()
-    for i, line in enumerate(lines):
-        lines[i] = '    ' + line
-    return '\n'.join(lines)
 
 
 if __name__ == '__main__':

@@ -14,7 +14,6 @@ __all__ = ()
 
 from . import base_tensors
 from . import entry_points
-from . import weighting
 
 from .npy_tensors import *
 __all__ += npy_tensors.__all__
