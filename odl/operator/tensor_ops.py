@@ -20,6 +20,7 @@ from odl.space.space_utils import tensor_space
 from odl.space.base_tensors import TensorSpace
 from odl.util import (
     signature_string, indent, dtype_repr, moveaxis, writable_array)
+from odl.util.utility import protocol
 
 
 __all__ = ('PointwiseNorm', 'PointwiseInner', 'PointwiseSum', 'MatrixOperator',
@@ -27,6 +28,11 @@ __all__ = ('PointwiseNorm', 'PointwiseInner', 'PointwiseSum', 'MatrixOperator',
            'FlatteningOperator')
 
 _SUPPORTED_DIFF_METHODS = ('central', 'forward', 'backward')
+
+
+def _pspace_variant(space, _, __):
+    """Dispatcher for power space vs. non-power-space."""
+    return 'power' if space.domain.is_power_space else 'non-power'
 
 
 class PointwiseTensorFieldOperator(Operator):
@@ -110,7 +116,7 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
     ``d``.
     """
 
-    def __init__(self, vfspace, exponent=None, weighting=None):
+    def __init__(self, vfspace, exponent=2.0, weighting=None):
         """Initialize a new instance.
 
         Parameters
@@ -123,14 +129,15 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
             Exponent of the norm in each point. Values between
             0 and 1 are currently not supported due to numerical
             instability.
-            Default: ``vfspace.exponent``
+
+            Default: ``2.0``
+
         weighting : `array-like` or positive float, optional
             Weighting array or constant for the norm. If an array is
             given, its length must be equal to ``len(domain)``, and
             all entries must be positive.
-            By default, the weights are is taken from
-            ``domain.weighting``. Note that this excludes unusual
-            weightings with custom inner product, norm or dist.
+
+            Default: no weighting
 
         Examples
         --------
@@ -140,28 +147,23 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
 
         >>> spc = odl.uniform_discr([-1, -1], [1, 1], (1, 2))
         >>> vfspace = odl.ProductSpace(spc, 2)
-        >>> pw_norm = odl.PointwiseNorm(vfspace)
-        >>> pw_norm.range == spc
+        >>> pwnorm = odl.PointwiseNorm(vfspace)
+        >>> pwnorm.range == spc
         True
 
         Now we can calculate the 2-norm in each point:
 
         >>> x = vfspace.element([[[1, -4]],
         ...                      [[0, 3]]])
-        >>> print(pw_norm(x))
-        [[ 1.,  5.]]
+        >>> pwnorm(x)
+        array([[ 1.,  5.]])
 
-        We can change the exponent either in the vector field space
-        or in the operator directly:
+        With ``exponent=1`` we can compute the pointwise 1-norm:
 
-        >>> vfspace = odl.ProductSpace(spc, 2, exponent=1)
-        >>> pw_norm = PointwiseNorm(vfspace)
-        >>> print(pw_norm(x))
-        [[ 1.,  7.]]
         >>> vfspace = odl.ProductSpace(spc, 2)
-        >>> pw_norm = PointwiseNorm(vfspace, exponent=1)
-        >>> print(pw_norm(x))
-        [[ 1.,  7.]]
+        >>> pwnorm = odl.PointwiseNorm(vfspace, exponent=1)
+        >>> pwnorm(x)
+        array([[ 1.,  7.]])
         """
         if not isinstance(vfspace, ProductSpace):
             raise TypeError('`vfspace` {!r} is not a ProductSpace '
@@ -173,45 +175,25 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
         # Need to check for product space shape once higher order tensors
         # are implemented
 
-        if exponent is None:
-            if self.domain.exponent is None:
-                raise ValueError('cannot determine `exponent` from {}'
-                                 ''.format(self.domain))
-            self._exponent = self.domain.exponent
-        elif exponent < 1:
+        if exponent < 1:
             raise ValueError('`exponent` smaller than 1 not allowed')
-        else:
-            self._exponent = float(exponent)
+        self.__exponent = float(exponent)
 
-        # Handle weighting, including sanity checks
         if weighting is None:
-            # TODO: find a more robust way of getting the weights as an array
-            if hasattr(self.domain.weighting, 'array'):
-                self.__weights = self.domain.weighting.array
-            elif hasattr(self.domain.weighting, 'const'):
-                self.__weights = (self.domain.weighting.const *
-                                  np.ones(len(self.domain)))
-            else:
-                raise ValueError('weighting scheme {!r} of the domain does '
-                                 'not define a weighting array or constant'
-                                 ''.format(self.domain.weighting))
-        elif np.isscalar(weighting):
-            if weighting <= 0:
-                raise ValueError('weighting constant must be positive, got '
-                                 '{}'.format(weighting))
+            weighting = 1.0
+
+        if np.isscalar(weighting):
+            # TODO(kohr-h): make more efficient by storing the float
             self.__weights = float(weighting) * np.ones(len(self.domain))
         else:
-            self.__weights = np.asarray(weighting, dtype='float64')
-            if (not np.all(self.weights > 0) or
-                    not np.all(np.isfinite(self.weights))):
-                raise ValueError('weighting array {} contains invalid '
-                                 'entries'.format(weighting))
-        self.__is_weighted = not np.array_equiv(self.weights, 1.0)
+            self.__weights = np.asarray(weighting, dtype=float)
+
+        self.__is_weighted = None  # lazy
 
     @property
     def exponent(self):
         """Exponent ``p`` of this norm."""
-        return self._exponent
+        return self.__exponent
 
     @property
     def weights(self):
@@ -221,36 +203,33 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
     @property
     def is_weighted(self):
         """``True`` if weighting is not 1 or all ones."""
+        if self.__is_weighted is None:
+            self.__is_weighted = not np.array_equiv(self.weights, 1.0)
         return self.__is_weighted
 
     def _call(self, f, out):
         """Implement ``self(f, out)``."""
-        if self.exponent == 1.0:
-            self._call_vecfield_1(f, out)
-        elif self.exponent == float('inf'):
-            self._call_vecfield_inf(f, out)
-        else:
-            self._call_vecfield_p(f, out)
+        return self._pwnorm_impl(f, out)
 
-    def _call_vecfield_1(self, vf, out):
-        """Implement ``self(vf, out)`` for exponent 1."""
-        vf[0].ufuncs.absolute(out=out)
-        if self.is_weighted:
-            out *= self.weights[0]
+    @protocol(dispatcher=_pspace_variant)
+    def _pwnorm_impl(self, f, out):
+        """Implementation of the pointwise norm."""
 
-        if len(self.domain) == 1:
-            return
+    @_pwnorm_impl.register('power')
+    def _pwnorm_power_space(self, f, out):
+        """Power space implementation for any exponent."""
+        pwnorm = np.linalg.norm(f, ord=self.exponent, axis=0)
+        out[:] = pwnorm
 
-        tmp = self.range.element()
-        for fi, wi in zip(vf[1:], self.weights[1:]):
-            fi.ufuncs.absolute(out=tmp)
-            if self.is_weighted:
-                tmp *= wi
-            out += tmp
+    @_pwnorm_impl.register('non-power')
+    @protocol(dispatcher=lambda self, f, out: self.exponent)
+    def _pwnorm_prod_space(self, f, out):
+        """Implementation of the pointwise norm for non-power spaces."""
 
-    def _call_vecfield_inf(self, vf, out):
-        """Implement ``self(vf, out)`` for exponent ``inf``."""
-        vf[0].ufuncs.absolute(out=out)
+    @_pwnorm_prod_space.register(1.0)
+    def _pwnorm_prod_space_exp_1(self, vf, out):
+        """Product space implementation for exponent 1."""
+        np.abs(vf[0], out=out)
         if self.is_weighted:
             out *= self.weights[0]
 
@@ -259,16 +238,34 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
 
         tmp = self.range.element()
         for vfi, wi in zip(vf[1:], self.weights[1:]):
-            vfi.ufuncs.absolute(out=tmp)
+            np.abs(vfi, out=tmp)
             if self.is_weighted:
                 tmp *= wi
-            out.ufuncs.maximum(tmp, out=out)
+            out += tmp
 
-    def _call_vecfield_p(self, vf, out):
-        """Implement ``self(vf, out)`` for exponent 1 < p < ``inf``."""
+    @_pwnorm_prod_space.register(float('inf'))
+    def _pwnorm_prod_space_exp_inf(self, vf, out):
+        """Product space implementation for exponent inf."""
+        np.abs(vf[0], out=out)
+        if self.is_weighted:
+            out *= self.weights[0]
+
+        if len(self.domain) == 1:
+            return
+
+        tmp = self.range.element()
+        for vfi, wi in zip(vf[1:], self.weights[1:]):
+            np.abs(vfi, out=tmp)
+            if self.is_weighted:
+                tmp *= wi
+            np.maximum(tmp, out, out=out)
+
+    @_pwnorm_prod_space.register()
+    def _pwnorm_prod_space_exp_other(self, vf, out):
+        """Product space implementation for other exponents."""
         # Optimization for 1 component - just absolute value (maybe weighted)
         if len(self.domain) == 1:
-            vf[0].ufuncs.absolute(out=out)
+            np.abs(vf[0], out=out)
             if self.is_weighted:
                 out *= self.weights[0] ** (1 / self.exponent)
             return
@@ -279,8 +276,8 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
             out *= self.weights[0]
 
         tmp = self.range.element()
-        for fi, wi in zip(vf[1:], self.weights[1:]):
-            self._abs_pow_ufunc(fi, out=tmp, p=self.exponent)
+        for vfi, wi in zip(vf[1:], self.weights[1:]):
+            self._abs_pow_ufunc(vfi, out=tmp, p=self.exponent)
             if self.is_weighted:
                 tmp *= wi
             out += tmp
@@ -291,13 +288,13 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
         """Compute |F_i(x)|^p point-wise and write to ``out``."""
         # Optimization for very common cases
         if p == 0.5:
-            fi.ufuncs.absolute(out=out)
-            out.ufuncs.sqrt(out=out)
+            np.abs(fi, out=out)
+            np.sqrt(out, out=out)
         elif p == 2.0 and self.base_space.field == RealNumbers():
-            fi.multiply(fi, out=out)
+            np.multiply(fi, fi, out=out)
         else:
-            fi.ufuncs.absolute(out=out)
-            out.ufuncs.power(p, out=out)
+            np.abs(fi, out=out)
+            np.power(out, p, out=out)
 
     def derivative(self, vf):
         """Derivative of the point-wise norm operator at ``vf``.
@@ -324,9 +321,9 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
         Raises
         ------
         NotImplementedError
-            * if the vector field space is complex, since the derivative
-              is not linear in that case
-            * if the exponent is ``inf``
+            * If the vector field space is complex, since the derivative
+              is not linear in that case.
+            * If the exponent is ``inf``.
         """
         if self.domain.field == ComplexNumbers():
             raise NotImplementedError('operator not Frechet-differentiable '
@@ -344,10 +341,10 @@ class PointwiseNorm(PointwiseTensorFieldOperator):
         inner_vf = vf.copy()
 
         for gi in inner_vf:
-            gi *= gi.ufuncs.absolute().ufuncs.power(self.exponent - 2)
+            gi *= np.abs(gi) ** (self.exponent - 2)
             if self.exponent >= 2:
                 # Any component that is zero is not divided with
-                nz = (vf_pwnorm_fac.asarray() != 0)
+                nz = (vf_pwnorm_fac != 0)
                 gi[nz] /= vf_pwnorm_fac[nz]
             else:
                 # For exponents < 2 there will be a singularity if any
@@ -402,38 +399,23 @@ class PointwiseInnerBase(PointwiseTensorFieldOperator):
                 domain=vfspace, range=vfspace[0], base_space=vfspace[0],
                 linear=True)
 
-        # Bail out if the space is complex but we cannot take the complex
-        # conjugate.
-        if (vfspace.field == ComplexNumbers() and
-                not hasattr(self.base_space.element_type, 'conj')):
-            raise NotImplementedError(
-                'base space element type {!r} does not implement conj() '
-                'method required for complex inner products'
-                ''.format(self.base_space.element_type))
+        self.__vecfield = vfspace.element(vecfield)
 
-        self._vecfield = vfspace.element(vecfield)
-
-        # Handle weighting, including sanity checks
         if weighting is None:
-            if hasattr(vfspace.weighting, 'array'):
-                self.__weights = vfspace.weighting.array
-            elif hasattr(vfspace.weighting, 'const'):
-                self.__weights = (vfspace.weighting.const *
-                                  np.ones(len(vfspace)))
-            else:
-                raise ValueError('weighting scheme {!r} of the domain does '
-                                 'not define a weighting array or constant'
-                                 ''.format(vfspace.weighting))
-        elif np.isscalar(weighting):
-            self.__weights = float(weighting) * np.ones(len(vfspace))
+            weighting = 1.0
+
+        if np.isscalar(weighting):
+            # TODO(kohr-h): make more efficient by storing the float
+            self.__weights = float(weighting) * np.ones(len(self.domain))
         else:
-            self.__weights = np.asarray(weighting, dtype='float64')
-        self.__is_weighted = not np.array_equiv(self.weights, 1.0)
+            self.__weights = np.asarray(weighting, dtype=float)
+
+        self.__is_weighted = None  # lazy
 
     @property
     def vecfield(self):
         """Fixed vector field ``G`` of this inner product."""
-        return self._vecfield
+        return self.__vecfield
 
     @property
     def weights(self):
@@ -443,6 +425,8 @@ class PointwiseInnerBase(PointwiseTensorFieldOperator):
     @property
     def is_weighted(self):
         """``True`` if weighting is not 1 or all ones."""
+        if self.__is_weighted is None:
+            self.__is_weighted = not np.array_equiv(self.weights, 1.0)
         return self.__is_weighted
 
     @property
@@ -498,32 +482,43 @@ class PointwiseInner(PointwiseInnerBase):
         >>> vfspace = odl.ProductSpace(spc, 2)
         >>> fixed_vf = np.array([[[0, 1]],
         ...                      [[1, -1]]])
-        >>> pw_inner = PointwiseInner(vfspace, fixed_vf)
-        >>> pw_inner.range == spc
+        >>> pwinner = odl.PointwiseInner(vfspace, fixed_vf)
+        >>> pwinner.range == spc
         True
 
         Now we can calculate the inner product in each point:
 
         >>> x = vfspace.element([[[1, -4]],
         ...                      [[0, 3]]])
-        >>> print(pw_inner(x))
-        [[ 0., -7.]]
+        >>> pwinner(x)
+        array([[ 0., -7.]])
         """
         super(PointwiseInner, self).__init__(
             adjoint=False, vfspace=vfspace, vecfield=vecfield,
             weighting=weighting)
 
-    @property
-    def vecfield(self):
-        """Fixed vector field ``G`` of this inner product."""
-        return self._vecfield
-
     def _call(self, vf, out):
         """Implement ``self(vf, out)``."""
+        return self._pwinner_impl(vf, out)
+
+    @protocol(dispatcher=_pspace_variant)
+    def _pwinner_impl(self, vf, out):
+        """Implementation of the pointwise inner product."""
+
+    @_pwinner_impl.register('power')
+    def _pwinner_power_space(self, vf, out):
+        """Implementation for power spaces."""
+        return np.einsum(
+            vf, [0, Ellipsis], self.vecfield, [0, Ellipsis], out=out
+        )
+
+    @_pwinner_impl.register('non-power')
+    def _pwinner_prod_space(self, vf, out):
+        """Implementation for non-power spaces."""
         if self.domain.field == ComplexNumbers():
-            vf[0].multiply(self._vecfield[0].conj(), out=out)
+            np.multiply(vf[0], self.vecfield[0].conj(), out=out)
         else:
-            vf[0].multiply(self._vecfield[0], out=out)
+            np.multiply(vf[0], self.vecfield[0], out=out)
 
         if self.is_weighted:
             out *= self.weights[0]
@@ -532,13 +527,11 @@ class PointwiseInner(PointwiseInnerBase):
             return
 
         tmp = self.range.element()
-        for vfi, gi, wi in zip(vf[1:], self.vecfield[1:],
-                               self.weights[1:]):
-
+        for vfi, gi, wi in zip(vf[1:], self.vecfield[1:], self.weights[1:]):
             if self.domain.field == ComplexNumbers():
-                vfi.multiply(gi.conj(), out=tmp)
+                np.multiply(vfi, gi.conj(), out=tmp)
             else:
-                vfi.multiply(gi, out=tmp)
+                np.multiply(vfi, gi, out=tmp)
 
             if self.is_weighted:
                 tmp *= wi

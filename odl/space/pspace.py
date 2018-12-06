@@ -41,11 +41,10 @@ class ProductSpace(LinearSpace):
             space. Can also be given as ``space, n`` with ``n`` integer,
             in which case the power space ``space ** n`` is created.
         exponent : non-zero float or ``float('inf')``, optional
-            Order of the product distance/norm, i.e.
+            Order of norm and distance, i.e. ::
 
-            ``dist(x, y) = np.linalg.norm(x-y, ord=exponent)``
-
-            ``norm(x) = np.linalg.norm(x, ord=exponent)``
+                norm(x) <=> np.linalg.norm(x, ord=exponent)
+                dist(x, y) <=> np.linalg.norm(x - y, ord=exponent)
 
             Values ``0 <= exponent < 1`` are currently unsupported
             due to numerical instability. See ``Notes`` for further
@@ -68,51 +67,6 @@ class ProductSpace(LinearSpace):
             length as the number of spaces.
 
             float : same weighting factor in each component
-
-        Other Parameters
-        ----------------
-        dist : callable, optional
-            The distance function defining a metric on the space.
-            It must accept two `ProductSpaceElement` arguments and
-            fulfill the following mathematical conditions for any
-            three space elements ``x, y, z``:
-
-            - ``dist(x, y) >= 0``
-            - ``dist(x, y) = 0``  if and only if  ``x = y``
-            - ``dist(x, y) = dist(y, x)``
-            - ``dist(x, y) <= dist(x, z) + dist(z, y)``
-
-            By default, ``dist(x, y)`` is calculated as ``norm(x - y)``.
-
-            Cannot be combined with: ``weighting, norm, inner``
-
-        norm : callable, optional
-            The norm implementation. It must accept an
-            `ProductSpaceElement` argument, return a float and satisfy the
-            following conditions for all space elements ``x, y`` and scalars
-            ``s``:
-
-            - ``||x|| >= 0``
-            - ``||x|| = 0``  if and only if  ``x = 0``
-            - ``||s * x|| = |s| * ||x||``
-            - ``||x + y|| <= ||x|| + ||y||``
-
-            By default, ``norm(x)`` is calculated as ``inner(x, x)``.
-
-            Cannot be combined with: ``weighting, dist, inner``
-
-        inner : callable, optional
-            The inner product implementation. It must accept two
-            `ProductSpaceElement` arguments, return a element from
-            the field of the space (real or complex number) and
-            satisfy the following conditions for all space elements
-            ``x, y, z`` and scalars ``s``:
-
-            - ``<x, y> = conj(<y, x>)``
-            - ``<s*x + y, z> = s * <x, z> + <y, z>``
-            - ``<x, x> = 0``  if and only if  ``x = 0``
-
-            Cannot be combined with: ``weighting, dist, norm``
 
         Examples
         --------
@@ -233,6 +187,8 @@ class ProductSpace(LinearSpace):
 
         super(ProductSpace, self).__init__(field)
 
+        self.__exponent = float(kwargs.pop('exponent', 2.0))
+
         # Assign weighting
         if weighting is None:
             weighting = 1.0
@@ -326,8 +282,7 @@ class ProductSpace(LinearSpace):
     @property
     def exponent(self):
         """Exponent of the product space norm/dist, ``None`` for custom."""
-        # FIXME: replace and add to init
-        return self.weighting.exponent
+        return self.__exponent
 
     @property
     def weighting(self):

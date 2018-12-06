@@ -113,8 +113,13 @@ class DiscreteLp(TensorSpace):
 
     @property
     def weighting(self):
-        """This space's weighting scheme."""
+        """This space's weighting."""
         return self.tspace.weighting
+
+    @property
+    def weighting_type(self):
+        """This space's weighting type."""
+        return self.tspace.weighting_type
 
     @property
     def is_weighted(self):
@@ -405,9 +410,10 @@ class DiscreteLp(TensorSpace):
                 """
                 part = space.partition.byaxis[indices]
 
-                if isinstance(space.weighting, ConstWeighting):
+                if space.weighting_type == 'const':
                     # Need to manually construct `tspace` since it doesn't
                     # know where its weighting factor comes from
+                    # TODO(kohr-h): this shouldn't happen!
                     try:
                         iter(indices)
                     except TypeError:
@@ -554,17 +560,14 @@ class DiscreteLp(TensorSpace):
                 not is_floating_dtype(self.dtype)
             ):
                 # In these cases, weighting constant 1 is the default
-                if (
-                    not isinstance(self.weighting, ConstWeighting) or
-                    not np.isclose(self.weighting.const, 1.0)
-                ):
-                    optargs.append(('weighting', self.weighting.const, None))
+                if self.weighting_type != 'const' or self.weighting != 1.0:
+                    optargs.append(('weighting', self.weighting, None))
             else:
                 if (
-                    not isinstance(self.weighting, ConstWeighting) or
-                    not np.isclose(self.weighting.const, self.cell_volume)
+                    self.weighting_type != 'const' or
+                    not np.isclose(self.weighting, self.cell_volume)
                 ):
-                    optargs.append(('weighting', self.weighting.const, None))
+                    optargs.append(('weighting', self.weighting, None))
 
             optmod = [''] * len(optargs)
             if self.dtype in (float, complex, int, bool):
