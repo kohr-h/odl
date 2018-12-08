@@ -240,7 +240,7 @@ def nearest_interpolator(x, coord_vecs, variant='left'):
     (will shift the grid points):
 
     >>> part = odl.uniform_partition_fromintv(rect, [4, 2])
-    >>> part.grid.coord_vectors
+    >>> part.grid.coord_vecs
     (array([ 0.125,  0.375,  0.625,  0.875]), array([ 0.25,  0.75]))
 
     Now we initialize the operator and test it with some points:

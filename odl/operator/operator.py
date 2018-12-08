@@ -70,7 +70,7 @@ def _default_call_in_place(op, x, out, **kwargs):
     kwargs:
         Optional arguments to the operator.
     """
-    out.assign(op.range.element(op._call_out_of_place(x, **kwargs)))
+    out[:] = op.range.element(op._call_out_of_place(x, **kwargs))
 
 
 def _function_signature(func):
@@ -289,20 +289,19 @@ def _dispatch_call_args(cls=None, bound_call=None, unbound_call=None,
 
 class Operator(object):
 
-    """Abstract mathematical operator.
+    r"""Abstract mathematical operator.
 
     An operator is a mapping
 
     .. math::
-        \mathcal{A}: \mathcal{X} \\to \mathcal{Y}
+        A: X \to Y
 
-    between sets :math:`\mathcal{X}` (domain) and :math:`\mathcal{Y}`
-    (range). The evaluation of :math:`\mathcal{A}` at an element
-    :math:`x \\in \mathcal{X}` is denoted by :math:`\mathcal{A}(x)`
-    and produces an element in :math:`\mathcal{Y}`:
+    between sets :math:`X` (domain) and :math:`Y` (range). The evaluation
+    of :math:`A` at an element :math:`x \in X` is denoted by :math:`A(x)`
+    and produces an element in :math:`Y`:
 
     .. math::
-        y = \mathcal{A}(x) \\in \mathcal{Y}.
+        y = A(x) \in Y.
 
     Programmatically, these properties are reflected in the `Operator`
     class described in the following.
@@ -642,15 +641,15 @@ class Operator(object):
         Out-of-place evaluation:
 
         >>> op(x)
-        rn(3).element([ 2.,  4.,  6.])
+        array([ 2.,  4.,  6.])
 
         In-place evaluation:
 
         >>> y = rn.element()
         >>> op(x, out=y)
-        rn(3).element([ 2.,  4.,  6.])
+        array([ 2.,  4.,  6.])
         >>> y
-        rn(3).element([ 2.,  4.,  6.])
+        array([ 2.,  4.,  6.])
 
         See Also
         --------
@@ -844,10 +843,10 @@ class Operator(object):
         >>> op = odl.IdentityOperator(rn)
         >>> x = rn.element([1, 2, 3])
         >>> op(x)
-        rn(3).element([ 1.,  2.,  3.])
-        >>> Scaled = op * 3
-        >>> Scaled(x)
-        rn(3).element([ 3.,  6.,  9.])
+        array([ 1.,  2.,  3.])
+        >>> scaled = op * 3
+        >>> scaled(x)
+        array([ 3.,  6.,  9.])
         """
         if isinstance(other, Operator):
             return OperatorComp(self, other)
@@ -926,20 +925,17 @@ class Operator(object):
         >>> op = odl.IdentityOperator(rn)
         >>> x = rn.element([1, 2, 3])
         >>> op(x)
-        rn(3).element([ 1.,  2.,  3.])
-        >>> Scaled = 3 * op
-        >>> Scaled(x)
-        rn(3).element([ 3.,  6.,  9.])
+        array([ 1.,  2.,  3.])
+        >>> scaled = 3 * op
+        >>> scaled(x)
+        array([ 3.,  6.,  9.])
         """
         if isinstance(other, Operator):
             return OperatorComp(other, self)
         elif isinstance(other, Number):
             return OperatorLeftScalarMult(self, other)
         elif other in self.range:
-            return OperatorLeftVectorMult(self, other.copy())
-        elif (isinstance(other, LinearSpaceElement) and
-              other.space.field == self.range):
-            return FunctionalLeftVectorMult(self, other.copy())
+            return OperatorLeftVectorMult(self, other)
         else:
             return NotImplemented
 
@@ -977,13 +973,13 @@ class Operator(object):
         >>> op = odl.ScalingOperator(rn, 3)
         >>> x = rn.element([1, 2, 3])
         >>> op(x)
-        rn(3).element([ 3.,  6.,  9.])
+        array([ 3.,  6.,  9.])
         >>> squared = op ** 2
         >>> squared(x)
-        rn(3).element([  9.,  18.,  27.])
+        array([  9.,  18.,  27.])
         >>> squared = op**3
         >>> squared(x)
-        rn(3).element([ 27.,  54.,  81.])
+        array([ 27.,  54.,  81.])
         """
         if isinstance(n, Integral) and n > 0:
             op = self
@@ -1019,10 +1015,10 @@ class Operator(object):
         >>> op = odl.IdentityOperator(rn)
         >>> x = rn.element([3, 6, 9])
         >>> op(x)
-        rn(3).element([ 3.,  6.,  9.])
+        array([ 3.,  6.,  9.])
         >>> Scaled = op / 3.0
         >>> Scaled(x)
-        rn(3).element([ 1.,  2.,  3.])
+        array([ 1.,  2.,  3.])
         """
         if isinstance(other, Number):
             return self * (1.0 / other)
@@ -1103,11 +1099,11 @@ class OperatorSum(Operator):
         >>> x = r3.element([1, 2, 3])
         >>> out = r3.element()
         >>> OperatorSum(op, op)(x, out)  # In-place, returns out
-        rn(3).element([ 2.,  4.,  6.])
+        array([ 2.,  4.,  6.])
         >>> out
-        rn(3).element([ 2.,  4.,  6.])
+        array([ 2.,  4.,  6.])
         >>> OperatorSum(op, op)(x)
-        rn(3).element([ 2.,  4.,  6.])
+        array([ 2.,  4.,  6.])
         """
         if left.range != right.range:
             raise OpTypeError('operator ranges {!r} and {!r} do not match'
@@ -1237,7 +1233,7 @@ class OperatorVectorSum(Operator):
         >>> sum_op = odl.OperatorVectorSum(ident_op, y)
         >>> x = r3.element([4, 5, 6])
         >>> sum_op(x)
-        rn(3).element([ 5.,  7.,  9.])
+        array([ 5.,  7.,  9.])
         """
         if not isinstance(operator, Operator):
             raise TypeError('`op` {!r} not a Operator instance'
@@ -1291,7 +1287,7 @@ class OperatorVectorSum(Operator):
         >>> sum = odl.OperatorVectorSum(op, r3.element([1, 2, 3]))
         >>> x = r3.element([4, 5, 6])
         >>> sum.derivative(x)(x)
-        rn(3).element([ 4.,  5.,  6.])
+        array([ 4.,  5.,  6.])
         """
         return self.operator.derivative(point)
 
@@ -1545,7 +1541,7 @@ class OperatorLeftScalarMult(Operator):
         >>> operator = odl.IdentityOperator(space)
         >>> left_mul_op = OperatorLeftScalarMult(operator, 3)
         >>> left_mul_op([1, 2, 3])
-        rn(3).element([ 3.,  6.,  9.])
+        array([ 3.,  6.,  9.])
         """
         if not isinstance(operator.range, (LinearSpace, Field)):
             raise OpTypeError('range {!r} not a `LinearSpace` or `Field` '
@@ -1603,7 +1599,7 @@ class OperatorLeftScalarMult(Operator):
         >>> operator = odl.IdentityOperator(space)
         >>> left_mul_op = OperatorLeftScalarMult(operator, 3)
         >>> left_mul_op.inverse([3, 3, 3])
-        rn(3).element([ 1.,  1.,  1.])
+        array([ 1.,  1.,  1.])
         """
         if self.scalar == 0.0:
             raise ZeroDivisionError('{} not invertible'.format(self))
@@ -1634,7 +1630,7 @@ class OperatorLeftScalarMult(Operator):
         >>> left_mul_op = OperatorLeftScalarMult(operator, 3)
         >>> derivative = left_mul_op.derivative([0, 0, 0])
         >>> derivative([1, 1, 1])
-        rn(3).element([ 3.,  3.,  3.])
+        array([ 3.,  3.,  3.])
         """
         if self.is_linear:
             return self
@@ -1662,7 +1658,7 @@ class OperatorLeftScalarMult(Operator):
         >>> operator = odl.IdentityOperator(space)
         >>> left_mul_op = OperatorLeftScalarMult(operator, 3)
         >>> left_mul_op.adjoint([1, 2, 3])
-        rn(3).element([ 3.,  6.,  9.])
+        array([ 3.,  6.,  9.])
         """
 
         if not self.is_linear:
@@ -1711,7 +1707,7 @@ class OperatorRightScalarMult(Operator):
         >>> operator = odl.IdentityOperator(space)
         >>> left_mul_op = OperatorRightScalarMult(operator, 3)
         >>> left_mul_op([1, 2, 3])
-        rn(3).element([ 3.,  6.,  9.])
+        array([ 3.,  6.,  9.])
         """
         if not isinstance(operator.domain, (LinearSpace, Field)):
             raise OpTypeError('domain {!r} not a `LinearSpace` or `Field` '
@@ -1790,7 +1786,7 @@ class OperatorRightScalarMult(Operator):
         >>> operator = odl.IdentityOperator(space)
         >>> left_mul_op = OperatorRightScalarMult(operator, 3)
         >>> left_mul_op.inverse([3, 3, 3])
-        rn(3).element([ 1.,  1.,  1.])
+        array([ 1.,  1.,  1.])
         """
         if self.scalar == 0.0:
             raise ZeroDivisionError('{} not invertible'.format(self))
@@ -1818,7 +1814,7 @@ class OperatorRightScalarMult(Operator):
         >>> left_mul_op = OperatorRightScalarMult(operator, 3)
         >>> derivative = left_mul_op.derivative([0, 0, 0])
         >>> derivative([1, 1, 1])
-        rn(3).element([ 3.,  3.,  3.])
+        array([ 3.,  3.,  3.])
         """
         return self.scalar * self.operator.derivative(self.scalar * x)
 
@@ -1843,7 +1839,7 @@ class OperatorRightScalarMult(Operator):
         >>> operator = odl.IdentityOperator(space)
         >>> left_mul_op = OperatorRightScalarMult(operator, 3)
         >>> left_mul_op.adjoint([1, 2, 3])
-        rn(3).element([ 3.,  6.,  9.])
+        array([ 3.,  6.,  9.])
         """
 
         if not self.is_linear:
@@ -1894,7 +1890,7 @@ class FunctionalLeftVectorMult(Operator):
         >>> functional = odl.InnerProductOperator(y)
         >>> left_mul_op = FunctionalLeftVectorMult(functional, y)
         >>> left_mul_op([1, 2, 3])
-        rn(3).element([ 14.,  28.,  42.])
+        array([ 14.,  28.,  42.])
         """
         if not isinstance(vector, LinearSpaceElement):
             raise TypeError('`vector` {!r} not is not a LinearSpaceElement'

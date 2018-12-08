@@ -78,8 +78,8 @@ class RectGrid(Set):
     See ``Notes`` for details.
     """
 
-    def __init__(self, *coord_vectors):
-        """Initialize a new instance.
+    def __init__(self, *coord_vecs):
+        r"""Initialize a new instance.
 
         Parameters
         ----------
@@ -162,7 +162,7 @@ class RectGrid(Set):
         super(RectGrid, self).__init__()
 
         vecs = tuple(np.atleast_1d(vec).astype('float64')
-                     for vec in coord_vectors)
+                     for vec in coord_vecs)
         for i, vec in enumerate(vecs):
 
             if len(vec) == 0:
@@ -189,30 +189,30 @@ class RectGrid(Set):
         # Lazily evaluates strides when needed but stores the result
         self.__stride = None
 
-        self.__coord_vectors = vecs
+        self.__coord_vecs = vecs
 
         # Non-degenerate axes
-        self.__nondegen_byaxis = tuple(len(v) > 1 for v in self.coord_vectors)
+        self.__nondegen_byaxis = tuple(len(v) > 1 for v in self.coord_vecs)
 
         # Uniformity, setting True in degenerate axes
-        diffs = [np.diff(v) for v in self.coord_vectors]
+        diffs = [np.diff(v) for v in self.coord_vecs]
         self.__is_uniform_byaxis = tuple(
             (diff.size == 0) or np.allclose(diff, diff[0])
             for diff in diffs)
 
     # Attributes
     @property
-    def coord_vectors(self):
+    def coord_vecs(self):
         """Coordinate vectors of the grid.
 
         Returns
         -------
-        coord_vectors : tuple of `numpy.ndarray`'s
+        coord_vecs : tuple of `numpy.ndarray`'s
 
         Examples
         --------
         >>> g = RectGrid([0, 1], [-1, 0, 2])
-        >>> x, y = g.coord_vectors
+        >>> x, y = g.coord_vecs
         >>> x
         array([ 0.,  1.])
         >>> y
@@ -222,7 +222,7 @@ class RectGrid(Set):
         --------
         meshgrid : Same result but with nd arrays
         """
-        return self.__coord_vectors
+        return self.__coord_vecs
 
     @property
     def ndim(self):
@@ -230,7 +230,7 @@ class RectGrid(Set):
         try:
             return self.__ndim
         except AttributeError:
-            ndim = len(self.coord_vectors)
+            ndim = len(self.coord_vecs)
             self.__ndim = ndim
             return ndim
 
@@ -240,7 +240,7 @@ class RectGrid(Set):
         try:
             return self.__shape
         except AttributeError:
-            shape = tuple(len(vec) for vec in self.coord_vectors)
+            shape = tuple(len(vec) for vec in self.coord_vecs)
             self.__shape = shape
             return shape
 
@@ -278,7 +278,7 @@ class RectGrid(Set):
         >>> g.min_pt
         array([ 1., -2.])
         """
-        return np.array([vec[0] for vec in self.coord_vectors])
+        return np.array([vec[0] for vec in self.coord_vecs])
 
     @property
     def max_pt(self):
@@ -290,7 +290,7 @@ class RectGrid(Set):
         >>> g.max_pt
         array([ 5.,  2.])
         """
-        return np.array([vec[-1] for vec in self.coord_vectors])
+        return np.array([vec[-1] for vec in self.coord_vecs])
 
     @property
     def nondegen_byaxis(self):
@@ -506,8 +506,8 @@ class RectGrid(Set):
                 self.ndim == other.ndim and
                 self.shape == other.shape and
                 all(np.allclose(vec_s, vec_o, atol=atol, rtol=0.0)
-                    for (vec_s, vec_o) in zip(self.coord_vectors,
-                                              other.coord_vectors)))
+                    for (vec_s, vec_o) in zip(self.coord_vecs,
+                                              other.coord_vecs)))
 
     def __eq__(self, other):
         """Return ``self == other``.
@@ -519,13 +519,13 @@ class RectGrid(Set):
         return (type(other) is type(self) and
                 self.shape == other.shape and
                 all(np.array_equal(vec_s, vec_o)
-                    for (vec_s, vec_o) in zip(self.coord_vectors,
-                                              other.coord_vectors)))
+                    for (vec_s, vec_o) in zip(self.coord_vecs,
+                                              other.coord_vecs)))
 
     def __hash__(self):
         """Return ``hash(self)``."""
         # TODO: update with #841
-        coord_vec_str = tuple(cv.tobytes() for cv in self.coord_vectors)
+        coord_vec_str = tuple(cv.tobytes() for cv in self.coord_vecs)
         return hash((type(self), coord_vec_str))
 
     def approx_contains(self, other, atol):
@@ -554,7 +554,7 @@ class RectGrid(Set):
         other = np.atleast_1d(other)
         return (other.shape == (self.ndim,) and
                 all(np.any(np.isclose(vector, coord, atol=atol, rtol=0.0))
-                    for vector, coord in zip(self.coord_vectors, other)))
+                    for vector, coord in zip(self.coord_vecs, other)))
 
     def __contains__(self, other):
         """Return ``other in self``."""
@@ -563,7 +563,7 @@ class RectGrid(Set):
             return False
         return (other.shape == (self.ndim,) and
                 all(coord in vector
-                    for vector, coord in zip(self.coord_vectors, other)))
+                    for vector, coord in zip(self.coord_vecs, other)))
 
     def is_subgrid(self, other, atol=0.0):
         """Return ``True`` if this grid is a subgrid of ``other``.
@@ -585,10 +585,10 @@ class RectGrid(Set):
         Examples
         --------
         >>> rg = uniform_grid([-2, -2], [0, 4], (3, 4))
-        >>> rg.coord_vectors
+        >>> rg.coord_vecs
         (array([-2., -1.,  0.]), array([-2.,  0.,  2.,  4.]))
         >>> rg_sub = uniform_grid([-1, 2], [0, 4], (2, 2))
-        >>> rg_sub.coord_vectors
+        >>> rg_sub.coord_vecs
         (array([-1.,  0.]), array([ 2.,  4.]))
         >>> rg_sub.is_subgrid(rg)
         True
@@ -633,7 +633,7 @@ class RectGrid(Set):
         else:
             # Array version of the fuzzy subgrid test, about 3 times faster
             # than the loop version.
-            for vec_o, vec_s in zip(other.coord_vectors, self.coord_vectors):
+            for vec_o, vec_s in zip(other.coord_vecs, self.coord_vecs):
                 # Create array of differences of all entries in vec_o and
                 # vec_s. If there is no almost zero entry in each row,
                 # return False.
@@ -699,15 +699,15 @@ class RectGrid(Set):
 
         if len(grids) == 0:
             # Copy of `self`
-            return RectGrid(*self.coord_vectors)
+            return RectGrid(*self.coord_vecs)
         elif len(grids) == 1:
             # Insert single grid
             grid = grids[0]
             if not isinstance(grid, RectGrid):
                 raise TypeError('{!r} is not a `RectGrid` instance'
                                 ''.format(grid))
-            new_vecs = (self.coord_vectors[:index] + grid.coord_vectors +
-                        self.coord_vectors[index:])
+            new_vecs = (self.coord_vecs[:index] + grid.coord_vecs +
+                        self.coord_vecs[index:])
             return RectGrid(*new_vecs)
         else:
             # Recursively insert first grid and the remaining into the result
@@ -783,7 +783,7 @@ class RectGrid(Set):
 
         new_indcs = [i for i in range(self.ndim)
                      if i not in rng or self.nondegen_byaxis[i]]
-        coord_vecs = [self.coord_vectors[axis] for axis in new_indcs]
+        coord_vecs = [self.coord_vecs[axis] for axis in new_indcs]
         return RectGrid(*coord_vecs)
 
     def points(self, order='C'):
@@ -830,7 +830,7 @@ class RectGrid(Set):
         for i, axis in enumerate(axes):
             view = point_arr[:, axis].reshape(shape)
             coord_shape = (1,) * i + (-1,) + (1,) * (self.ndim - i - 1)
-            view[:] = self.coord_vectors[axis].reshape(coord_shape)
+            view[:] = self.coord_vecs[axis].reshape(coord_shape)
 
         return point_arr
 
@@ -852,10 +852,10 @@ class RectGrid(Set):
         minmax_vecs = []
         for axis in range(self.ndim):
             if self.shape[axis] == 1:
-                minmax_vecs.append(self.coord_vectors[axis][0])
+                minmax_vecs.append(self.coord_vecs[axis][0])
             else:
-                minmax_vecs.append((self.coord_vectors[axis][0],
-                                    self.coord_vectors[axis][-1]))
+                minmax_vecs.append((self.coord_vecs[axis][0],
+                                    self.coord_vecs[axis][-1]))
 
         return RectGrid(*minmax_vecs)
 
@@ -920,7 +920,7 @@ class RectGrid(Set):
         array([[-1.,  0., -4.],
                [ 0.,  1., -3.]])
         """
-        return sparse_meshgrid(*self.coord_vectors)
+        return sparse_meshgrid(*self.coord_vecs)
 
     def __getitem__(self, indices):
         """Return ``self[indices]``.
@@ -979,8 +979,8 @@ class RectGrid(Set):
             if indices == []:
                 new_coord_vecs = []
             else:
-                new_coord_vecs = [self.coord_vectors[0][indices]]
-                new_coord_vecs += self.coord_vectors[1:]
+                new_coord_vecs = [self.coord_vecs[0][indices]]
+                new_coord_vecs += self.coord_vecs[1:]
             return RectGrid(*new_coord_vecs)
 
         indices = normalized_index_expression(indices, self.shape,
@@ -990,11 +990,11 @@ class RectGrid(Set):
         # create a new grid.
         if all(np.isscalar(idx) for idx in indices):
             return np.fromiter(
-                (v[int(idx)] for idx, v in zip(indices, self.coord_vectors)),
+                (v[int(idx)] for idx, v in zip(indices, self.coord_vecs)),
                 dtype=float)
         else:
             new_coord_vecs = [vec[idx]
-                              for idx, vec in zip(indices, self.coord_vectors)]
+                              for idx, vec in zip(indices, self.coord_vecs)]
             return RectGrid(*new_coord_vecs)
 
     def __array__(self, dtype=None):
@@ -1039,7 +1039,7 @@ class RectGrid(Set):
             return '{}({})'.format(ctor, inner_str)
         else:
             ctor = self.__class__.__name__
-            posargs = self.coord_vectors
+            posargs = self.coord_vecs
             posmod = array_str
             inner_str = signature_string(posargs, [], sep=[',\n', ', ', ', '],
                                          mod=[posmod, ''])
@@ -1084,13 +1084,13 @@ def uniform_grid_fromintv(intv_prod, shape, nodes_on_bdry=True):
     --------
     >>> rbox = odl.IntervalProd([-1.5, 2], [-0.5, 3])
     >>> grid = uniform_grid_fromintv(rbox, (3, 3))
-    >>> grid.coord_vectors
+    >>> grid.coord_vecs
     (array([-1.5, -1. , -0.5]), array([ 2. ,  2.5,  3. ]))
 
     To have the nodes in the "middle", use ``nodes_on_bdry=False``:
 
     >>> grid = uniform_grid_fromintv(rbox, (2, 2), nodes_on_bdry=False)
-    >>> grid.coord_vectors
+    >>> grid.coord_vecs
     (array([-1.25, -0.75]), array([ 2.25,  2.75]))
 
     See Also
@@ -1215,7 +1215,7 @@ def uniform_grid(min_pt, max_pt, shape, nodes_on_bdry=True):
     By default, the min/max points are included in the grid:
 
     >>> grid = odl.uniform_grid([-1.5, 2], [-0.5, 3], (3, 3))
-    >>> grid.coord_vectors
+    >>> grid.coord_vecs
     (array([-1.5, -1. , -0.5]), array([ 2. ,  2.5,  3. ]))
 
     If ``shape`` is supposed to refer to small subvolumes, and the grid
@@ -1223,13 +1223,13 @@ def uniform_grid(min_pt, max_pt, shape, nodes_on_bdry=True):
 
     >>> grid = odl.uniform_grid([-1.5, 2], [-0.5, 3], (2, 2),
     ...                         nodes_on_bdry=False)
-    >>> grid.coord_vectors
+    >>> grid.coord_vecs
     (array([-1.25, -0.75]), array([ 2.25,  2.75]))
 
     In 1D, we don't need sequences:
 
     >>> grid = odl.uniform_grid(0, 1, 3)
-    >>> grid.coord_vectors
+    >>> grid.coord_vecs
     (array([ 0. ,  0.5,  1. ]),)
     """
     return uniform_grid_fromintv(IntervalProd(min_pt, max_pt), shape,

@@ -15,6 +15,7 @@ import inspect
 import sys
 from collections import OrderedDict
 from contextlib import contextmanager
+from functools import wraps
 from itertools import product
 
 import numpy as np
@@ -1509,10 +1510,7 @@ def unique(seq):
         return unique_values
 
 
-from functools import wraps
-
-
-def protocol(dispatcher):
+def protocol(dispatcher, registry=None):
     """Decorator that defines a protocol with a dispatching function.
 
     The general idea is this:
@@ -1540,6 +1538,9 @@ def protocol(dispatcher):
         that handler is called with the input.
         The returned value of ``dispatcher`` must be hashable and support
         comparison with ``==``.
+    registry : dict, optional
+        If provided, this dictionary is used to register and retrieve
+        handlers. By default, an internal dictionary is used.
 
     Examples
     --------
@@ -1596,9 +1597,9 @@ def protocol(dispatcher):
 
     >>> try:
     ...     make_list(1j)  # no handler defined for `complex`
-    ... except RuntimeError:
-    ...     print("Unhandled!")
-    Unhandled!
+    ... except RuntimeError as err:
+    ...     print(err)
+    no implementation of make_list registered for <class 'complex'>
 
     To avoid this case, a default handler for unhandled cases can be
     registered by using the decorator without ``dispatch_value_`` argument:
@@ -1615,7 +1616,7 @@ def protocol(dispatcher):
     """
 
     def proto_deco(pfun):  # decorator for the protocol function
-        _proto_handlers = {}
+        _proto_handlers = {} if registry is None else registry
         default_key = '__' + pfun.__name__ + '__default'
 
         @wraps(pfun)
@@ -1637,10 +1638,13 @@ def protocol(dispatcher):
                 handler = _proto_handlers[default_key]
             except KeyError:
                 # No default handler, give up
-                raise RuntimeError(
-                    'no handler registered for dispatch value {}'
-                    ''.format(dispval)
+                pfun_name = getattr(pfun, '__name__', None)
+                pfun_txt = '' if pfun_name is None else 'of ' + pfun_name
+                err_fmt = (
+                    'no implementation {} registered for {{!r}}'
+                    ''.format(pfun_txt)
                 )
+                raise RuntimeError(err_fmt.format(dispval))
             else:
                 return handler(*args, **kwargs)
 
@@ -1670,21 +1674,6 @@ def protocol(dispatcher):
         return proto_fun
 
     return proto_deco
-
-
-@protocol(dispatcher=type)
-def myfun(x):
-    pass
-
-
-@myfun.register(tuple)
-def _myfun_tuple(x):
-    print(len(x))
-
-
-@myfun.register(list)
-def _myfun_list(x):
-    print(x)
 
 
 if __name__ == '__main__':

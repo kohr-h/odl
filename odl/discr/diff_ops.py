@@ -472,10 +472,10 @@ class Divergence(PointwiseTensorFieldOperator):
         >>> div = odl.Divergence(dom)
         >>> div.range == ran
         True
-        >>> div2 = Divergence(range=ran)
+        >>> div2 = odl.Divergence(range=ran)
         >>> div2.domain == dom
         True
-        >>> div3 = Divergence(domain=dom, range=ran)
+        >>> div3 = odl.Divergence(domain=dom, range=ran)
         >>> div3.domain == dom
         True
         >>> div3.range == ran
@@ -675,7 +675,7 @@ class Laplacian(PointwiseTensorFieldOperator):
         ...               [ 0., 1., 0.],
         ...               [ 0., 0., 0.]])
         >>> space = odl.uniform_discr([0, 0], [3, 3], [3, 3])
-        >>> lap = Laplacian(space)
+        >>> lap = odl.Laplacian(space)
         >>> lap(x)
         array([[ 0.,  1.,  0.],
                [ 1., -4.,  1.],

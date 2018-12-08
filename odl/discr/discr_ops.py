@@ -113,7 +113,7 @@ class Resampling(Operator):
         operators of the underlying spaces.
         """
         interpolator = per_axis_interpolator(
-            x, self.domain.grid.coord_vectors, self.interp
+            x, self.domain.grid.coord_vecs, self.interp
         )
         return point_collocation(interpolator, self.range.meshgrid, out=out)
 

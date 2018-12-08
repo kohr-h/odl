@@ -83,7 +83,7 @@ class RectPartition(object):
 
         # Initialize the cell boundaries, the defining property of partitions
         bdry_vecs = []
-        for ax, vec in enumerate(self.grid.coord_vectors):
+        for ax, vec in enumerate(self.grid.coord_vecs):
             bdry = np.empty(len(vec) + 1)
             bdry[1:-1] = (vec[1:] + vec[:-1]) / 2.0
             bdry[0] = self.min()[ax]
@@ -302,9 +302,9 @@ class RectPartition(object):
         return self.grid.meshgrid
 
     @property
-    def coord_vectors(self):
+    def coord_vecs(self):
         """Coordinate vectors of the grid."""
-        return self.grid.coord_vectors
+        return self.grid.coord_vecs
 
     # Further derived methods / properties
     @property
@@ -353,7 +353,7 @@ class RectPartition(object):
         """
         frac_list = []
         for ax, (cvec, bmin, bmax) in enumerate(zip(
-                self.grid.coord_vectors, self.set.min_pt, self.set.max_pt)):
+                self.grid.coord_vecs, self.set.min_pt, self.set.max_pt)):
             # Degenerate axes have a value of 1.0 (this is used as weight
             # in integration formulas later)
             if len(cvec) == 1:
@@ -373,7 +373,7 @@ class RectPartition(object):
         -------
         csizes : tuple of `numpy.ndarray`'s
             The cell sizes per axis. The length of the vectors is the
-            same as the corresponding ``grid.coord_vectors``.
+            same as the corresponding ``grid.coord_vecs``.
             For axes with 1 grid point, cell size is set to 0.0.
 
         Examples
@@ -393,7 +393,7 @@ class RectPartition(object):
         (array([ 0.5,  0.5]), array([ 0.5,  1.5,  1. ]))
         """
         csizes = []
-        for ax, cvec in enumerate(self.grid.coord_vectors):
+        for ax, cvec in enumerate(self.grid.coord_vecs):
             if len(cvec) == 1:
                 csizes.append(np.array([0.0]))
             else:
@@ -892,7 +892,7 @@ class RectPartition(object):
             return '{}({})'.format(ctor, sig_str)
         else:
             ctor = 'nonuniform_partition'
-            posargs = self.coord_vectors
+            posargs = self.coord_vecs
             posmod = array_str
 
             optargs = []
@@ -974,35 +974,34 @@ def uniform_partition_fromintv(intv_prod, shape, nodes_on_bdry=False):
     By default, no grid points are placed on the boundary:
 
     >>> interval = odl.IntervalProd(0, 1)
-    >>> part = odl.uniform_partition_fromintv(interval, 4)
+    >>> part = uniform_partition_fromintv(interval, 4)
     >>> part.cell_boundary_vecs
     (array([ 0.  ,  0.25,  0.5 ,  0.75,  1.  ]),)
-    >>> part.grid.coord_vectors
+    >>> part.grid.coord_vecs
     (array([ 0.125,  0.375,  0.625,  0.875]),)
 
     This can be changed with the nodes_on_bdry parameter:
 
-    >>> part = odl.uniform_partition_fromintv(interval, 3,
-    ...                                       nodes_on_bdry=True)
+    >>> part = uniform_partition_fromintv(interval, 3, nodes_on_bdry=True)
     >>> part.cell_boundary_vecs
     (array([ 0.  ,  0.25,  0.75,  1.  ]),)
-    >>> part.grid.coord_vectors
+    >>> part.grid.coord_vecs
     (array([ 0. ,  0.5,  1. ]),)
 
     We can specify this per axis, too. In this case we choose both
     in the first axis and only the rightmost in the second:
 
     >>> rect = odl.IntervalProd([0, 0], [1, 1])
-    >>> part = odl.uniform_partition_fromintv(
-    ...     rect, (3, 3), nodes_on_bdry=(True, (False, True)))
-    ...
+    >>> part = uniform_partition_fromintv(
+    ...     rect, (3, 3), nodes_on_bdry=(True, (False, True))
+    ... )
     >>> part.cell_boundary_vecs[0]  # first axis, as above
     array([ 0.  ,  0.25,  0.75,  1.  ])
-    >>> part.grid.coord_vectors[0]
+    >>> part.grid.coord_vecs[0]
     array([ 0. ,  0.5,  1. ])
     >>> part.cell_boundary_vecs[1]  # second, asymmetric axis
     array([ 0. ,  0.4,  0.8,  1. ])
-    >>> part.grid.coord_vectors[1]
+    >>> part.grid.coord_vecs[1]
     array([ 0.2,  0.6,  1. ])
     """
     grid = uniform_grid_fromintv(intv_prod, shape, nodes_on_bdry=nodes_on_bdry)
@@ -1052,15 +1051,15 @@ def uniform_partition_fromgrid(grid, min_pt=None, max_pt=None):
     calculated:
 
     >>> grid = odl.uniform_grid(0, 1, 3)
-    >>> grid.coord_vectors
+    >>> grid.coord_vecs
     (array([ 0. ,  0.5,  1. ]),)
-    >>> part = odl.uniform_partition_fromgrid(grid)
+    >>> part = uniform_partition_fromgrid(grid)
     >>> part.cell_boundary_vecs
     (array([-0.25,  0.25,  0.75,  1.25]),)
 
     ``min_pt`` and ``max_pt`` can be given explicitly:
 
-    >>> part = odl.uniform_partition_fromgrid(grid, min_pt=0, max_pt=1)
+    >>> part = uniform_partition_fromgrid(grid, min_pt=0, max_pt=1)
     >>> part.cell_boundary_vecs
     (array([ 0.  ,  0.25,  0.75,  1.  ]),)
 
@@ -1068,8 +1067,7 @@ def uniform_partition_fromgrid(grid, min_pt=None, max_pt=None):
     keys refer to axes, the values to the coordinates to use:
 
     >>> grid = odl.uniform_grid([0, 0], [1, 1], (3, 3))
-    >>> part = odl.uniform_partition_fromgrid(grid,
-    ...                                       min_pt={0: -1}, max_pt={-1: 3})
+    >>> part = uniform_partition_fromgrid(grid, min_pt={0: -1}, max_pt={-1: 3})
     >>> part.cell_boundary_vecs[0]
     array([-1.  ,  0.25,  0.75,  1.25])
     >>> part.cell_boundary_vecs[1]
@@ -1100,7 +1098,7 @@ def uniform_partition_fromgrid(grid, min_pt=None, max_pt=None):
     min_pt_vec = np.empty(grid.ndim)
     for ax, xmin in min_pt.items():
         if xmin is None:
-            cvec = grid.coord_vectors[ax]
+            cvec = grid.coord_vecs[ax]
             if len(cvec) == 1:
                 raise ValueError('in axis {}: cannot calculate `min_pt` with '
                                  'only 1 grid point'.format(ax))
@@ -1111,7 +1109,7 @@ def uniform_partition_fromgrid(grid, min_pt=None, max_pt=None):
     max_pt_vec = np.empty(grid.ndim)
     for ax, xmax in max_pt.items():
         if xmax is None:
-            cvec = grid.coord_vectors[ax]
+            cvec = grid.coord_vecs[ax]
             if len(cvec) == 1:
                 raise ValueError('in axis {}: cannot calculate `max_pt` with '
                                  'only 1 grid point'.format(ax))
@@ -1202,7 +1200,7 @@ def uniform_partition(min_pt=None, max_pt=None, shape=None, cell_sides=None,
     False
     >>> part.cell_boundary_vecs
     (array([ 0.  ,  0.25,  0.5 ,  0.75,  1.  ]),)
-    >>> part.grid.coord_vectors
+    >>> part.grid.coord_vecs
     (array([ 0.125,  0.375,  0.625,  0.875]),)
 
     This can be changed with the nodes_on_bdry parameter:
@@ -1212,7 +1210,7 @@ def uniform_partition(min_pt=None, max_pt=None, shape=None, cell_sides=None,
     True
     >>> part.cell_boundary_vecs
     (array([ 0.  ,  0.25,  0.75,  1.  ]),)
-    >>> part.grid.coord_vectors
+    >>> part.grid.coord_vecs
     (array([ 0. ,  0.5,  1. ]),)
 
     We can specify this per axis, too. In this case we choose both
@@ -1223,11 +1221,11 @@ def uniform_partition(min_pt=None, max_pt=None, shape=None, cell_sides=None,
     ...
     >>> part.cell_boundary_vecs[0]  # first axis, as above
     array([ 0.  ,  0.25,  0.75,  1.  ])
-    >>> part.grid.coord_vectors[0]
+    >>> part.grid.coord_vecs[0]
     array([ 0. ,  0.5,  1. ])
     >>> part.cell_boundary_vecs[1]  # second, asymmetric axis
     array([ 0. ,  0.4,  0.8,  1. ])
-    >>> part.grid.coord_vectors[1]
+    >>> part.grid.coord_vecs[1]
     array([ 0.2,  0.6,  1. ])
     """
     # Normalize partition parameters

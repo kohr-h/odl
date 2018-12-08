@@ -720,14 +720,14 @@ def show(self, title=None, method='', coords=None, indices=None,
                 if coord_minp is None:
                     min_ind = 0
                 else:
-                    min_ind = np.floor(subpart.index(coord_minp,
-                                                     floating=True))
+                    min_ind = np.floor(
+                        subpart.index(coord_minp, floating=True)
+                    )
 
                 if coord_maxp is None:
                     max_ind = len(subpart)
                 else:
-                    max_ind = np.ceil(subpart.index(coord_maxp,
-                                                    floating=True))
+                    max_ind = np.ceil(subpart.index(coord_maxp, floating=True))
 
                 indices.append(slice(int(min_ind), int(max_ind)))
 
