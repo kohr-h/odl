@@ -8,35 +8,38 @@
 
 """Example functionals used in optimization."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
-from odl.solvers.functional.functional import Functional
-from odl.operator import Operator, MatrixOperator
+import odl.operator as op
+from odl.functional.functional import Functional
+from odl.operator import Operator
 from odl.space.base_tensors import TensorSpace
 
-
-__all__ = ('RosenbrockFunctional',)
+__all__ = (
+    'RosenbrockFunctional',
+)
 
 
 class RosenbrockFunctional(Functional):
 
-    """The well-known Rosenbrock function on ``R^n``.
+    r"""The well-known Rosenbrock function on ``R^n``.
 
     The `Rosenbrock function`_ is often used as a test problem in
     smooth optimization.
 
     Notes
     -----
-    The functional is defined for :math:`x \\in \\mathbb{R}^n`,
-    :math:`n \\geq 2`, as
+    The functional is defined for :math:`x \in \mathbb{R}^n`,
+    :math:`n \geq 2`, as
 
     .. math::
         \sum_{i=1}^{n - 1} c (x_{i+1} - x_i^2)^2 + (1 - x_i)^2,
 
     where :math:`c` is a constant, usually set to 100, which determines how
     "ill-behaved" the function should be.
-    The global minimum lies at :math:`x = (1, \\dots, 1)`, independent
+    The global minimum lies at :math:`x = (1, \dots, 1)`, independent
     of :math:`c`.
 
     There are two definitions of the n-dimensional Rosenbrock function found in
@@ -152,7 +155,7 @@ class RosenbrockFunctional(Functional):
                     matrix[i, i + 1] = -4 * c * x[i]
                 matrix[-1, -1] = 2 * c
                 matrix[0, 0] = 2 + 12 * c * x[0] ** 2 - 4 * c * x[1]
-                return MatrixOperator(matrix, self.domain, self.range)
+                return op.MatrixOperator(matrix, self.domain, self.range)
 
         return RosenbrockGradient()
 

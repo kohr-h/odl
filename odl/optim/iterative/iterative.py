@@ -12,7 +12,8 @@ from __future__ import print_function, division, absolute_import
 from builtins import next
 import numpy as np
 
-from odl.operator import IdentityOperator, OperatorComp, OperatorSum
+from odl.operator import IdentityOperator
+from odl.operator.operator import OperatorComp, OperatorSum
 from odl.util import normalized_scalar_param_list
 
 
@@ -243,7 +244,7 @@ Conjugate_gradient_on_the_normal_equations>`_.
     See Also
     --------
     conjugate_gradient : Optimized solver for symmetric matrices
-    odl.solvers.smooth.nonlinear_cg.conjugate_gradient_nonlinear :
+    odl.optim.smooth.nonlinear_cg.conjugate_gradient_nonlinear :
         Equivalent solver for the nonlinear case
     """
     # TODO: add a book reference

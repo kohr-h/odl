@@ -8,9 +8,10 @@
 
 """Convenience functions for operators."""
 
-from __future__ import print_function, division, absolute_import
-from future.utils import native
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
+from future.utils import native
 
 from odl.space.base_tensors import TensorSpace
 from odl.space.pspace import ProductSpace
@@ -345,7 +346,7 @@ def as_scipy_functional(func, return_gradient=False):
     Wrap functional and solve simple problem
     (here toy problem ``min_x ||x||^2``):
 
-    >>> func = odl.solvers.L2NormSquared(odl.rn(3))
+    >>> func = fn.L2NormSquared(odl.rn(3))
     >>> scipy_func = odl.as_scipy_functional(func)
     >>> from scipy.optimize import minimize
     >>> result = minimize(scipy_func, x0=[0, 1, 0])
@@ -354,7 +355,7 @@ def as_scipy_functional(func, return_gradient=False):
 
     The gradient (jacobian) can also be provided:
 
-    >>> func = odl.solvers.L2NormSquared(odl.rn(3))
+    >>> func = fn.L2NormSquared(odl.rn(3))
     >>> scipy_func, scipy_grad = odl.as_scipy_functional(func, True)
     >>> from scipy.optimize import minimize
     >>> result = minimize(scipy_func, x0=[0, 1, 0], jac=scipy_grad)

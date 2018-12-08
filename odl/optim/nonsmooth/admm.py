@@ -1,12 +1,15 @@
 """Alternating Direction method of Multipliers (ADMM) method variants."""
 
 from __future__ import division
+
 from builtins import range
 
-from odl.operator import Operator, OpDomainError
+from odl.operator import Operator
+from odl.operator.operator import OpDomainError
 
-
-__all__ = ('admm_linearized',)
+__all__ = (
+    'admm_linearized',
+)
 
 
 def admm_linearized(x, f, g, L, tau, sigma, niter, **kwargs):

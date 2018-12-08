@@ -9,12 +9,15 @@
 """Gradient-based optimization schemes."""
 
 from __future__ import print_function, division, absolute_import
+
 import numpy as np
 
-from odl.solvers.util import ConstantLineSearch
+from odl.optim.smooth.steplen import ConstantLineSearch
 
-
-__all__ = ('steepest_descent', 'adam')
+__all__ = (
+    'steepest_descent',
+    'adam',
+)
 
 
 # TODO: update all docs
@@ -22,7 +25,7 @@ __all__ = ('steepest_descent', 'adam')
 
 def steepest_descent(f, x, line_search=1.0, maxiter=1000, tol=1e-16,
                      projection=None, callback=None):
-    """Steepest descent method to minimize an objective function.
+    r"""Steepest descent method to minimize an objective function.
 
     General implementation of steepest decent (also known as gradient
     decent) for solving
@@ -66,9 +69,9 @@ def steepest_descent(f, x, line_search=1.0, maxiter=1000, tol=1e-16,
 
     See Also
     --------
-    odl.solvers.iterative.iterative.landweber :
+    odl.optim.iterative.iterative.landweber :
         Optimized solver for the case ``f(x) = ||Ax - b||_2^2``
-    odl.solvers.iterative.iterative.conjugate_gradient :
+    odl.optim.iterative.iterative.conjugate_gradient :
         Optimized solver for the case ``f(x) = x^T Ax - 2 x^T b``
 
     References
@@ -107,7 +110,7 @@ def steepest_descent(f, x, line_search=1.0, maxiter=1000, tol=1e-16,
 
 def adam(f, x, learning_rate=1e-3, beta1=0.9, beta2=0.999, eps=1e-8,
          maxiter=1000, tol=1e-16, callback=None):
-    """ADAM method to minimize an objective function.
+    r"""ADAM method to minimize an objective function.
 
     General implementation of ADAM for solving
 
@@ -143,10 +146,10 @@ def adam(f, x, learning_rate=1e-3, beta1=0.9, beta2=0.999, eps=1e-8,
 
     See Also
     --------
-    odl.solvers.smooth.gradient.steepest_descent : Simple gradient descent.
-    odl.solvers.iterative.iterative.landweber :
+    odl.optim.smooth.gradient.steepest_descent : Simple gradient descent.
+    odl.optim.iterative.iterative.landweber :
         Optimized solver for the case ``f(x) = ||Ax - b||_2^2``.
-    odl.solvers.iterative.iterative.conjugate_gradient :
+    odl.optim.iterative.iterative.conjugate_gradient :
         Optimized solver for the case ``f(x) = x^T Ax - 2 x^T b``.
 
     References

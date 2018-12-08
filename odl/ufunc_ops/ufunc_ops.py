@@ -8,14 +8,18 @@
 
 """Ufunc operators for ODL vectors."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
-from odl.set import LinearSpace, RealNumbers, Field
+import odl.functional as fn
+import odl.operator as op
+from odl.functional import Functional
+from odl.operator import Operator
+from odl.set import RealNumbers
+from odl.set.sets import Field
+from odl.set.space import LinearSpace
 from odl.space import ProductSpace, tensor_space
-from odl.operator import Operator, MultiplyOperator
-from odl.solvers import (Functional, ScalingFunctional, FunctionalQuotient,
-                         ConstantFunctional)
 from odl.util.ufuncs import UFUNCS
 
 __all__ = ()
@@ -101,7 +105,7 @@ Examples
 {result!s}
 """
 
-
+# TODO(kohr-h): there must be a better way!
 def gradient_factory(name):
     """Create gradient `Functional` for some ufuncs."""
 
@@ -120,12 +124,13 @@ def gradient_factory(name):
     elif name == 'sqrt':
         def gradient(self):
             """Return the gradient operator."""
-            return FunctionalQuotient(ConstantFunctional(self.domain, 0.5),
-                                      self)
+            #return FunctionalQuotient(ConstantFunctional(self.domain, 0.5),
+            #                          self)
+            return fn.ConstantFunctional(self.domain, 0.5) / self
     elif name == 'square':
         def gradient(self):
             """Return the gradient operator."""
-            return ScalingFunctional(self.domain, 2.0)
+            return fn.ScalingFunctional(self.domain, 2.0)
     elif name == 'log':
         def gradient(self):
             """Return the gradient operator."""
@@ -137,8 +142,9 @@ def gradient_factory(name):
     elif name == 'reciprocal':
         def gradient(self):
             """Return the gradient operator."""
-            return FunctionalQuotient(ConstantFunctional(self.domain, -1.0),
-                                      square(self.domain))
+            return (
+                fn.ConstantFunctional(self.domain, -1.0) / square(self.domain)
+            )
     elif name == 'sinh':
         def gradient(self):
             """Return the gradient operator."""
@@ -160,48 +166,48 @@ def derivative_factory(name):
     if name == 'sin':
         def derivative(self, point):
             """Return the derivative operator."""
-            return MultiplyOperator(cos(self.domain)(point))
+            return op.MultiplyOperator(cos(self.domain)(point))
     elif name == 'cos':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return MultiplyOperator(-sin(self.domain)(point))
+            return op.MultiplyOperator(-sin(self.domain)(point))
     elif name == 'tan':
         def derivative(self, point):
             """Return the derivative operator."""
-            return MultiplyOperator(1 + self(point) ** 2)
+            return op.MultiplyOperator(1 + self(point) ** 2)
     elif name == 'sqrt':
         def derivative(self, point):
             """Return the derivative operator."""
-            return MultiplyOperator(0.5 / self(point))
+            return op.MultiplyOperator(0.5 / self(point))
     elif name == 'square':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return MultiplyOperator(2.0 * point)
+            return op.MultiplyOperator(2.0 * point)
     elif name == 'log':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return MultiplyOperator(1.0 / point)
+            return op.MultiplyOperator(1.0 / point)
     elif name == 'exp':
         def derivative(self, point):
             """Return the derivative operator."""
-            return MultiplyOperator(self(point))
+            return op.MultiplyOperator(self(point))
     elif name == 'reciprocal':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return MultiplyOperator(-self(point) ** 2)
+            return op.MultiplyOperator(-self(point) ** 2)
     elif name == 'sinh':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return MultiplyOperator(cosh(self.domain)(point))
+            return op.MultiplyOperator(cosh(self.domain)(point))
     elif name == 'cosh':
         def derivative(self, point):
             """Return the derivative operator."""
-            return MultiplyOperator(sinh(self.domain)(point))
+            return op.MultiplyOperator(sinh(self.domain)(point))
     else:
         # Fallback to default
         derivative = Operator.derivative

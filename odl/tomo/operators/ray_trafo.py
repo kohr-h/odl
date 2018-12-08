@@ -8,21 +8,22 @@
 
 """Ray transforms."""
 
-from __future__ import print_function, division, absolute_import
-import numpy as np
+from __future__ import absolute_import, division, print_function
+
 import warnings
 
-from odl.discr import DiscreteLp
+import numpy as np
+
+from odl.discr.lp_discr import DiscreteLp
 from odl.operator import Operator
+# TODO(kohr-h): better to import specifically?
+from odl.tomo.backends import (
+    ASTRA_AVAILABLE, ASTRA_CUDA_AVAILABLE, ASTRA_VERSION, SKIMAGE_AVAILABLE,
+    AstraCudaBackProjectorImpl, AstraCudaProjectorImpl,
+    astra_cpu_back_projector, astra_cpu_forward_projector, astra_supports,
+    skimage_radon_back_projector, skimage_radon_forward)
 from odl.tomo.geometry import (
     Geometry, Parallel2dGeometry, Parallel3dAxisGeometry)
-from odl.tomo.backends import (
-    ASTRA_AVAILABLE, ASTRA_CUDA_AVAILABLE, SKIMAGE_AVAILABLE,
-    astra_supports, ASTRA_VERSION,
-    astra_cpu_forward_projector, astra_cpu_back_projector,
-    AstraCudaProjectorImpl, AstraCudaBackProjectorImpl,
-    skimage_radon_forward, skimage_radon_back_projector)
-
 
 ASTRA_CPU_AVAILABLE = ASTRA_AVAILABLE
 _SUPPORTED_IMPL = ('astra_cpu', 'astra_cuda', 'skimage')
@@ -33,7 +34,6 @@ if ASTRA_CUDA_AVAILABLE:
     _AVAILABLE_IMPLS.append('astra_cuda')
 if SKIMAGE_AVAILABLE:
     _AVAILABLE_IMPLS.append('skimage')
-
 
 __all__ = ('RayTransform', 'RayBackProjection')
 

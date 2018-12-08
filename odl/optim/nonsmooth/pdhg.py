@@ -149,10 +149,10 @@ def pdhg(x, f, g, L, niter, tau=None, sigma=None, **kwargs):
 
     See Also
     --------
-    odl.solvers.nonsmooth.douglas_rachford.douglas_rachford_pd :
+    odl.optim.nonsmooth.douglas_rachford.douglas_rachford_pd :
         Solver for similar problems which can additionaly handle infimal
         convolutions and multiple forward operators.
-    odl.solvers.nonsmooth.forward_backward.forward_backward_pd :
+    odl.optim.nonsmooth.forward_backward.forward_backward_pd :
         Solver for similar problems which can additionaly handle infimal
         convolutions, multiple forward operators and a differentiable term.
 

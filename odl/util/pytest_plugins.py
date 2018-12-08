@@ -32,6 +32,8 @@ except ImportError:
 def _add_doctest_np_odl(doctest_namespace):
     doctest_namespace['np'] = np
     doctest_namespace['odl'] = odl
+    doctest_namespace['op'] = odl.operator
+    doctest_namespace['fn'] = odl.functional
 
 
 def pytest_addoption(parser):
@@ -52,8 +54,10 @@ def pytest_addoption(parser):
 
 this_dir = os.path.dirname(__file__)
 odl_root = os.path.abspath(os.path.join(this_dir, os.pardir, os.pardir))
-collect_ignore = [os.path.join(odl_root, 'setup.py'),
-                  os.path.join(odl_root, 'odl', 'contrib')]
+collect_ignore = [
+    os.path.join(odl_root, 'setup.py'),
+    os.path.join(odl_root, 'odl', 'contrib'),
+]
 
 
 # Add example directories to `collect_ignore`
@@ -70,15 +74,18 @@ collect_ignore.extend(find_example_dirs())
 
 if not PYFFTW_AVAILABLE:
     collect_ignore.append(
-        os.path.join(odl_root, 'odl', 'trafos', 'backends',
-                     'pyfftw_bindings.py'))
+        os.path.join(
+            odl_root, 'odl', 'trafos', 'backends', 'pyfftw_bindings.py'
+        )
+    )
 if not PYWT_AVAILABLE:
     collect_ignore.append(
-        os.path.join(odl_root, 'odl', 'trafos', 'backends',
-                     'pywt_bindings.py'))
+        os.path.join(odl_root, 'odl', 'trafos', 'backends', 'pywt_bindings.py')
+    )
     # Currently `pywt` is the only implementation
     collect_ignore.append(
-        os.path.join(odl_root, 'odl', 'trafos', 'wavelet.py'))
+        os.path.join(odl_root, 'odl', 'trafos', 'wavelet.py')
+    )
 
 
 # Remove duplicates
@@ -98,37 +105,43 @@ def pytest_ignore_collect(path, config):
 # are exposed globally across packages by setuptools.
 
 # Simple ones, use helper
-odl_tspace_impl = simple_fixture(name='tspace_impl',
-                                 params=tensor_space_impl_names())
+odl_tspace_impl = simple_fixture(
+    name='tspace_impl', params=tensor_space_impl_names()
+)
 
 floating_dtypes = np.sctypes['float'] + np.sctypes['complex']
 floating_dtype_params = [np.dtype(dt) for dt in floating_dtypes]
-odl_floating_dtype = simple_fixture(name='dtype',
-                                    params=floating_dtype_params,
-                                    fmt=' {name} = np.{value.name} ')
-
+odl_floating_dtype = simple_fixture(
+    name='dtype',
+    params=floating_dtype_params,
+    fmt=' {name} = np.{value.name} ',
+)
 scalar_dtypes = floating_dtype_params + np.sctypes['int'] + np.sctypes['uint']
 scalar_dtype_params = [np.dtype(dt) for dt in floating_dtypes]
-odl_scalar_dtype = simple_fixture(name='dtype',
-                                  params=scalar_dtype_params,
-                                  fmt=' {name} = np.{value.name} ')
-
+odl_scalar_dtype = simple_fixture(
+    name='dtype',
+    params=scalar_dtype_params,
+    fmt=' {name} = np.{value.name} ',
+)
 odl_elem_order = simple_fixture(name='order', params=[None, 'C', 'F'])
-
 odl_ufunc = simple_fixture('ufunc', [p[0] for p in odl.util.ufuncs.UFUNCS])
 odl_reduction = simple_fixture('reduction', ['sum', 'prod', 'min', 'max'])
 
 # More complicated ones with non-trivial documentation
-arithmetic_op_par = [operator.add,
-                     operator.truediv,
-                     operator.mul,
-                     operator.sub,
-                     operator.iadd,
-                     operator.itruediv,
-                     operator.imul,
-                     operator.isub]
-arithmetic_op_ids = [" op = '{}' ".format(op)
-                     for op in ['+', '/', '*', '-', '+=', '/=', '*=', '-=']]
+arithmetic_op_par = [
+    operator.add,
+    operator.truediv,
+    operator.mul,
+    operator.sub,
+    operator.iadd,
+    operator.itruediv,
+    operator.imul,
+    operator.isub
+]
+arithmetic_op_ids = [
+    " op = '{}' ".format(op)
+    for op in ['+', '/', '*', '-', '+=', '/=', '*=', '-=']
+]
 
 
 @fixture(ids=arithmetic_op_ids, params=arithmetic_op_par)

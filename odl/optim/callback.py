@@ -87,8 +87,8 @@ class Callback(object):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> callback = odl.solvers.CallbackPrint()
-        >>> operator = odl.ScalingOperator(r3, 2.0)
+        >>> callback = odl.optim.CallbackPrint()
+        >>> operator = op.ScalingOperator(r3, 2.0)
         >>> composed_callback = callback * operator
         >>> composed_callback([1, 2, 3])
         rn(3).element([ 2.,  4.,  6.])
@@ -170,8 +170,8 @@ class _CallbackCompose(Callback):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> callback = odl.solvers.CallbackPrint()
-        >>> operator = odl.ScalingOperator(r3, 2.0)
+        >>> callback = odl.optim.CallbackPrint()
+        >>> operator = op.ScalingOperator(r3, 2.0)
         >>> callback * operator
         CallbackPrint() * ScalingOperator(rn(3), 2.0)
         """

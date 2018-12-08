@@ -13,11 +13,10 @@ import numpy as np
 import pytest
 
 import odl
-from odl.operator import OpTypeError
+from odl.operator.operator import OpTypeError
 from odl.util.testutils import (
     all_almost_equal, dtype_ndigits, dtype_tol, noise_element, simple_fixture)
-from odl.solvers.functional.default_functionals import (
-    KullbackLeiblerConvexConj)
+import odl.functional as fn
 
 
 # TODO: maybe add tests for if translations etc. belongs to the wrong space.
@@ -60,9 +59,10 @@ func_params = ['l1 ', 'l2', 'l2^2', 'constant', 'zero', 'ind_unit_ball_1',
 func_ids = [" functional='{}' ".format(p) for p in func_params]
 
 FUNCTIONALS_WITHOUT_DERIVATIVE = (
-    odl.solvers.functional.IndicatorLpUnitBall,
-    odl.solvers.functional.IndicatorSimplex,
-    odl.solvers.functional.IndicatorSumConstraint)
+    fn.IndicatorLpUnitBall,
+    fn.IndicatorSimplex,
+    fn.IndicatorSumConstraint,
+)
 
 
 @pytest.fixture(scope="module", ids=func_ids, params=func_params)
@@ -70,37 +70,37 @@ def functional(request, space):
     name = request.param.strip()
 
     if name == 'l1':
-        func = odl.solvers.functional.L1Norm(space)
+        func = fn.L1Norm(space)
     elif name == 'l2':
-        func = odl.solvers.functional.L2Norm(space)
+        func = fn.L2Norm(space)
     elif name == 'l2^2':
-        func = odl.solvers.functional.L2NormSquared(space)
+        func = fn.L2NormSquared(space)
     elif name == 'constant':
-        func = odl.solvers.functional.ConstantFunctional(space, 2)
+        func = fn.ConstantFunctional(space, 2)
     elif name == 'zero':
-        func = odl.solvers.functional.ZeroFunctional(space)
+        func = fn.ZeroFunctional(space)
     elif name == 'ind_unit_ball_1':
-        func = odl.solvers.functional.IndicatorLpUnitBall(space, 1)
+        func = fn.IndicatorLpUnitBall(space, 1)
     elif name == 'ind_unit_ball_2':
-        func = odl.solvers.functional.IndicatorLpUnitBall(space, 2)
+        func = fn.IndicatorLpUnitBall(space, 2)
     elif name == 'ind_unit_ball_pi':
-        func = odl.solvers.functional.IndicatorLpUnitBall(space, np.pi)
+        func = fn.IndicatorLpUnitBall(space, np.pi)
     elif name == 'ind_unit_ball_inf':
-        func = odl.solvers.functional.IndicatorLpUnitBall(space, np.inf)
+        func = fn.IndicatorLpUnitBall(space, np.inf)
     elif name == 'product':
-        left = odl.solvers.functional.L2Norm(space)
-        right = odl.solvers.functional.ConstantFunctional(space, 2)
-        func = odl.solvers.functional.FunctionalProduct(left, right)
+        left = fn.L2Norm(space)
+        right = fn.ConstantFunctional(space, 2)
+        func = fn.FunctionalProduct(left, right)
     elif name == 'quotient':
-        dividend = odl.solvers.functional.L2Norm(space)
-        divisor = odl.solvers.functional.ConstantFunctional(space, 2)
-        func = odl.solvers.functional.FunctionalQuotient(dividend, divisor)
+        dividend = fn.L2Norm(space)
+        divisor = fn.ConstantFunctional(space, 2)
+        func = fn.FunctionalQuotient(dividend, divisor)
     elif name == 'kl':
-        func = odl.solvers.functional.KullbackLeibler(space)
+        func = fn.KullbackLeibler(space)
     elif name == 'kl_cc':
         func = odl.solvers.KullbackLeibler(space).convex_conj
     elif name == 'kl_cross_ent':
-        func = odl.solvers.functional.KullbackLeiblerCrossEntropy(space)
+        func = fn.KullbackLeiblerCrossEntropy(space)
     elif name == 'kl_cc_cross_ent':
         func = odl.solvers.KullbackLeiblerCrossEntropy(space).convex_conj
     elif name == 'huber':
@@ -210,7 +210,7 @@ def test_left_scalar_mult(space, scalar):
     rtol = dtype_tol(space.dtype)
 
     x = noise_element(space)
-    func = odl.solvers.functional.L2Norm(space)
+    func = fn.L2Norm(space)
     lmul_func = scalar * func
 
     if scalar == 0:
@@ -257,7 +257,7 @@ def test_right_scalar_mult(space, scalar):
     rtol = dtype_tol(space.dtype)
 
     x = noise_element(space)
-    func = odl.solvers.functional.L2NormSquared(space)
+    func = fn.L2NormSquared(space)
     rmul_func = func * scalar
 
     if scalar == 0:
@@ -296,7 +296,7 @@ def test_right_scalar_mult(space, scalar):
 
     # Verify that for linear functionals, left multiplication is used.
     func = odl.solvers.ZeroFunctional(space)
-    assert isinstance(func * scalar, odl.solvers.FunctionalLeftScalarMult)
+    assert isinstance(func * scalar, odl.functional.functional.FunctionalLeftScalarMult)
 
 
 def test_functional_composition(space):
@@ -319,7 +319,7 @@ def test_functional_composition(space):
     # Test composition with operator from the right
     op = odl.operator.ScalingOperator(space, scalar)
     func_op_comp = func * op
-    assert isinstance(func_op_comp, odl.solvers.Functional)
+    assert isinstance(func_op_comp, odl.functional.Functional)
 
     x = noise_element(space)
     assert func_op_comp(x) == pytest.approx(func(op(x)), rel=rtol)

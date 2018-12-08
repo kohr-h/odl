@@ -111,9 +111,9 @@ def douglas_rachford_pd(x, f, g, L, niter, tau=None, sigma=None,
 
     See Also
     --------
-    odl.solvers.nonsmooth.primal_dual_hybrid_gradient.pdhg :
+    odl.optim.nonsmooth.primal_dual_hybrid_gradient.pdhg :
         Solver for similar problems.
-    odl.solvers.nonsmooth.forward_backward.forward_backward_pd :
+    odl.optim.nonsmooth.forward_backward.forward_backward_pd :
         Solver for similar problems which can additionaly handle a
         differentiable term.
 

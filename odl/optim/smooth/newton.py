@@ -11,8 +11,8 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 
-from odl.solvers.util import ConstantLineSearch
-from odl.solvers.iterative.iterative import conjugate_gradient
+from odl.optim.smooth.steplen import ConstantLineSearch
+from odl.optim.iterative.iterative import conjugate_gradient
 
 
 __all__ = ('newtons_method', 'bfgs_method', 'broydens_method')

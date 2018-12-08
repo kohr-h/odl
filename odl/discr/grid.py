@@ -16,7 +16,8 @@ from __future__ import absolute_import, division, print_function
 
 import numpy as np
 
-from odl.set import IntervalProd, Set
+from odl.set import IntervalProd
+from odl.set.sets import Set
 from odl.util import (
     array_str, indent, normalized_index_expression,
     normalized_scalar_param_list, npy_printoptions, safe_int_conv,

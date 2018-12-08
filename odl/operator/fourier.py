@@ -8,24 +8,29 @@
 
 """Discretized Fourier transform on L^p spaces."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
-from odl.discr import DiscreteLp
+from odl.discr.lp_discr import DiscreteLp
 from odl.operator import Operator
-from odl.set import RealNumbers, ComplexNumbers
-from odl.trafos.backends.pyfftw_bindings import (
-    pyfftw_call, PYFFTW_AVAILABLE, _pyfftw_to_local)
-from odl.trafos.util import (
-    reciprocal_grid, reciprocal_space,
-    dft_preprocess_data, dft_postprocess_data)
-from odl.util import (is_real_dtype, is_complex_floating_dtype,
-                      dtype_repr, conj_exponent, complex_dtype,
-                      normalized_scalar_param_list, normalized_axes_tuple)
+from odl.operator.backends.pyfftw_bindings import (
+    PYFFTW_AVAILABLE, _pyfftw_to_local, pyfftw_call)
+from odl.operator.fourier_utils import (
+    dft_postprocess_data, dft_preprocess_data, reciprocal_grid,
+    reciprocal_space)
+from odl.set import ComplexNumbers, RealNumbers
+from odl.util import (
+    complex_dtype, conj_exponent, dtype_repr, is_complex_floating_dtype,
+    is_real_dtype, normalized_axes_tuple, normalized_scalar_param_list)
 
-
-__all__ = ('DiscreteFourierTransform', 'DiscreteFourierTransformInverse',
-           'FourierTransform', 'FourierTransformInverse')
+__all__ = (
+    'DiscreteFourierTransform',
+    'DiscreteFourierTransformInverse',
+    'FourierTransform',
+    'FourierTransformInverse',
+    'PYFFTW_AVAILABLE',
+)
 
 
 _SUPPORTED_FOURIER_IMPLS = ('numpy',)

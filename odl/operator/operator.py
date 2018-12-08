@@ -8,23 +8,20 @@
 
 """Abstract mathematical operators."""
 
-from __future__ import print_function, division, absolute_import
-from builtins import object
-import inspect
-from numbers import Number, Integral
-import sys
+from __future__ import absolute_import, division, print_function
 
-from odl.set import LinearSpace, Set, Field
+import inspect
+import sys
+from builtins import object
+from numbers import Integral, Number
+
+from odl.set.sets import Field, Set
+from odl.set.space import LinearSpace
 from odl.util import cache_arguments
 
-
-__all__ = ('Operator', 'OperatorComp', 'OperatorSum', 'OperatorVectorSum',
-           'OperatorLeftScalarMult', 'OperatorRightScalarMult',
-           'FunctionalLeftVectorMult',
-           'OperatorLeftVectorMult', 'OperatorRightVectorMult',
-           'OperatorPointwiseProduct',
-           'OpTypeError', 'OpDomainError', 'OpRangeError',
-           'OpNotImplementedError')
+__all__ = (
+    'Operator',
+)
 
 
 def _default_call_out_of_place(op, x, **kwargs):
@@ -971,20 +968,16 @@ class Operator(object):
         --------
         >>> rn = odl.rn(3)
         >>> op = odl.ScalingOperator(rn, 3)
-        >>> x = rn.element([1, 2, 3])
-        >>> op(x)
+        >>> op([1, 2, 3])
         array([ 3.,  6.,  9.])
         >>> squared = op ** 2
-        >>> squared(x)
+        >>> squared([1, 2, 3])
         array([  9.,  18.,  27.])
-        >>> squared = op**3
-        >>> squared(x)
-        array([ 27.,  54.,  81.])
         """
         if isinstance(n, Integral) and n > 0:
             op = self
             while n > 1:
-                op = OperatorComp(self, op)
+                op = self @ op
                 n -= 1
             return op
         else:
@@ -1013,11 +1006,8 @@ class Operator(object):
         --------
         >>> rn = odl.rn(3)
         >>> op = odl.IdentityOperator(rn)
-        >>> x = rn.element([3, 6, 9])
-        >>> op(x)
-        array([ 3.,  6.,  9.])
-        >>> Scaled = op / 3.0
-        >>> Scaled(x)
+        >>> scaled = op / 3.0
+        >>> scaled([3, 6, 9])
         array([ 1.,  2.,  3.])
         """
         if isinstance(other, Number):
@@ -1095,15 +1085,11 @@ class OperatorSum(Operator):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> op = odl.IdentityOperator(r3)
-        >>> x = r3.element([1, 2, 3])
-        >>> out = r3.element()
-        >>> OperatorSum(op, op)(x, out)  # In-place, returns out
-        array([ 2.,  4.,  6.])
-        >>> out
-        array([ 2.,  4.,  6.])
-        >>> OperatorSum(op, op)(x)
-        array([ 2.,  4.,  6.])
+        >>> op1 = odl.IdentityOperator(r3)
+        >>> op2 = odl.ScalingOperator(r3, 2)
+        >>> sum_op = OperatorSum(op1, op2)
+        >>> sum_op([1, 2, 3])
+
         """
         if left.range != right.range:
             raise OpTypeError('operator ranges {!r} and {!r} do not match'

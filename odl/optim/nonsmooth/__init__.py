@@ -12,14 +12,14 @@ from __future__ import absolute_import
 
 __all__ = ()
 
-from .proximal_operators import *
-__all__ += proximal_operators.__all__
+from .ad_updates import *
+__all__ += ad_updates.__all__
 
 from .admm import *
 __all__ += admm.__all__
 
-from .primal_dual_hybrid_gradient import *
-__all__ += primal_dual_hybrid_gradient.__all__
+from .difference_convex import *
+__all__ += difference_convex.__all__
 
 from .douglas_rachford import *
 __all__ += douglas_rachford.__all__
@@ -27,11 +27,10 @@ __all__ += douglas_rachford.__all__
 from .forward_backward import *
 __all__ += forward_backward.__all__
 
-from .proximal_gradient_solvers import *
-__all__ += proximal_gradient_solvers.__all__
+# Same name of module and function, need this as workaround
+from . import pdhg
+__all__ += pdhg.__all__
+from .pdhg import *
 
-from .alternating_dual_updates import *
-__all__ += alternating_dual_updates.__all__
-
-from .difference_convex import *
-__all__ += difference_convex.__all__
+from .prox_grad import *
+__all__ += prox_grad.__all__

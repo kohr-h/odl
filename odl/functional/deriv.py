@@ -8,15 +8,18 @@
 
 """Utilities for computing the gradient and Hessian of functionals."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
-from odl.solvers.functional.functional import Functional
+from odl.functional.functional import Functional
 from odl.operator import Operator
 from odl.space.base_tensors import TensorSpace
 
-
-__all__ = ('NumericalDerivative', 'NumericalGradient',)
+__all__ = (
+    'NumericalDerivative',
+    'NumericalGradient',
+)
 
 
 class NumericalDerivative(Operator):
@@ -50,7 +53,7 @@ class NumericalDerivative(Operator):
         L2 norm:
 
         >>> space = odl.rn(3)
-        >>> func = odl.solvers.L2NormSquared(space)
+        >>> func = fn.L2NormSquared(space)
         >>> hess = NumericalDerivative(func.gradient, [1, 1, 1])
         >>> hess([0, 0, 1])
         rn(3).element([ 0.,  0.,  2.])
@@ -168,7 +171,7 @@ class NumericalGradient(Operator):
         Examples
         --------
         >>> space = odl.rn(3)
-        >>> func = odl.solvers.L2NormSquared(space)
+        >>> func = fn.L2NormSquared(space)
         >>> grad = NumericalGradient(func)
         >>> grad([1, 1, 1])
         rn(3).element([ 2.,  2.,  2.])
@@ -290,7 +293,7 @@ class NumericalGradient(Operator):
         Compute a numerical estimate of the derivative of the squared L2 norm:
 
         >>> space = odl.rn(3)
-        >>> func = odl.solvers.L2NormSquared(space)
+        >>> func = fn.L2NormSquared(space)
         >>> grad = NumericalGradient(func)
         >>> hess = grad.derivative([1, 1, 1])
         >>> hess([1, 0, 0])

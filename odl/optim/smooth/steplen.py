@@ -13,8 +13,12 @@ from builtins import object
 import numpy as np
 
 
-__all__ = ('LineSearch', 'BacktrackingLineSearch', 'ConstantLineSearch',
-           'LineSearchFromIterNum')
+__all__ = (
+    'LineSearch',
+    'BacktrackingLineSearch',
+    'ConstantLineSearch',
+    'LineSearchFromIterNum',
+)
 
 
 class LineSearch(object):
@@ -96,8 +100,8 @@ class BacktrackingLineSearch(LineSearch):
         Create line search
 
         >>> r3 = odl.rn(3)
-        >>> func = odl.solvers.L2NormSquared(r3)
-        >>> line_search = BacktrackingLineSearch(func)
+        >>> func = fn.L2NormSquared(r3)
+        >>> line_search = odl.optim.BacktrackingLineSearch(func)
 
         Find step in point x and direction d that decreases the function value.
 

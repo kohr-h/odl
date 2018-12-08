@@ -10,7 +10,7 @@
 
 from __future__ import print_function, division, absolute_import
 
-from odl.solvers.util import ConstantLineSearch
+from odl.optim.smooth.steplen import ConstantLineSearch
 
 
 __all__ = ('conjugate_gradient_nonlinear',)
@@ -19,7 +19,7 @@ __all__ = ('conjugate_gradient_nonlinear',)
 def conjugate_gradient_nonlinear(f, x, line_search=1.0, maxiter=1000, nreset=0,
                                  tol=1e-16, beta_method='FR',
                                  callback=None):
-    """Conjugate gradient for nonlinear problems.
+    r"""Conjugate gradient for nonlinear problems.
 
     Parameters
     ----------
@@ -58,11 +58,11 @@ def conjugate_gradient_nonlinear(f, x, line_search=1.0, maxiter=1000, nreset=0,
         \min f(x)
 
     for a differentiable functional
-    :math:`f: \mathcal{X}\\to \mathbb{R}` on a Hilbert space
-    :math:`\mathcal{X}`. It does so by finding a zero of the gradient
+    :math:`f: X\to \mathbb{R}` on a Hilbert space
+    :math:`X`. It does so by finding a zero of the gradient
 
     .. math::
-        \\nabla f: \mathcal{X} \\to \mathcal{X}.
+        \nabla f: X \to X.
 
     The method is described in a
     `Wikipedia article
@@ -70,12 +70,12 @@ def conjugate_gradient_nonlinear(f, x, line_search=1.0, maxiter=1000, nreset=0,
 
     See Also
     --------
-    odl.solvers.smooth.newton.bfgs_method :
+    odl.optim.smooth.newton.bfgs_method :
         Quasi-Newton solver for the same problem
-    odl.solvers.iterative.iterative.conjugate_gradient :
+    odl.optim.iterative.iterative.conjugate_gradient :
         Optimized solver for least-squares problem with linear and symmetric
         operator
-    odl.solvers.iterative.iterative.conjugate_gradient_normal :
+    odl.optim.iterative.iterative.conjugate_gradient_normal :
         Equivalent solver but for least-squares problem with linear operator
     """
     if x not in f.domain:

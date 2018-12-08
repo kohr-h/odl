@@ -16,20 +16,24 @@ from __future__ import absolute_import
 import numpy as np
 
 __version__ = '1.0.0.dev0'
-__all__ = ('set',
-           'space',
-           'operator',
-           'discr',
-           'contrib',
-           'deform',
-           'diagnostics',
-           'phantom',
-           'solvers',
-           'tomo',
-           'trafos',
-           'ufunc_ops',
-           'util',
-           )
+__all__ = (
+    'set',
+    'space',
+    'operator',
+    'op',
+    'functional',
+    'fn',
+    'discr',
+    'contrib',
+    'deform',
+    'diagnostics',
+    'phantom',
+    'optim',
+    'tomo',
+    'trafos',
+    'ufunc_ops',
+    'util',
+)
 
 # Set old Numpy printing behavior as to not invalidate all doctests.
 # TODO(kohr-h): switch to new behavior when Numpy 1.14 is minimum
@@ -50,21 +54,22 @@ __all__ += set.__all__
 from .space import *
 __all__ += space.__all__
 
-from .operator import *
-__all__ += operator.__all__
-
 from .discr import *
 __all__ += discr.__all__
 
 # More "advanced" subpackages keep their namespaces separate from top-level,
 # we only import the modules themselves
+from . import operator
+op = operator
+from . import functional
+fn = functional
+
 from . import contrib
 from . import deform
 from . import diagnostics
+from . import optim
 from . import phantom
-from . import solvers
 from . import tomo
-from . import trafos
 from . import ufunc_ops
 from . import util
 

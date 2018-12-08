@@ -23,9 +23,19 @@ ODL geometry representation to ASTRA's data structures, including:
 `ASTRA on GitHub <https://github.com/astra-toolbox/>`_.
 """
 
-from __future__ import print_function, division, absolute_import
-import numpy as np
+from __future__ import absolute_import, division, print_function
+
 import warnings
+
+import numpy as np
+
+from odl.discr.lp_discr import DiscreteLp
+from odl.tomo.geometry import (
+    DivergentBeamGeometry, Flat1dDetector, Flat2dDetector, Geometry,
+    ParallelBeamGeometry)
+from odl.tomo.util.utility import euler_matrix
+from odl.util.npy_compat import moveaxis
+
 try:
     import astra
 except ImportError:
@@ -34,12 +44,6 @@ except ImportError:
 else:
     ASTRA_AVAILABLE = True
 
-from odl.discr import DiscreteLp
-from odl.tomo.geometry import (
-    Geometry, DivergentBeamGeometry, ParallelBeamGeometry,
-    Flat1dDetector, Flat2dDetector)
-from odl.tomo.util.utility import euler_matrix
-from odl.util.npy_compat import moveaxis
 
 # Make sure that ASTRA >= 1.7 is used
 if ASTRA_AVAILABLE:
@@ -57,12 +61,19 @@ if ASTRA_AVAILABLE:
                 'to 1.7 or higher'.format(_maj, _min), RuntimeWarning)
 
 
-__all__ = ('ASTRA_AVAILABLE', 'ASTRA_VERSION', 'astra_supports',
-           'astra_volume_geometry', 'astra_projection_geometry',
-           'astra_data', 'astra_projector', 'astra_algorithm',
-           'astra_conebeam_3d_geom_to_vec',
-           'astra_conebeam_2d_geom_to_vec',
-           'astra_parallel_3d_geom_to_vec')
+__all__ = (
+    'ASTRA_AVAILABLE',
+    'ASTRA_VERSION',
+    'astra_supports',
+    'astra_volume_geometry',
+    'astra_projection_geometry',
+    'astra_data',
+    'astra_projector',
+    'astra_algorithm',
+    'astra_conebeam_3d_geom_to_vec',
+    'astra_conebeam_2d_geom_to_vec',
+    'astra_parallel_3d_geom_to_vec',
+)
 
 
 # ASTRA_FEATURES contains a set of features along with version specifiers

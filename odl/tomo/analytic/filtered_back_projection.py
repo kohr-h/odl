@@ -9,8 +9,8 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 
-from odl.discr import ResizingOperator
-from odl.trafos import FourierTransform, PYFFTW_AVAILABLE
+import odl.operator as op
+from odl.operator.fourier import PYFFTW_AVAILABLE
 
 
 __all__ = ('fbp_op', 'fbp_filter_op', 'tam_danielson_window',
@@ -372,12 +372,12 @@ def fbp_filter_op(ray_trafo, padding=True, filter_type='Ram-Lak',
             # Define padding operator
             ran_shp = (ray_trafo.range.shape[0],
                        ray_trafo.range.shape[1] * 2 - 1)
-            resizing = ResizingOperator(ray_trafo.range, ran_shp=ran_shp)
+            resizing = op.ResizingOperator(ray_trafo.range, ran_shp=ran_shp)
 
-            fourier = FourierTransform(resizing.range, axes=1, impl=impl)
+            fourier = op.FourierTransform(resizing.range, axes=1, impl=impl)
             fourier = fourier * resizing
         else:
-            fourier = FourierTransform(ray_trafo.range, axes=1, impl=impl)
+            fourier = op.FourierTransform(ray_trafo.range, axes=1, impl=impl)
 
     elif ray_trafo.domain.ndim == 3:
         # Find the direction that the filter should be taken in
@@ -439,12 +439,14 @@ def fbp_filter_op(ray_trafo, padding=True, filter_type='Ram-Lak',
             ran_shp = (ray_trafo.range.shape[0],
                        padded_shape_u,
                        padded_shape_v)
-            resizing = ResizingOperator(ray_trafo.range, ran_shp=ran_shp)
+            resizing = op.ResizingOperator(ray_trafo.range, ran_shp=ran_shp)
 
-            fourier = FourierTransform(resizing.range, axes=axes, impl=impl)
+            fourier = op.FourierTransform(resizing.range, axes=axes, impl=impl)
             fourier = fourier * resizing
         else:
-            fourier = FourierTransform(ray_trafo.range, axes=axes, impl=impl)
+            fourier = op.FourierTransform(
+                ray_trafo.range, axes=axes, impl=impl
+            )
     else:
         raise NotImplementedError('FBP only implemented in 2d and 3d')
 

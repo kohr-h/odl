@@ -10,20 +10,35 @@
 
 """Default operators defined on any (reasonable) space."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 from copy import copy
+
 import numpy as np
 
 from odl.operator.operator import Operator
-from odl.set import LinearSpace, Field, RealNumbers, ComplexNumbers
+from odl.set import ComplexNumbers, RealNumbers
+from odl.set.sets import Field
+from odl.set.space import LinearSpace
 from odl.space.pspace import ProductSpace
 
-
-__all__ = ('ScalingOperator', 'ZeroOperator', 'IdentityOperator',
-           'LinCombOperator', 'MultiplyOperator', 'PowerOperator',
-           'InnerProductOperator', 'NormOperator', 'DistOperator',
-           'ConstantOperator', 'RealPart', 'ImagPart', 'ComplexEmbedding',
-           'ComplexModulus', 'ComplexModulusSquared')
+__all__ = (
+    'ScalingOperator',
+    'IdentityOperator',
+    'LinCombOperator',
+    'MultiplyOperator',
+    'PowerOperator',
+    'InnerProductOperator',
+    'NormOperator',
+    'DistOperator',
+    'ConstantOperator',
+    'ZeroOperator',
+    'RealPart',
+    'ImagPart',
+    'ComplexEmbedding',
+    'ComplexModulus',
+    'ComplexModulusSquared',
+)
 
 
 class ScalingOperator(Operator):
@@ -50,12 +65,12 @@ class ScalingOperator(Operator):
         >>> r3 = odl.rn(3)
         >>> vec = r3.element([1, 2, 3])
         >>> out = r3.element()
-        >>> op = odl.ScalingOperator(r3, 2.0)
-        >>> op(vec, out)  # In-place, Returns out
+        >>> A = op.ScalingOperator(r3, 2.0)
+        >>> A(vec, out)  # In-place, Returns out
         array([ 2.,  4.,  6.])
         >>> out
         array([ 2.,  4.,  6.])
-        >>> op(vec)  # Out-of-place
+        >>> A(vec)  # Out-of-place
         array([ 2.,  4.,  6.])
         """
         if not isinstance(domain, (LinearSpace, Field)):
@@ -86,11 +101,11 @@ class ScalingOperator(Operator):
         --------
         >>> r3 = odl.rn(3)
         >>> vec = r3.element([1, 2, 3])
-        >>> op = odl.ScalingOperator(r3, 2.0)
-        >>> inv = op.inverse
-        >>> inv(op(vec)) == vec
+        >>> A = op.ScalingOperator(r3, 2.0)
+        >>> Ainv = A.inverse
+        >>> Ainv(A(vec)) == vec
         array([ True,  True,  True], dtype=bool)
-        >>> op(inv(vec)) == vec
+        >>> A(Ainv(vec)) == vec
         array([ True,  True,  True], dtype=bool)
         """
         if self.scalar == 0.0:
@@ -108,8 +123,8 @@ class ScalingOperator(Operator):
 
         >>> r3 = odl.rn(3)
         >>> x = r3.element([1, 2, 3])
-        >>> op = odl.ScalingOperator(r3, 2)
-        >>> op(x)
+        >>> A = op.ScalingOperator(r3, 2)
+        >>> A(x)
         array([ 2.,  4.,  6.])
         >>> op.adjoint(x)
         array([ 2.,  4.,  6.])
@@ -118,8 +133,8 @@ class ScalingOperator(Operator):
 
         >>> c3 = odl.cn(3)
         >>> x_complex = c3.element([1, 1j, 1 - 1j])
-        >>> op = odl.ScalingOperator(c3, 1 + 1j)
-        >>> expected_adj = odl.ScalingOperator(c3, 1 - 1j)
+        >>> A = op.ScalingOperator(c3, 1 + 1j)
+        >>> expected_adj = op.ScalingOperator(c3, 1 - 1j)
         >>> op.adjoint(x_complex)
         array([ 1.-1.j,  1.+1.j,  0.-2.j])
         >>> expected_adj(x_complex)
@@ -151,7 +166,7 @@ class ScalingOperator(Operator):
         Examples
         --------
         >>> spc = odl.rn(3)
-        >>> scaling = odl.ScalingOperator(spc, 3.0)
+        >>> scaling = op.ScalingOperator(spc, 3.0)
         >>> scaling.norm(True)
         3.0
         """
@@ -221,8 +236,8 @@ class LinCombOperator(Operator):
         >>> r3xr3 = odl.ProductSpace(r3, r3)
         >>> xy = r3xr3.element([[1, 2, 3], [1, 2, 3]])
         >>> z = r3.element()
-        >>> op = odl.LinCombOperator(r3, 1.0, 1.0)
-        >>> op(xy, out=z)  # Returns z
+        >>> A = op.LinCombOperator(r3, 1.0, 1.0)
+        >>> A(xy, out=z)  # Returns z
         array([ 2.,  4.,  6.])
         >>> z
         array([ 2.,  4.,  6.])
@@ -283,13 +298,13 @@ class MultiplyOperator(Operator):
         Multiply by vector:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.MultiplyOperator(r3, [1, 2, 3])
-        >>> op([2, 3, 4])
+        >>> A = op.MultiplyOperator(r3, [1, 2, 3])
+        >>> A([2, 3, 4])
         array([  2.,   6.,  12.])
 
         Multiply by scalar:
 
-        >>> op2 = odl.MultiplyOperator(r3.field, [1, 2, 3], range=r3)
+        >>> op2 = op.MultiplyOperator(r3.field, [1, 2, 3], range=r3)
         >>> op2(3)
         array([ 3.,  6.,  9.])
         """
@@ -335,7 +350,7 @@ class MultiplyOperator(Operator):
         Multiply by a space element:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.MultiplyOperator(r3, [1, 2, 3])
+        >>> A = op.MultiplyOperator(r3, [1, 2, 3])
         >>> op.adjoint([2, 3, 4])
         array([  2.,   6.,  12.])
 
@@ -347,7 +362,7 @@ class MultiplyOperator(Operator):
 
         Multiply vectors with a fixed scalar:
 
-        >>> op2 = odl.MultiplyOperator(r3, 3.0)
+        >>> op2 = op.MultiplyOperator(r3, 3.0)
         >>> op2.adjoint([2, 3, 4])
         array([  6.,   9.,  12.])
 
@@ -355,7 +370,7 @@ class MultiplyOperator(Operator):
 
         >>> c3 = odl.cn(3)
         >>> x_complex = c3.element([1, 1j, 1-1j])
-        >>> op3 = odl.MultiplyOperator(c3, x_complex)
+        >>> op3 = op.MultiplyOperator(c3, x_complex)
         >>> op3.adjoint.multiplicand
         array([ 1.-0.j,  0.-1.j,  1.+1.j])
         """
@@ -418,14 +433,14 @@ class PowerOperator(Operator):
         --------
         Use with vectors
 
-        >>> op = odl.PowerOperator(odl.rn(3), exponent=2)
-        >>> op([1, 2, 3])
+        >>> A = op.PowerOperator(odl.rn(3), exponent=2)
+        >>> A([1, 2, 3])
         array([ 1.,  4.,  9.])
 
         or scalars
 
-        >>> op = odl.PowerOperator(odl.RealNumbers(), exponent=2)
-        >>> op(2.0)
+        >>> A = op.PowerOperator(odl.RealNumbers(), exponent=2)
+        >>> A(2.0)
         4.0
         """
         super(PowerOperator, self).__init__(
@@ -467,16 +482,16 @@ class PowerOperator(Operator):
         --------
         Use on vector spaces:
 
-        >>> op = odl.PowerOperator(odl.rn(3), exponent=2)
-        >>> dop = op.derivative(op.domain.element([1, 2, 3]))
-        >>> dop([1, 1, 1])
+        >>> A = op.PowerOperator(odl.rn(3), exponent=2)
+        >>> Ad = op.derivative(op.domain.element([1, 2, 3]))
+        >>> Ad([1, 1, 1])
         array([ 2.,  4.,  6.])
 
         Use with scalars:
 
-        >>> op = odl.PowerOperator(odl.RealNumbers(), exponent=2)
-        >>> dop = op.derivative(2.0)
-        >>> dop(2.0)
+        >>> A = op.PowerOperator(odl.RealNumbers(), exponent=2)
+        >>> Ad = op.derivative(2.0)
+        >>> Ad(2.0)
         8.0
         """
         return self.exponent * MultiplyOperator(
@@ -521,8 +536,8 @@ class InnerProductOperator(Operator):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> op = odl.InnerProductOperator(r3, [1, 2, 3])
-        >>> op([2, 3, 4])
+        >>> A = op.InnerProductOperator(r3, [1, 2, 3])
+        >>> A([2, 3, 4])
         20.0
         """
         super(InnerProductOperator, self).__init__(
@@ -551,7 +566,7 @@ class InnerProductOperator(Operator):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> op = odl.InnerProductOperator(r3, [1, 2, 3])
+        >>> A = op.InnerProductOperator(r3, [1, 2, 3])
         >>> op.adjoint(2.0)
         array([ 2.,  4.,  6.])
         """
@@ -594,8 +609,8 @@ class NormOperator(Operator):
         Examples
         --------
         >>> r2 = odl.rn(2)
-        >>> op = odl.NormOperator(r2)
-        >>> op([3, 4])
+        >>> A = op.NormOperator(r2)
+        >>> A([3, 4])
         5.0
         """
         super(NormOperator, self).__init__(space, RealNumbers(), linear=False)
@@ -637,7 +652,7 @@ class NormOperator(Operator):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> op = odl.NormOperator(r3)
+        >>> A = op.NormOperator(r3)
         >>> derivative = op.derivative([1, 0, 0])
         >>> derivative([1, 0, 0])
         1.0
@@ -688,8 +703,8 @@ class DistOperator(Operator):
         Examples
         --------
         >>> r2 = odl.rn(2)
-        >>> op = odl.DistOperator(r2, [1, 1])
-        >>> op([4, 5])
+        >>> A = op.DistOperator(r2, [1, 1])
+        >>> A([4, 5])
         5.0
         """
         super(DistOperator, self).__init__(space, RealNumbers(), linear=False)
@@ -738,7 +753,7 @@ class DistOperator(Operator):
         Examples
         --------
         >>> r2 = odl.rn(2)
-        >>> op = odl.DistOperator(r2, [1, 1])
+        >>> A = op.DistOperator(r2, [1, 1])
         >>> derivative = op.derivative([2, 1])
         >>> derivative([1, 0])
         1.0
@@ -788,8 +803,8 @@ class ConstantOperator(Operator):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> op = odl.ConstantOperator(r3, [1, 2, 3])
-        >>> op([2, 3, 4])
+        >>> A = op.ConstantOperator(r3, [1, 2, 3])
+        >>> A([2, 3, 4])
         array([ 1.,  2.,  3.])
         """
         if domain is None:
@@ -820,7 +835,7 @@ class ConstantOperator(Operator):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> op = odl.ConstantOperator(r3, [1, 2, 3])
+        >>> A = op.ConstantOperator(r3, [1, 2, 3])
         >>> deriv = op.derivative([1, 1, 1])
         >>> deriv([2, 2, 2])
         array([ 0.,  0.,  0.])
@@ -857,14 +872,14 @@ class ZeroOperator(Operator):
 
         Examples
         --------
-        >>> op = odl.ZeroOperator(odl.rn(3))
-        >>> op([1, 2, 3])
+        >>> A = op.ZeroOperator(odl.rn(3))
+        >>> A([1, 2, 3])
         array([ 0.,  0.,  0.])
 
         Also works with domain != range:
 
-        >>> op = odl.ZeroOperator(odl.rn(3), odl.cn(4))
-        >>> op([1, 2, 3])
+        >>> A = op.ZeroOperator(odl.rn(3), odl.cn(4))
+        >>> A([1, 2, 3])
         array([ 0.+0.j,  0.+0.j,  0.+0.j,  0.+0.j])
         """
         if range is None:
@@ -918,23 +933,23 @@ class RealPart(Operator):
         Take the real part of complex vector:
 
         >>> c3 = odl.cn(3)
-        >>> op = odl.RealPart(c3)
-        >>> op([1 + 2j, 2, 3 - 1j])
+        >>> A = op.RealPart(c3)
+        >>> A([1 + 2j, 2, 3 - 1j])
         array([ 1.,  2.,  3.])
 
         The operator is the identity on real spaces:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.RealPart(r3)
-        >>> op([1, 2, 3])
+        >>> A = op.RealPart(r3)
+        >>> A([1, 2, 3])
         array([ 1.,  2.,  3.])
 
         The operator also works on other `TensorSpace` spaces such as
         `DiscreteLp` spaces:
 
         >>> r3 = odl.uniform_discr(0, 1, 3, dtype=complex)
-        >>> op = odl.RealPart(r3)
-        >>> op([1, 2, 3])
+        >>> A = op.RealPart(r3)
+        >>> A([1, 2, 3])
         array([ 1.,  2.,  3.])
         """
         real_space = space.real_space
@@ -971,16 +986,16 @@ class RealPart(Operator):
         The inverse is its own inverse if its domain is real:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.RealPart(r3)
-        >>> op.inverse(op([1, 2, 3]))
+        >>> A = op.RealPart(r3)
+        >>> A.inverse(A([1, 2, 3]))
         array([ 1.,  2.,  3.])
 
         This is not a true inverse, only a pseudoinverse, the complex part
         will by necessity be lost.
 
         >>> c3 = odl.cn(3)
-        >>> op = odl.RealPart(c3)
-        >>> op.inverse(op([1 + 2j, 2, 3 - 1j]))
+        >>> A = op.RealPart(c3)
+        >>> A.inverse(A([1 + 2j, 2, 3 - 1j]))
         array([ 1.+0.j,  2.+0.j,  3.+0.j])
         """
         if self.space_is_real:
@@ -1010,19 +1025,19 @@ class RealPart(Operator):
         The adjoint satisfies the adjoint equation for real spaces:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.RealPart(r3)
+        >>> A = op.RealPart(r3)
         >>> x = op.domain.element([1, 2, 3])
         >>> y = op.range.element([3, 2, 1])
-        >>> r3.inner(x, op.adjoint(y)) == r3.inner(op(x), y)
+        >>> r3.inner(x, A.adjoint(y)) == r3.inner(A(x), y)
         True
 
         If the domain is complex, it only satisfies the weaker definition:
 
         >>> c3 = odl.cn(3)
-        >>> op = odl.RealPart(c3)
+        >>> A = op.RealPart(c3)
         >>> y = op.range.element([3, 2, 1])
         >>> z = op.range.element([4, 3, 2])
-        >>> AAtyz = r3.inner(op(op.adjoint(y)), z)
+        >>> AAtyz = r3.inner(A(A.adjoint(y)), z)
         >>> AtyAtz = c3.inner(op.adjoint(y), op.adjoint(z))
         >>> AAtyz == AtyAtz
         True
@@ -1056,15 +1071,15 @@ class ImagPart(Operator):
         Take the imaginary part of complex vector:
 
         >>> c3 = odl.cn(3)
-        >>> op = odl.ImagPart(c3)
-        >>> op([1 + 2j, 2, 3 - 1j])
+        >>> A = op.ImagPart(c3)
+        >>> A([1 + 2j, 2, 3 - 1j])
         array([ 2.,  0., -1.])
 
         The operator is the zero operator on real spaces:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.ImagPart(r3)
-        >>> op([1, 2, 3])
+        >>> A = op.ImagPart(r3)
+        >>> A([1, 2, 3])
         array([ 0.,  0.,  0.])
         """
         real_space = space.real_space
@@ -1099,16 +1114,16 @@ class ImagPart(Operator):
         The inverse is the zero operator if the domain is real:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.ImagPart(r3)
-        >>> op.inverse(op([1, 2, 3]))
+        >>> A = op.ImagPart(r3)
+        >>> A.inverse(A([1, 2, 3]))
         array([ 0.,  0.,  0.])
 
         This is not a true inverse, only a pseudoinverse, the real part
         will by necessity be lost.
 
         >>> c3 = odl.cn(3)
-        >>> op = odl.ImagPart(c3)
-        >>> op.inverse(op([1 + 2j, 2, 3 - 1j]))
+        >>> A = op.ImagPart(c3)
+        >>> A.inverse(A([1 + 2j, 2, 3 - 1j]))
         array([ 0.+2.j,  0.+0.j, -0.-1.j])
         """
         if self.space_is_real:
@@ -1138,20 +1153,20 @@ class ImagPart(Operator):
         The adjoint satisfies the adjoint equation for real spaces:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.ImagPart(r3)
+        >>> A = op.ImagPart(r3)
         >>> x = op.domain.element([1, 2, 3])
         >>> y = op.range.element([3, 2, 1])
-        >>> r3.inner(x, op.adjoint(y)) == r3.inner(op(x), y)
+        >>> r3.inner(x, A.adjoint(y)) == r3.inner(A(x), y)
         True
 
         If the domain is complex, it only satisfies the weaker definition:
 
         >>> c3 = odl.cn(3)
-        >>> op = odl.ImagPart(c3)
+        >>> A = op.ImagPart(c3)
         >>> y = op.range.element([1, 2, 3])
         >>> z = op.range.element([3, 2, 1])
-        >>> AAtyz = r3.inner(op(op.adjoint(y)), z)
-        >>> AtyAtz = c3.inner(op.adjoint(y), op.adjoint(z))
+        >>> AAtyz = r3.inner(A(A.adjoint(y)), z)
+        >>> AtyAtz = c3.inner(A.adjoint(y), A.adjoint(z))
         >>> AAtyz == AtyAtz
         True
         """
@@ -1187,22 +1202,22 @@ class ComplexEmbedding(Operator):
         Embed real vector into complex space:
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.ComplexEmbedding(r3)
-        >>> op([1, 2, 3])
+        >>> A = op.ComplexEmbedding(r3)
+        >>> A([1, 2, 3])
         array([ 1.+0.j,  2.+0.j,  3.+0.j])
 
         Embed real vector as imaginary part into complex space:
 
-        >>> op = odl.ComplexEmbedding(r3, scalar=1j)
-        >>> op([1, 2, 3])
+        >>> A = op.ComplexEmbedding(r3, scalar=1j)
+        >>> A([1, 2, 3])
         array([ 0.+1.j,  0.+2.j,  0.+3.j])
 
         On complex spaces the operator is the same as simple multiplication by
         scalar:
 
         >>> c3 = odl.cn(3)
-        >>> op = odl.ComplexEmbedding(c3, scalar=1 + 2j)
-        >>> op([1 + 1j, 2 + 2j, 3 + 3j])
+        >>> A = op.ComplexEmbedding(c3, scalar=1 + 2j)
+        >>> A([1 + 1j, 2 + 2j, 3 + 3j])
         array([-1.+3.j, -2.+6.j, -3.+9.j])
         """
         complex_space = space.complex_space
@@ -1230,8 +1245,8 @@ class ComplexEmbedding(Operator):
         Examples
         --------
         >>> r3 = odl.rn(3)
-        >>> op = odl.ComplexEmbedding(r3, scalar=1)
-        >>> op.inverse(op([1, 2, 4]))
+        >>> A = op.ComplexEmbedding(r3, scalar=1)
+        >>> A.inverse(A([1, 2, 4]))
         array([ 1.,  2.,  4.])
         """
         if self.domain.is_real:
@@ -1260,7 +1275,7 @@ class ComplexEmbedding(Operator):
         space, this does not satisfy the usual adjoint equation:
 
         .. math::
-            \langle Ax, y \\rangle = \langle x, A^*y \rangle
+            \langle Ax, y \rangle = \langle x, A^*y \rangle
 
         Instead it is an adjoint in a weaker sense as follows:
 
@@ -1272,10 +1287,10 @@ class ComplexEmbedding(Operator):
         The adjoint satisfies the adjoint equation for complex spaces
 
         >>> c3 = odl.cn(3)
-        >>> op = odl.ComplexEmbedding(c3, scalar=1j)
+        >>> A = op.ComplexEmbedding(c3, scalar=1j)
         >>> x = c3.element([1 + 1j, 2 + 2j, 3 + 3j])
         >>> y = c3.element([3 + 1j, 2 + 2j, 3 + 1j])
-        >>> Axy = c3.inner(op(x), y)
+        >>> Axy = c3.inner(A(x), y)
         >>> xAty = c3.inner(x, op.adjoint(y))
         >>> Axy == xAty
         True
@@ -1283,11 +1298,11 @@ class ComplexEmbedding(Operator):
         For real domains, it only satisfies the (right) adjoint equation
 
         >>> r3 = odl.rn(3)
-        >>> op = odl.ComplexEmbedding(r3, scalar=1j)
+        >>> A = op.ComplexEmbedding(r3, scalar=1j)
         >>> x = r3.element([1, 2, 3])
         >>> y = r3.element([3, 2, 3])
-        >>> AtAxy = r3.inner(op.adjoint(op(x)), y)
-        >>> AxAy = c3.inner(op(x), op(y))
+        >>> AtAxy = r3.inner(A.adjoint(A(x)), y)
+        >>> AxAy = c3.inner(A(x), A(y))
         >>> AtAxy == AxAy
         True
         """
@@ -1325,23 +1340,23 @@ class ComplexModulus(Operator):
         Take the modulus of a complex vector:
 
         >>> c2 = odl.cn(2)
-        >>> op = odl.ComplexModulus(c2)
-        >>> op([3 + 4j, 2])
+        >>> A = op.ComplexModulus(c2)
+        >>> A([3 + 4j, 2])
         array([ 5.,  2.])
 
         The operator is the absolute value on real spaces:
 
         >>> r2 = odl.rn(2)
-        >>> op = odl.ComplexModulus(r2)
-        >>> op([1, -2])
+        >>> A = op.ComplexModulus(r2)
+        >>> A([1, -2])
         array([ 1.,  2.])
 
         The operator also works on other `TensorSpace`'s such as
         `DiscreteLp`:
 
         >>> space = odl.uniform_discr(0, 1, 2, dtype=complex)
-        >>> op = odl.ComplexModulus(space)
-        >>> op([3 + 4j, 2])
+        >>> A = op.ComplexModulus(space)
+        >>> A([3 + 4j, 2])
         array([ 5.,  2.])
         """
         real_space = space.real_space
@@ -1370,8 +1385,8 @@ class ComplexModulus(Operator):
         Examples
         --------
         >>> c2 = odl.cn(2)
-        >>> op = odl.ComplexModulus(c2)
-        >>> op([3 + 4j, 2])
+        >>> A = op.ComplexModulus(c2)
+        >>> A([3 + 4j, 2])
         array([ 5.,  2.])
         >>> deriv = op.derivative([3 + 4j, 2])
         >>> deriv.domain
@@ -1422,8 +1437,8 @@ class ComplexModulus(Operator):
                 Adjoint of the derivative:
 
                 >>> c2 = odl.cn(2)
-                >>> op = odl.ComplexModulus(c2)
-                >>> op([3 + 4j, 2])
+                >>> A = op.ComplexModulus(c2)
+                >>> A([3 + 4j, 2])
                 array([ 5.,  2.])
                 >>> deriv = op.derivative([3 + 4j, 2])
                 >>> adj = deriv.adjoint
@@ -1527,23 +1542,23 @@ class ComplexModulusSquared(Operator):
         Take the squared modulus of a complex vector:
 
         >>> c2 = odl.cn(2)
-        >>> op = odl.ComplexModulusSquared(c2)
-        >>> op([3 + 4j, 2])
+        >>> A = op.ComplexModulusSquared(c2)
+        >>> A([3 + 4j, 2])
         array([ 25.,   4.])
 
         On a real space, this is the same as squaring:
 
         >>> r2 = odl.rn(2)
-        >>> op = odl.ComplexModulusSquared(r2)
-        >>> op([1, -2])
+        >>> A = op.ComplexModulusSquared(r2)
+        >>> A([1, -2])
         array([ 1.,  4.])
 
         The operator also works on other `TensorSpace`'s such as
         `DiscreteLp`:
 
         >>> space = odl.uniform_discr(0, 1, 2, dtype=complex)
-        >>> op = odl.ComplexModulusSquared(space)
-        >>> op([3 + 4j, 2])
+        >>> A = op.ComplexModulusSquared(space)
+        >>> A([3 + 4j, 2])
         array([ 25.,   4.])
         """
         real_space = space.real_space
@@ -1569,8 +1584,8 @@ class ComplexModulusSquared(Operator):
         Examples
         --------
         >>> c2 = odl.cn(2)
-        >>> op = odl.ComplexModulusSquared(c2)
-        >>> op([3 + 4j, 2])
+        >>> A = op.ComplexModulusSquared(c2)
+        >>> A([3 + 4j, 2])
         array([ 25.,   4.])
         >>> deriv = op.derivative([3 + 4j, 2])
         >>> deriv.domain
@@ -1620,7 +1635,7 @@ class ComplexModulusSquared(Operator):
                 Examples
                 --------
                 >>> c2 = odl.cn(2)
-                >>> op = odl.ComplexModulusSquared(c2)
+                >>> A = op.ComplexModulusSquared(c2)
                 >>> deriv = op.derivative([3 + 4j, 2])
                 >>> adj = deriv.adjoint
                 >>> adj.domain

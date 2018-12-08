@@ -8,20 +8,16 @@
 
 from __future__ import absolute_import
 
-
 __all__ = ()
 
 from .functional import *
 __all__ += functional.__all__
 
-from .nonsmooth import *
-__all__ += nonsmooth.__all__
+from .basic_funcs import *
+__all__ += basic_funcs.__all__
 
-from .smooth import *
-__all__ += smooth.__all__
+from .deriv import *
+__all__ += deriv.__all__
 
-from .iterative import *
-__all__ += iterative.__all__
-
-from .util import *
-__all__ += util.__all__
+from . import misc_funcs
+from . import prox_ops

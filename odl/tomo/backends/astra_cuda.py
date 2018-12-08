@@ -8,11 +8,21 @@
 
 """Backend for ASTRA using CUDA."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 from builtins import object
 from multiprocessing import Lock
+
 import numpy as np
 from packaging.version import parse as parse_version
+
+from odl.discr.lp_discr import DiscreteLp
+from odl.tomo.backends.astra_setup import (
+    ASTRA_VERSION, astra_algorithm, astra_data, astra_projection_geometry,
+    astra_projector, astra_volume_geometry)
+from odl.tomo.geometry import (
+    ConeFlatGeometry, FanFlatGeometry, Geometry, Parallel2dGeometry,
+    Parallel3dAxisGeometry)
 
 try:
     import astra
@@ -20,18 +30,11 @@ try:
 except ImportError:
     ASTRA_CUDA_AVAILABLE = False
 
-from odl.discr import DiscreteLp
-from odl.tomo.backends.astra_setup import (
-    ASTRA_VERSION,
-    astra_projection_geometry, astra_volume_geometry, astra_projector,
-    astra_data, astra_algorithm)
-from odl.tomo.geometry import (
-    Geometry, Parallel2dGeometry, FanFlatGeometry, Parallel3dAxisGeometry,
-    ConeFlatGeometry)
-
-
-__all__ = ('ASTRA_CUDA_AVAILABLE',
-           'AstraCudaProjectorImpl', 'AstraCudaBackProjectorImpl')
+__all__ = (
+    'ASTRA_CUDA_AVAILABLE',
+    'AstraCudaProjectorImpl',
+    'AstraCudaBackProjectorImpl',
+)
 
 
 class AstraCudaProjectorImpl(object):

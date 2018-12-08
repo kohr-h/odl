@@ -27,7 +27,6 @@ from odl.util import (
     npy_printoptions, safe_int_conv, signature_string)
 
 __all__ = (
-    'DiscreteLp',
     'uniform_discr',
 )
 

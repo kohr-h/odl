@@ -15,8 +15,7 @@ import pytest
 
 import odl
 from odl.util.testutils import all_almost_equal, noise_element, simple_fixture
-from odl.solvers.functional.default_functionals import (
-    KullbackLeiblerConvexConj, KullbackLeiblerCrossEntropyConvexConj)
+import odl.functional as fn
 
 
 # --- pytest fixtures --- #
@@ -307,7 +306,7 @@ def test_kullback_leibler(space):
     # The convex conjugate functional
     cc_func = func.convex_conj
 
-    assert isinstance(cc_func, KullbackLeiblerConvexConj)
+    assert isinstance(cc_func, fn.KullbackLeiblerConvexConj)
 
     # The convex conjugate functional is only finite for elements with all
     # components smaller than 1.
@@ -383,7 +382,7 @@ def test_kullback_leibler_cross_entorpy(space):
     # The convex conjugate functional
     cc_func = func.convex_conj
 
-    assert isinstance(cc_func, KullbackLeiblerCrossEntropyConvexConj)
+    assert isinstance(cc_func, fn.KullbackLeiblerCrossEntropyConvexConj)
 
     # The convex conjugate functional is defined for all values of x.
     x = noise_element(space)

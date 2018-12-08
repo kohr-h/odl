@@ -8,25 +8,27 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
+from odl.functional.prox_ops import (
+    prox_arg_scaling, prox_const_func, prox_convex_conj,
+    prox_quadratic_perturbation, prox_translation)
+from odl.operator import ConstantOperator, IdentityOperator, Operator
 from odl.operator.operator import (
-    Operator, OperatorComp, OperatorLeftScalarMult, OperatorRightScalarMult,
-    OperatorRightVectorMult, OperatorSum, OperatorPointwiseProduct)
-from odl.operator.default_ops import (IdentityOperator, ConstantOperator)
-from odl.solvers.nonsmooth import (proximal_arg_scaling, proximal_translation,
-                                   proximal_quadratic_perturbation,
-                                   proximal_const_func, proximal_convex_conj)
-from odl.util import signature_string, indent
+    OperatorComp, OperatorLeftScalarMult, OperatorPointwiseProduct,
+    OperatorRightScalarMult, OperatorRightVectorMult, OperatorSum)
+from odl.util import indent, signature_string
 
-
-__all__ = ('Functional', 'FunctionalLeftScalarMult',
-           'FunctionalRightScalarMult', 'FunctionalComp',
-           'FunctionalRightVectorMult', 'FunctionalSum', 'FunctionalScalarSum',
-           'FunctionalTranslation', 'InfimalConvolution',
-           'FunctionalQuadraticPerturb', 'FunctionalProduct',
-           'FunctionalQuotient', 'BregmanDistance', 'simple_functional')
+__all__ = (
+    'Functional',
+    'FunctionalTranslation',
+    'FunctionalQuadraticPerturb',
+    'InfimalConvolution',
+    'BregmanDistance',
+    'simple_functional'
+)
 
 
 class Functional(Operator):
@@ -316,20 +318,24 @@ class Functional(Operator):
         """
         if isinstance(other, Operator):
             return FunctionalComp(self, other)
+
         elif other in self.range:
-            # Left multiplication is more efficient, so we can use this in the
-            # case of linear functional.
             if other == 0:
-                from odl.solvers.functional.default_functionals import (
-                    ConstantFunctional)
-                return ConstantFunctional(self.domain,
-                                          self(self.domain.zero()))
+                # Optimization: constant functional F(0)
+                from odl.functional.default_funcs import ConstantFunctional
+                return ConstantFunctional(
+                    self.domain, self(self.domain.zero())
+                )
             elif self.is_linear:
+                # Optimization: left multiplication is more efficient, and
+                # equivalent for linear functionals
                 return FunctionalLeftScalarMult(self, other)
             else:
                 return FunctionalRightScalarMult(self, other)
+
         elif other in self.domain:
             return FunctionalRightVectorMult(self, other)
+
         else:
             return super(Functional, self).__mul__(other)
 
@@ -385,11 +391,12 @@ class Functional(Operator):
         """
         if other in self.range:
             if other == 0:
-                from odl.solvers.functional.default_functionals import (
-                    ZeroFunctional)
+                # Optimization: always 0
+                from odl.functional.default_funcs import ZeroFunctional
                 return ZeroFunctional(self.domain)
             else:
                 return FunctionalLeftScalarMult(self, other)
+
         else:
             return super(Functional, self).__rmul__(other)
 
@@ -503,7 +510,7 @@ class FunctionalLeftScalarMult(Functional, OperatorLeftScalarMult):
 
         See Also
         --------
-        odl.solvers.nonsmooth.proximal_operators.proximal_const_func
+        odl.functional.prox_ops.prox_const_func
         """
 
         if self.scalar < 0:
@@ -514,10 +521,10 @@ class FunctionalLeftScalarMult(Functional, OperatorLeftScalarMult):
         elif self.scalar == 0:
             # Should not get here. `Functional.__rmul__` takes care of the case
             # scalar = 0
-            return proximal_const_func(self.domain)
+            return prox_const_func(self.domain)
 
         else:
-            def proximal_left_scalar_mult(sigma=1.0):
+            def prox_left_scalar_mult(sigma=1.0):
                 """Proximal operator for left scalar multiplication.
 
                     Parameters
@@ -527,7 +534,7 @@ class FunctionalLeftScalarMult(Functional, OperatorLeftScalarMult):
                 """
                 return self.functional.proximal(sigma * self.scalar)
 
-            return proximal_left_scalar_mult
+            return prox_left_scalar_mult
 
 
 class FunctionalRightScalarMult(Functional, OperatorRightScalarMult):
@@ -588,9 +595,9 @@ class FunctionalRightScalarMult(Functional, OperatorRightScalarMult):
 
         See Also
         --------
-        odl.solvers.nonsmooth.proximal_operators.proximal_arg_scaling
+        odl.functional.prox_ops.prox_arg_scaling
         """
-        return proximal_arg_scaling(self.functional.proximal, self.scalar)
+        return prox_arg_scaling(self.functional.proximal, self.scalar)
 
 
 class FunctionalComp(Functional, OperatorComp):
@@ -755,8 +762,7 @@ class FunctionalScalarSum(FunctionalSum):
             The scalar to be added to the functional. The `field` of the
             ``domain`` is the range of the functional.
         """
-        from odl.solvers.functional.default_functionals import (
-            ConstantFunctional)
+        from odl.functional.default_funcs import ConstantFunctional
 
         if not isinstance(func, Functional):
             raise TypeError('`fun` {!r} is not a `Functional` instance'
@@ -767,7 +773,8 @@ class FunctionalScalarSum(FunctionalSum):
 
         super(FunctionalScalarSum, self).__init__(
             left=func,
-            right=ConstantFunctional(space=func.domain, constant=scalar))
+            right=ConstantFunctional(space=func.domain, constant=scalar),
+        )
 
     @property
     def scalar(self):
@@ -851,14 +858,13 @@ class FunctionalTranslation(Functional):
 
         See Also
         --------
-        odl.solvers.nonsmooth.proximal_operators.proximal_translation
+        odl.functional.prox_ops.prox_translation
         """
-        return proximal_translation(self.functional.proximal,
-                                    self.translation)
+        return prox_translation(self.functional.proximal, self.translation)
 
     @property
     def convex_conj(self):
-        """Convex conjugate functional of the translated functional.
+        r"""Convex conjugate functional of the translated functional.
 
         Notes
         -----
@@ -910,9 +916,9 @@ class InfimalConvolution(Functional):
         Examples
         --------
         >>> space = odl.rn(3)
-        >>> l1 = odl.solvers.L1Norm(space)
-        >>> l2 = odl.solvers.L2Norm(space)
-        >>> f = odl.solvers.InfimalConvolution(l1.convex_conj, l2.convex_conj)
+        >>> l1 = fn.L1Norm(space)
+        >>> l2 = fn.L2Norm(space)
+        >>> f = fn.InfimalConvolution(l1.convex_conj, l2.convex_conj)
         >>> x = f.domain.one()
         >>> f.convex_conj(x) - (l1(x) + l2(x))
         0.0
@@ -1062,7 +1068,7 @@ class FunctionalQuadraticPerturb(Functional):
             raise TypeError('`quadratic_coeff` {} must be non-negative'
                             ''.format(self.quadratic_coeff))
 
-        return proximal_quadratic_perturbation(
+        return prox_quadratic_perturbation(
             self.functional.proximal,
             a=self.quadratic_coeff, u=self.linear_term)
 
@@ -1137,10 +1143,10 @@ class FunctionalProduct(Functional, OperatorPointwiseProduct):
         Construct the functional || . ||_2^2 * 3
 
         >>> space = odl.rn(2)
-        >>> func1 = odl.solvers.L2NormSquared(space)
-        >>> func2 = odl.solvers.ConstantFunctional(space, 3)
-        >>> prod = odl.solvers.FunctionalProduct(func1, func2)
-        >>> prod([2, 3])  # expect (2**2 + 3**2) * 3 = 39
+        >>> func1 = fn.L2NormSquared(space)
+        >>> func2 = fn.ConstantFunctional(space, 3)
+        >>> prod = FunctionalProduct(func1, func2)
+        >>> prod([2, 3])  # expect (2 ** 2 + 3 ** 2) * 3 = 39
         39.0
         """
         if not isinstance(left, Functional):
@@ -1196,9 +1202,9 @@ class FunctionalQuotient(Functional):
         Construct the functional || . ||_2 / 5
 
         >>> space = odl.rn(2)
-        >>> func1 = odl.solvers.L2Norm(space)
-        >>> func2 = odl.solvers.ConstantFunctional(space, 5)
-        >>> prod = odl.solvers.FunctionalQuotient(func1, func2)
+        >>> func1 = fn.L2Norm(space)
+        >>> func2 = fn.ConstantFunctional(space, 5)
+        >>> prod = fn.FunctionalQuotient(func1, func2)
         >>> prod([3, 4])  # expect sqrt(3**2 + 4**2) / 5 = 1
         1.0
         """
@@ -1317,10 +1323,10 @@ class FunctionalDefaultConvexConjugate(Functional):
 
         Returns
         -------
-        proximal : proximal_convex_conj
+        proximal : prox_convex_conj
             Proximal computed using the Moreu identity
         """
-        return proximal_convex_conj(self.convex_conj.proximal)
+        return prox_convex_conj(self.convex_conj.proximal)
 
     def __repr__(self):
         """Return ``repr(self)``."""
@@ -1378,11 +1384,10 @@ class BregmanDistance(Functional):
         Example of initializing the Bregman distance functional:
 
         >>> space = odl.uniform_discr(0, 1, 10)
-        >>> l2_squared = odl.solvers.L2NormSquared(space)
+        >>> l2_squared = fn.L2NormSquared(space)
         >>> point = space.one()
         >>> subgrad = l2_squared.gradient(point)
-        >>> bregman_dist = odl.solvers.BregmanDistance(
-        ...     l2_squared, point, subgrad)
+        >>> bregman_dist = fn.BregmanDistance(l2_squared, point, subgrad)
 
         This is gives squared L2 distance to the given point, ||x - 1||^2:
 

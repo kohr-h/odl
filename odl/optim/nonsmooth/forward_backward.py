@@ -118,10 +118,10 @@ def forward_backward_pd(x, f, g, L, h, tau, sigma, niter,
 
     See Also
     --------
-    odl.solvers.nonsmooth.primal_dual_hybrid_gradient.pdhg :
+    odl.optim.nonsmooth.primal_dual_hybrid_gradient.pdhg :
         Solver for similar problems without differentiability in any
         of the terms.
-    odl.solvers.nonsmooth.douglas_rachford.douglas_rachford_pd :
+    odl.optim.nonsmooth.douglas_rachford.douglas_rachford_pd :
         Solver for similar problems without differentiability in any
         of the terms.
 

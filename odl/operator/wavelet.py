@@ -8,16 +8,20 @@
 
 """Discrete wavelet transformation on L2 spaces."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
 
 import numpy as np
-from odl.discr import DiscreteLp
-from odl.operator import Operator
-from odl.trafos.backends.pywt_bindings import (
-    PYWT_AVAILABLE,
-    pywt_pad_mode, pywt_wavelet, precompute_raveled_slices)
 
-__all__ = ('WaveletTransform', 'WaveletTransformInverse')
+from odl.discr.lp_discr import DiscreteLp
+from odl.operator import Operator
+from odl.operator.backends.pywt_bindings import (
+    PYWT_AVAILABLE, precompute_raveled_slices, pywt_pad_mode, pywt_wavelet)
+
+__all__ = (
+    'WaveletTransform',
+    'WaveletTransformInverse',
+    'PYWT_AVAILABLE',
+)
 
 
 _SUPPORTED_WAVELET_IMPLS = ()
