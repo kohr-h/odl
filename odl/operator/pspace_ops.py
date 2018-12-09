@@ -106,48 +106,41 @@ class ProductSpaceOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> pspace = odl.ProductSpace(r3, r3)
-        >>> I = odl.IdentityOperator(r3)
-        >>> x = pspace.element([[1, 2, 3],
-        ...                     [4, 5, 6]])
+        >>> X = odl.rn(3)
+        >>> I = op.IdentityOperator(X)
 
         Create an operator that sums two inputs:
 
-        >>> prod_op = odl.ProductSpaceOperator([[I, I]])
-        >>> prod_op(x)
-        ProductSpace(rn(3), 1).element([
-            [ 5.,  7.,  9.]
-        ])
+        >>> P = op.ProductSpaceOperator([[I, I]])
+        >>> P([[1, 2, 3],
+        ...    [4, 5, 6]])
+        array([[ 5.,  7.,  9.]])
 
         Diagonal operator -- 0 or ``None`` means ignore, or the implicit
         zero operator:
 
-        >>> prod_op = odl.ProductSpaceOperator([[I, 0],
-        ...                                     [0, I]])
-        >>> prod_op(x)
-        ProductSpace(rn(3), 2).element([
-            [ 1.,  2.,  3.],
-            [ 4.,  5.,  6.]
-        ])
+        >>> P = op.ProductSpaceOperator([[I, 0],
+        ...                              [0, I]])
+        >>> P([[1, 2, 3],
+        ...    [4, 5, 6]])
+        array([[ 1.,  2.,  3.],
+               [ 4.,  5.,  6.]])
 
         If a column is empty, the operator domain must be specified. The
         same holds for an empty row and the range of the operator:
 
-        >>> prod_op = odl.ProductSpaceOperator([[I, 0],
-        ...                                     [I, 0]], domain=r3 ** 2)
-        >>> prod_op(x)
-        ProductSpace(rn(3), 2).element([
-            [ 1.,  2.,  3.],
-            [ 1.,  2.,  3.]
-        ])
-        >>> prod_op = odl.ProductSpaceOperator([[I, I],
-        ...                                     [0, 0]], range=r3 ** 2)
-        >>> prod_op(x)
-        ProductSpace(rn(3), 2).element([
-            [ 5.,  7.,  9.],
-            [ 0.,  0.,  0.]
-        ])
+        >>> P = op.ProductSpaceOperator([[I, 0],
+        ...                              [I, 0]], domain=X ** 2)
+        >>> P([[1, 2, 3],
+        ...    [4, 5, 6]])
+        array([[ 1.,  2.,  3.],
+               [ 1.,  2.,  3.]])
+        >>> P = op.ProductSpaceOperator([[I, I],
+        ...                              [0, 0]], range=X ** 2)
+        >>> P([[1, 2, 3],
+        ...    [4, 5, 6]])
+        array([[ 5.,  7.,  9.],
+               [ 0.,  0.,  0.]])
         """
         # Lazy import to improve `import odl` time
         import scipy.sparse
@@ -327,52 +320,42 @@ class ProductSpaceOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> pspace = odl.ProductSpace(r3, r3)
-        >>> I = odl.IdentityOperator(r3)
-        >>> x = pspace.element([[1, 2, 3], [4, 5, 6]])
+        >>> X = odl.rn(3)
+        >>> I = op.IdentityOperator(X)
 
-        Example with linear operator (derivative is itself)
+        Example with linear operator (derivative is itself):
 
-        >>> prod_op = ProductSpaceOperator([[0, I], [0, 0]],
-        ...                                domain=pspace, range=pspace)
-        >>> prod_op(x)
-        ProductSpace(rn(3), 2).element([
-            [ 4.,  5.,  6.],
-            [ 0.,  0.,  0.]
-        ])
-        >>> prod_op.derivative(x)(x)
-        ProductSpace(rn(3), 2).element([
-            [ 4.,  5.,  6.],
-            [ 0.,  0.,  0.]
-        ])
+        >>> P = op.ProductSpaceOperator([[0, I],
+        ...                              [0, 0]],
+        ...                             domain=X ** 2, range=X ** 2)
+        >>> x = P.domain.element([[1, 2, 3],
+        ...                       [4, 5, 6]])
+        >>> P(x)
+        array([[ 4.,  5.,  6.],
+               [ 0.,  0.,  0.]])
+        >>> P.derivative(x)(x)
+        array([[ 4.,  5.,  6.],
+               [ 0.,  0.,  0.]])
 
-        Example with affine operator
+        Example with affine operator whose derivative is the identity:
 
-        >>> residual_op = I - r3.element([1, 1, 1])
-        >>> op = ProductSpaceOperator([[0, residual_op], [0, 0]],
-        ...                           domain=pspace, range=pspace)
-
-        Calling operator gives offset by [1, 1, 1]
-
-        >>> op(x)
-        ProductSpace(rn(3), 2).element([
-            [ 3.,  4.,  5.],
-            [ 0.,  0.,  0.]
-        ])
-
-        Derivative of affine operator does not have this offset
-
-        >>> op.derivative(x)(x)
-        ProductSpace(rn(3), 2).element([
-            [ 4.,  5.,  6.],
-            [ 0.,  0.,  0.]
-        ])
+        >>> A = I - X.element([1, 1, 1])
+        >>> P = op.ProductSpaceOperator([[0, A],
+        ...                              [0, 0]],
+        ...                             domain=X ** 2, range=X ** 2)
+        >>> x = P.domain.element([[1, 2, 3],
+        ...                       [4, 5, 6]])
+        >>> P(x)
+        array([[ 3.,  4.,  5.],
+               [ 0.,  0.,  0.]])
+        >>> P.derivative(x)(x)
+        array([[ 4.,  5.,  6.],
+               [ 0.,  0.,  0.]])
         """
         # Lazy import to improve `import odl` time
         import scipy.sparse
 
-        # Short circuit optimization
+        # Optimization for linear operators
         if self.is_linear:
             return self
 
@@ -402,26 +385,24 @@ class ProductSpaceOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> pspace = odl.ProductSpace(r3, r3)
-        >>> I = odl.IdentityOperator(r3)
-        >>> x = pspace.element([[1, 2, 3],
-        ...                     [4, 5, 6]])
+        >>> X = odl.rn(3)
+        >>> I = op.IdentityOperator(X)
 
-        Matrix is transposed:
+        Operator matrix of the adjoint is transposed:
 
-        >>> prod_op = ProductSpaceOperator([[0, I], [0, 0]],
-        ...                                domain=pspace, range=pspace)
-        >>> prod_op(x)
-        ProductSpace(rn(3), 2).element([
-            [ 4.,  5.,  6.],
-            [ 0.,  0.,  0.]
-        ])
-        >>> prod_op.adjoint(x)
-        ProductSpace(rn(3), 2).element([
-            [ 0.,  0.,  0.],
-            [ 1.,  2.,  3.]
-        ])
+        >>> P = op.ProductSpaceOperator([[0, I],
+        ...                              [0, 0]],
+        ...                             domain=X ** 2, range=X ** 2)
+        >>> x = P.domain.element([[1, 2, 3],
+        ...                       [4, 5, 6]])
+        >>> P(x)
+        array([[ 4.,  5.,  6.],
+               [ 0.,  0.,  0.]])
+        >>> y = P.range.element([[1, 2, 3],
+        ...                      [4, 5, 6]])
+        >>> P.adjoint(y)
+        array([[ 0.,  0.,  0.],
+               [ 1.,  2.,  3.]])
         """
         # Lazy import to improve `import odl` time
         import scipy.sparse
@@ -453,25 +434,24 @@ class ProductSpaceOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> pspace = odl.ProductSpace(r3, r3)
-        >>> I = odl.IdentityOperator(r3)
-        >>> prod_op = ProductSpaceOperator([[0, I],
-        ...                                 [0, 0]],
-        ...                                domain=pspace, range=pspace)
-        >>> prod_op[0, 0]
+        >>> X = odl.rn(3)
+        >>> I = op.IdentityOperator(X)
+        >>> P = op.ProductSpaceOperator([[0, I],
+        ...                              [0, 0]],
+        ...                             domain=X ** 2, range=X ** 2)
+        >>> P[0, 0]
         0
-        >>> prod_op[0, 1]
+        >>> P[0, 1]
         IdentityOperator(rn(3))
-        >>> prod_op[1, 0]
+        >>> P[1, 0]
         0
-        >>> prod_op[1, 1]
+        >>> P[1, 1]
         0
 
         By accessing single indices, a row is extracted as a
         `ReductionOperator`:
 
-        >>> prod_op[0]
+        >>> P[0]
         ReductionOperator(ZeroOperator(rn(3)), IdentityOperator(rn(3)))
         """
         if isinstance(index, tuple):
@@ -523,18 +503,18 @@ class ComponentProjection(Operator):
 
     r"""Projection onto the subspace identified by an index.
 
-    For a product space :math:`X = X_1 \times \dots
-    \times X_n`, the component projection
+    For a product space :math:`X = X_1 \times \dots \times X_n`, the
+    component projection
 
     .. math::
-       \mathcal{P}_i: X \to X_i
+       P_i: X \to X_i
 
-    is given by :math:`\mathcal{P}_i(x) = x_i` for an element
+    is given by :math:`P_i(x) = x_i` for an element
     :math:`x = (x_1, \dots, x_n) \in X`.
 
     More generally, for an index set :math:`I \subset \{1, \dots, n\}`,
-    the projection operator :math:`\mathcal{P}_I` is defined by
-    :math:`\mathcal{P}_I(x) = (x_i)_{i \in I}`.
+    the projection operator :math:`P_I` is defined by
+    :math:`P_I(x) = (x_i)_{i \in I}`.
 
     Note that this is a special case of a product space operator where
     the "operator matrix" has only one row and contains only
@@ -554,28 +534,21 @@ class ComponentProjection(Operator):
 
         Examples
         --------
-        >>> r1 = odl.rn(1)
-        >>> r2 = odl.rn(2)
-        >>> r3 = odl.rn(3)
-        >>> pspace = odl.ProductSpace(r1, r2, r3)
-
         Projection on n-th component:
 
-        >>> proj = odl.ComponentProjection(pspace, 0)
-        >>> x = [[1],
-        ...      [2, 3],
-        ...      [4, 5, 6]]
-        >>> proj(x)
-        rn(1).element([ 1.])
+        >>> Z = odl.ProductSpace(odl.rn(1), odl.rn(2), odl.rn(3))
+        >>> P = op.ComponentProjection(Z, 0)
+        >>> x = P.domain.element([[1],
+        ...                       [2, 3],
+        ...                       [4, 5, 6]])
+        >>> P(x)
+        array([ 1.])
 
-        Projection on sub-space:
+        Projection on a larger subset of the component spaces:
 
-        >>> proj = odl.ComponentProjection(pspace, [0, 2])
-        >>> proj(x)
-        ProductSpace(rn(1), rn(3)).element([
-            [ 1.],
-            [ 4.,  5.,  6.]
-        ])
+        >>> P = op.ComponentProjection(Z, [0, 2])
+        >>> P(x)
+        array([array([ 1.]), array([ 4.,  5.,  6.])], dtype=object)
         """
         self.__index = index
         super(ComponentProjection, self).__init__(
@@ -612,8 +585,7 @@ class ComponentProjection(Operator):
 
         Examples
         --------
-        >>> pspace = odl.ProductSpace(odl.rn(1), odl.rn(2))
-        >>> odl.ComponentProjection(pspace, 0)
+        >>> op.ComponentProjection(odl.rn(1)* odl.rn(2), 0)
         ComponentProjection(ProductSpace(rn(1), rn(2)), 0)
         """
         return '{}({!r}, {})'.format(self.__class__.__name__,
@@ -645,33 +617,21 @@ class ComponentProjectionAdjoint(Operator):
 
         Examples
         --------
-        >>> r1 = odl.rn(1)
-        >>> r2 = odl.rn(2)
-        >>> r3 = odl.rn(3)
-        >>> pspace = odl.ProductSpace(r1, r2, r3)
-        >>> x = pspace.element([[1],
-        ...                     [2, 3],
-        ...                     [4, 5, 6]])
+        Extension from the 0-th component:
 
-        Projection on the 0-th component:
+        >>> Z = odl.ProductSpace(odl.rn(1), odl.rn(2), odl.rn(3))
+        >>> Pt = op.ComponentProjectionAdjoint(Z, 0)
+        >>> x = Pt.range.element([[1],
+        ...                       [2, 3],
+        ...                       [4, 5, 6]])
+        >>> Pt(x[0])
+        array([array([ 1.]), array([ 0.,  0.]), array([ 0.,  0.,  0.])], dtype=object)
 
-        >>> proj_adj = odl.ComponentProjectionAdjoint(pspace, 0)
-        >>> proj_adj(x[0])
-        ProductSpace(rn(1), rn(2), rn(3)).element([
-            [ 1.],
-            [ 0.,  0.],
-            [ 0.,  0.,  0.]
-        ])
+        Extension from a larger subset of the component spaces:
 
-        Projection on a sub-space corresponding to indices 0 and 2:
-
-        >>> proj_adj = odl.ComponentProjectionAdjoint(pspace, [0, 2])
-        >>> proj_adj(x[[0, 2]])
-        ProductSpace(rn(1), rn(2), rn(3)).element([
-            [ 1.],
-            [ 0.,  0.],
-            [ 4.,  5.,  6.]
-        ])
+        >>> Pt = op.ComponentProjectionAdjoint(Z, [0, 2])
+        >>> Pt(x[[0, 2]])
+        array([array([ 1.]), array([ 0.,  0.]), array([ 4.,  5.,  6.])], dtype=object)
         """
         self.__index = index
         super(ComponentProjectionAdjoint, self).__init__(
@@ -709,8 +669,7 @@ class ComponentProjectionAdjoint(Operator):
 
         Examples
         --------
-        >>> pspace = odl.ProductSpace(odl.rn(1), odl.rn(2))
-        >>> odl.ComponentProjectionAdjoint(pspace, 0)
+        >>> op.ComponentProjectionAdjoint(odl.rn(1) * odl.rn(2), 0)
         ComponentProjectionAdjoint(ProductSpace(rn(1), rn(2)), 0)
         """
         return '{}({!r}, {})'.format(self.__class__.__name__,

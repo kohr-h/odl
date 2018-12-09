@@ -377,7 +377,7 @@ class LinearSpace(Set):
         >>> r2 * r3
         ProductSpace(rn(2), rn(3))
         """
-        from odl.space import ProductSpace
+        from odl.space.pspace import ProductSpace
 
         if not isinstance(other, LinearSpace):
             raise TypeError('Can only multiply with `LinearSpace`, got {!r}'

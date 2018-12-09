@@ -17,7 +17,9 @@ from odl.util import is_real_dtype, signature_string, indent
 from odl.util.utility import protocol
 
 
-__all__ = ()
+__all__ = (
+    'ProductSpace',
+)
 
 
 class ProductSpace(LinearSpace):
@@ -441,6 +443,14 @@ class ProductSpace(LinearSpace):
         for i, p in enumerate(parts):
             ret[i] = p
         return ret
+
+    def zero(self):
+        """Return an element of all zeros."""
+        return self.element([spc.zero() for spc in self.spaces])
+
+    def one(self):
+        """Return an element of all ones."""
+        return self.element([spc.one() for spc in self.spaces])
 
     def __contains__(self, other):
         if not isinstance(other, np.ndarray):
