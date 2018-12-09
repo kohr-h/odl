@@ -8,17 +8,21 @@
 
 """Operators and functions for linearized deformation."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
 import odl.operator as op
 from odl.discr.lp_discr import DiscreteLp
 from odl.operator import Operator
-from odl.space import ProductSpace
-from odl.util import signature_string, indent
+from odl.space.pspace import ProductSpace
+from odl.util import indent, signature_string
 
-
-__all__ = ('LinDeformFixedTempl', 'LinDeformFixedDisp', 'linear_deform')
+__all__ = (
+    'LinDeformFixedTempl',
+    'LinDeformFixedDisp',
+    'linear_deform',
+)
 
 
 def linear_deform(template, displacement, out=None):

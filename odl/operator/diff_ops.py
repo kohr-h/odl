@@ -102,11 +102,12 @@ class PartialDerivative(PointwiseTensorFieldOperator):
 
         Examples
         --------
-        >>> x = np.array([[ 0.,  1.,  2.,  3.,  4.],
-        ...               [ 0.,  2.,  4.,  6.,  8.]])
-        >>> space = odl.uniform_discr([0, 0], [2, 1], x.shape)
-        >>> par_deriv = odl.PartialDerivative(space, axis=0, pad_mode='order1')
-        >>> par_deriv(x)
+        Compute derivative along the first axis with step size ``1.0``:
+
+        >>> X = odl.uniform_discr([0, 0], [2, 1], shape=(2, 5))
+        >>> D0 = op.PartialDerivative(X, axis=0, pad_mode='order1')
+        >>> D0([[ 0.,  1.,  2.,  3.,  4.],
+        ...     [ 0.,  2.,  4.,  6.,  8.]])
         array([[ 0.,  1.,  2.,  3.,  4.],
                [ 0.,  1.,  2.,  3.,  4.]])
         """
@@ -252,29 +253,12 @@ class Gradient(PointwiseTensorFieldOperator):
 
         Examples
         --------
-        Creating a Gradient operator:
+        Evaluate the gradient on a space with unit step size:
 
-        >>> dom = odl.uniform_discr([0, 0], [1, 1], (10, 20))
-        >>> ran = odl.ProductSpace(dom, dom.ndim)  # 2-dimensional
-        >>> grad_op = odl.Gradient(dom)
-        >>> grad_op.range == ran
-        True
-        >>> grad_op2 = odl.Gradient(range=ran)
-        >>> grad_op2.domain == dom
-        True
-        >>> grad_op3 = odl.Gradient(domain=dom, range=ran)
-        >>> grad_op3.domain == dom
-        True
-        >>> grad_op3.range == ran
-        True
-
-        Calling the operator:
-
-        >>> x = np.array([[ 0., 1., 2., 3., 4.],
-        ...               [ 0., 2., 4., 6., 8.]])
-        >>> space = odl.uniform_discr([0, 0], [2, 5], x.shape)
-        >>> grad = odl.Gradient(space)
-        >>> grad(x)
+        >>> X = odl.uniform_discr([0, 0], [2, 5], shape=(2, 5))
+        >>> G = op.Gradient(X)
+        >>> G([[0, 1, 2, 3, 4],
+        ...    [0, 2, 4, 6, 8]])
         array([[[ 0.,  1.,  2.,  3.,  4.],
                 [ 0., -2., -4., -6., -8.]],
         <BLANKLINE>
@@ -283,14 +267,18 @@ class Gradient(PointwiseTensorFieldOperator):
 
         Verify adjoint:
 
-        >>> gspace = grad.range
-        >>> g = gspace.element((x, x ** 2))
-        >>> adj_g = grad.adjoint(g)
-        >>> adj_g
+        >>> X, Y = G.domain, G.range
+        >>> x = X.element([[0, 1, 2, 3, 4],
+        ...                [0, 2, 4, 6, 8]])
+        >>> y = Y.element([x, x ** 2])
+        >>> Gt = G.adjoint
+        >>> Gt(y)
         array([[ -0.,  -2.,  -5.,  -8., -11.],
                [ -0.,  -5., -14., -23., -32.]])
-        >>> gspace.inner(grad(x), g) / space.inner(x, adj_g)
-        1.0
+        >>> Y.inner(G(x), y)
+        -540.0
+        >>> X.inner(x, Gt(y))
+        -540.0
         """
         if domain is None and range is None:
             raise ValueError('either `domain` or `range` must be specified')
@@ -465,38 +453,27 @@ class Divergence(PointwiseTensorFieldOperator):
 
         Examples
         --------
-        Initialize a Divergence opeator:
+        Evaluate the divergence opeator on a space with unit step size:
 
-        >>> ran = odl.uniform_discr([0, 0], [3, 5], (3, 5))
-        >>> dom = ran ** 2
-        >>> div = odl.Divergence(dom)
-        >>> div.range == ran
-        True
-        >>> div2 = odl.Divergence(range=ran)
-        >>> div2.domain == dom
-        True
-        >>> div3 = odl.Divergence(domain=dom, range=ran)
-        >>> div3.domain == dom
-        True
-        >>> div3.range == ran
-        True
-
-        Call the operator:
-
-        >>> a = np.array([[0., 1., 2., 3., 4.],
-        ...               [1., 2., 3., 4., 5.],
-        ...               [2., 3., 4., 5., 6.]])
-        >>> x = dom.element([a, a])
-        >>> div(x)
+        >>> Y = odl.uniform_discr([0, 0], [3, 5], (3, 5))
+        >>> D = op.Divergence(range=Y)
+        >>> X = D.domain
+        >>> y = Y.element([[0., 1., 2., 3., 4.],
+        ...                [1., 2., 3., 4., 5.],
+        ...                [2., 3., 4., 5., 6.]])
+        >>> x = X.element([y, y])
+        >>> D(x)
         array([[  2.,   2.,   2.,   2.,  -3.],
                [  2.,   2.,   2.,   2.,  -4.],
                [ -1.,  -2.,  -3.,  -4., -12.]])
 
         Verify adjoint:
 
-        >>> y = ran.element(a ** 2)
-        >>> dom.inner(x, div.adjoint(y)) / ran.inner(div(x), y)
-        1.0
+        >>> x = X.element([y, y ** 2])
+        >>> Y.inner(D(x), y)
+        -244.0
+        >>> X.inner(x, D.adjoint(y))
+        -244.0
         """
         if domain is None and range is None:
             raise ValueError('either `domain` or `range` must be specified')
@@ -671,12 +648,11 @@ class Laplacian(PointwiseTensorFieldOperator):
 
         Examples
         --------
-        >>> x = np.array([[ 0., 0., 0.],
-        ...               [ 0., 1., 0.],
-        ...               [ 0., 0., 0.]])
-        >>> space = odl.uniform_discr([0, 0], [3, 3], [3, 3])
-        >>> lap = odl.Laplacian(space)
-        >>> lap(x)
+        >>> X = odl.uniform_discr([0, 0], [3, 3], shape=(3, 3))
+        >>> L = op.Laplacian(X)
+        >>> L([[ 0., 0., 0.],
+        ...    [ 0., 1., 0.],
+        ...    [ 0., 0., 0.]])
         array([[ 0.,  1.,  0.],
                [ 1., -4.,  1.],
                [ 0.,  1.,  0.]])

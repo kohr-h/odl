@@ -32,7 +32,6 @@ __all__ = (
     'PYFFTW_AVAILABLE',
 )
 
-
 _SUPPORTED_FOURIER_IMPLS = ('numpy',)
 _DEFAULT_FOURIER_IMPL = 'numpy'
 if PYFFTW_AVAILABLE:

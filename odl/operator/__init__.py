@@ -10,7 +10,9 @@
 
 from __future__ import absolute_import
 
-__all__ = ()
+__all__ = (
+    'ufunc',
+)
 
 from .oputils import *
 __all__ += oputils.__all__
@@ -38,3 +40,5 @@ __all__ += fourier.__all__
 
 from .wavelet import *
 __all__ += wavelet.__all__
+
+from . import ufunc

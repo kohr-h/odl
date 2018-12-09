@@ -8,15 +8,17 @@
 
 """Domains for continuous functions. """
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
 from odl.set.sets import Set
 from odl.util import (
     array_str, is_valid_input_array, is_valid_input_meshgrid, safe_int_conv)
 
-
-__all__ = ('IntervalProd',)
+__all__ = (
+    'IntervalProd',
+)
 
 
 class IntervalProd(Set):

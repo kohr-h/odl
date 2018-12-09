@@ -18,7 +18,7 @@ from odl.discr.discr_utils import make_vec_func_for_sampling, point_collocation
 from odl.discr.partition import (
     RectPartition, uniform_partition, uniform_partition_fromintv)
 from odl.set import IntervalProd, RealNumbers
-from odl.space import ProductSpace
+from odl.space.pspace import ProductSpace
 from odl.space.base_tensors import TensorSpace
 from odl.space.entry_points import tensor_space_impl
 from odl.util import (

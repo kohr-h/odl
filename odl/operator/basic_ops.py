@@ -62,15 +62,8 @@ class ScalingOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> vec = r3.element([1, 2, 3])
-        >>> out = r3.element()
-        >>> A = op.ScalingOperator(r3, 2.0)
-        >>> A(vec, out)  # In-place, Returns out
-        array([ 2.,  4.,  6.])
-        >>> out
-        array([ 2.,  4.,  6.])
-        >>> A(vec)  # Out-of-place
+        >>> A = op.ScalingOperator(odl.rn(3), 2.0)
+        >>> A([1, 2, 3])
         array([ 2.,  4.,  6.])
         """
         if not isinstance(domain, (LinearSpace, Field)):
@@ -99,13 +92,12 @@ class ScalingOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> vec = r3.element([1, 2, 3])
-        >>> A = op.ScalingOperator(r3, 2.0)
+        >>> A = op.ScalingOperator(odl.rn(3), 2.0)
+        >>> x = A.domain.element([1, 2, 3])
         >>> Ainv = A.inverse
-        >>> Ainv(A(vec)) == vec
+        >>> Ainv(A(x)) == x
         array([ True,  True,  True], dtype=bool)
-        >>> A(Ainv(vec)) == vec
+        >>> A(Ainv(x)) == x
         array([ True,  True,  True], dtype=bool)
         """
         if self.scalar == 0.0:
@@ -121,23 +113,19 @@ class ScalingOperator(Operator):
         --------
         In the real case, the adjoint is the same as the operator:
 
-        >>> r3 = odl.rn(3)
-        >>> x = r3.element([1, 2, 3])
-        >>> A = op.ScalingOperator(r3, 2)
-        >>> A(x)
+        >>> A = op.ScalingOperator(odl.rn(3), 2)
+        >>> A([1, 2, 3])
         array([ 2.,  4.,  6.])
-        >>> op.adjoint(x)
+        >>> A.adjoint([1, 2, 3])
         array([ 2.,  4.,  6.])
 
         In the complex case, the scalar is conjugated:
 
-        >>> c3 = odl.cn(3)
-        >>> x_complex = c3.element([1, 1j, 1 - 1j])
-        >>> A = op.ScalingOperator(c3, 1 + 1j)
-        >>> expected_adj = op.ScalingOperator(c3, 1 - 1j)
-        >>> op.adjoint(x_complex)
+        >>> B = op.ScalingOperator(odl.cn(3), 1 + 1j)
+        >>> z = B.domain.element([1, 1j, 1 - 1j])
+        >>> B.adjoint(z)
         array([ 1.-1.j,  1.+1.j,  0.-2.j])
-        >>> expected_adj(x_complex)
+        >>> z * (1 - 1j)
         array([ 1.-1.j,  1.+1.j,  0.-2.j])
 
         Returns
@@ -165,9 +153,8 @@ class ScalingOperator(Operator):
 
         Examples
         --------
-        >>> spc = odl.rn(3)
-        >>> scaling = op.ScalingOperator(spc, 3.0)
-        >>> scaling.norm(True)
+        >>> A = op.ScalingOperator(odl.rn(3), 3.0)
+        >>> A.norm(estimate=True)
         3.0
         """
         # TODO(kohr-h): this is not always true
@@ -225,27 +212,27 @@ class LinCombOperator(Operator):
 
         Parameters
         ----------
-        space : `LinearSpace`
-            Space of elements which the operator is acting on.
-        a, b : ``space.field`` elements
+        space : `ProductSpace`
+            Space of elements on which the operator acts. Must be a power
+            space.
+        a, b : ``space[0].field`` elements
             Scalars to multiply ``x[0]`` and ``x[1]`` with, respectively.
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> r3xr3 = odl.ProductSpace(r3, r3)
-        >>> xy = r3xr3.element([[1, 2, 3], [1, 2, 3]])
-        >>> z = r3.element()
-        >>> A = op.LinCombOperator(r3, 1.0, 1.0)
-        >>> A(xy, out=z)  # Returns z
-        array([ 2.,  4.,  6.])
-        >>> z
+        >>> X = odl.rn(3)
+        >>> A = op.LinCombOperator(X * X, 1.0, 1.0)
+        >>> A([[1, 2, 3],
+        ...    [1, 2, 3]])
         array([ 2.,  4.,  6.])
         """
-        domain = ProductSpace(space, space)
-        super(LinCombOperator, self).__init__(domain, space, linear=True)
-        self.a = a
-        self.b = b
+        if not isinstance(space, ProductSpace) or not space.is_power_space:
+            raise TypeError(
+                '`space` must be a power space, got {!r}'.format(space)
+            )
+        super(LinCombOperator, self).__init__(space, space[0], linear=True)
+        self.a = self.range.field.element(a)
+        self.b = self.range.field.element(b)
 
     def _call(self, x, out=None):
         """Linearly combine ``x`` and write to ``out`` if given."""
@@ -297,15 +284,15 @@ class MultiplyOperator(Operator):
         --------
         Multiply by vector:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.MultiplyOperator(r3, [1, 2, 3])
+        >>> A = op.MultiplyOperator(odl.rn(3), [1, 2, 3])
         >>> A([2, 3, 4])
         array([  2.,   6.,  12.])
 
         Multiply by scalar:
 
-        >>> op2 = op.MultiplyOperator(r3.field, [1, 2, 3], range=r3)
-        >>> op2(3)
+        >>> X = odl.rn(3)
+        >>> B = op.MultiplyOperator(X.field, [1, 2, 3], range=X)
+        >>> B(3)
         array([ 3.,  6.,  9.])
         """
         if range is None:
@@ -349,29 +336,27 @@ class MultiplyOperator(Operator):
         --------
         Multiply by a space element:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.MultiplyOperator(r3, [1, 2, 3])
-        >>> op.adjoint([2, 3, 4])
+        >>> A = op.MultiplyOperator(odl.rn(3), [1, 2, 3])
+        >>> A.adjoint([2, 3, 4])
         array([  2.,   6.,  12.])
 
         Multiply scalars with a fixed vector:
 
-        >>> op2 = MultiplyOperator(r3.field, [1, 2, 3], range=r3)
-        >>> op2.adjoint([2, 3, 4])
+        >>> X = odl.rn(3)
+        >>> B = op.MultiplyOperator(X.field, [1, 2, 3], range=X)
+        >>> B.adjoint([2, 3, 4])
         20.0
 
         Multiply vectors with a fixed scalar:
 
-        >>> op2 = op.MultiplyOperator(r3, 3.0)
-        >>> op2.adjoint([2, 3, 4])
+        >>> C = op.MultiplyOperator(odl.rn(3), 3.0)
+        >>> C.adjoint([2, 3, 4])
         array([  6.,   9.,  12.])
 
         Multiplication operator with complex space:
 
-        >>> c3 = odl.cn(3)
-        >>> x_complex = c3.element([1, 1j, 1-1j])
-        >>> op3 = op.MultiplyOperator(c3, x_complex)
-        >>> op3.adjoint.multiplicand
+        >>> C = op.MultiplyOperator(odl.cn(3), [1, 1j, 1-1j])
+        >>> C.adjoint.multiplicand
         array([ 1.-0.j,  0.-1.j,  1.+1.j])
         """
         if self.__domain_is_field:
@@ -483,15 +468,15 @@ class PowerOperator(Operator):
         Use on vector spaces:
 
         >>> A = op.PowerOperator(odl.rn(3), exponent=2)
-        >>> Ad = op.derivative(op.domain.element([1, 2, 3]))
-        >>> Ad([1, 1, 1])
+        >>> dA = A.derivative(A.domain.element([1, 2, 3]))
+        >>> dA([1, 1, 1])
         array([ 2.,  4.,  6.])
 
         Use with scalars:
 
         >>> A = op.PowerOperator(odl.RealNumbers(), exponent=2)
-        >>> Ad = op.derivative(2.0)
-        >>> Ad(2.0)
+        >>> dA = A.derivative(2.0)
+        >>> dA(2.0)
         8.0
         """
         return self.exponent * MultiplyOperator(
@@ -535,8 +520,7 @@ class InnerProductOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> A = op.InnerProductOperator(r3, [1, 2, 3])
+        >>> A = op.InnerProductOperator(odl.rn(3), [1, 2, 3])
         >>> A([2, 3, 4])
         20.0
         """
@@ -565,9 +549,8 @@ class InnerProductOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> A = op.InnerProductOperator(r3, [1, 2, 3])
-        >>> op.adjoint(2.0)
+        >>> A = op.InnerProductOperator(odl.rn(3), [1, 2, 3])
+        >>> A.adjoint(2.0)
         array([ 2.,  4.,  6.])
         """
         return MultiplyOperator(self.range, self.vector, range=self.domain)
@@ -608,8 +591,7 @@ class NormOperator(Operator):
 
         Examples
         --------
-        >>> r2 = odl.rn(2)
-        >>> A = op.NormOperator(r2)
+        >>> A = op.NormOperator(odl.rn(2))
         >>> A([3, 4])
         5.0
         """
@@ -651,10 +633,9 @@ class NormOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> A = op.NormOperator(r3)
-        >>> derivative = op.derivative([1, 0, 0])
-        >>> derivative([1, 0, 0])
+        >>> A = op.NormOperator(odl.rn(3))
+        >>> dA = A.derivative([1, 0, 0])
+        >>> dA([1, 0, 0])
         1.0
         """
         point = self.domain.element(point)
@@ -702,8 +683,7 @@ class DistOperator(Operator):
 
         Examples
         --------
-        >>> r2 = odl.rn(2)
-        >>> A = op.DistOperator(r2, [1, 1])
+        >>> A = op.DistOperator(odl.rn(2), [1, 1])
         >>> A([4, 5])
         5.0
         """
@@ -752,10 +732,9 @@ class DistOperator(Operator):
 
         Examples
         --------
-        >>> r2 = odl.rn(2)
-        >>> A = op.DistOperator(r2, [1, 1])
-        >>> derivative = op.derivative([2, 1])
-        >>> derivative([1, 0])
+        >>> A = op.DistOperator(odl.rn(2), [1, 1])
+        >>> dA = A.derivative([2, 1])
+        >>> dA([1, 0])
         1.0
         """
         point = self.domain.element(point)
@@ -802,8 +781,7 @@ class ConstantOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> A = op.ConstantOperator(r3, [1, 2, 3])
+        >>> A = op.ConstantOperator(odl.rn(3), [1, 2, 3])
         >>> A([2, 3, 4])
         array([ 1.,  2.,  3.])
         """
@@ -834,10 +812,9 @@ class ConstantOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> A = op.ConstantOperator(r3, [1, 2, 3])
-        >>> deriv = op.derivative([1, 1, 1])
-        >>> deriv([2, 2, 2])
+        >>> A = op.ConstantOperator(odl.rn(3), [1, 2, 3])
+        >>> dA = A.derivative([1, 1, 1])
+        >>> dA([2, 2, 2])
         array([ 0.,  0.,  0.])
         """
         return ZeroOperator(domain=self.domain, range=self.range)
@@ -878,7 +855,7 @@ class ZeroOperator(Operator):
 
         Also works with domain != range:
 
-        >>> A = op.ZeroOperator(odl.rn(3), odl.cn(4))
+        >>> A = op.ZeroOperator(odl.rn(3), range=odl.cn(4))
         >>> A([1, 2, 3])
         array([ 0.+0.j,  0.+0.j,  0.+0.j,  0.+0.j])
         """
@@ -889,7 +866,7 @@ class ZeroOperator(Operator):
 
     def _call(self, x, out):
         """Return the zero vector or assign it to ``out``."""
-        out[:] = 0
+        out[:] = 0  # TODO: use assign()
         return out
 
     @property
@@ -932,24 +909,22 @@ class RealPart(Operator):
         --------
         Take the real part of complex vector:
 
-        >>> c3 = odl.cn(3)
-        >>> A = op.RealPart(c3)
+        >>> A = op.RealPart(odl.cn(3))
         >>> A([1 + 2j, 2, 3 - 1j])
         array([ 1.,  2.,  3.])
 
         The operator is the identity on real spaces:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.RealPart(r3)
+        >>> A = op.RealPart(odl.rn(3))
         >>> A([1, 2, 3])
         array([ 1.,  2.,  3.])
 
         The operator also works on other `TensorSpace` spaces such as
         `DiscreteLp` spaces:
 
-        >>> r3 = odl.uniform_discr(0, 1, 3, dtype=complex)
-        >>> A = op.RealPart(r3)
-        >>> A([1, 2, 3])
+        >>> X = odl.uniform_discr(0, 1, 3, dtype=complex)
+        >>> A = op.RealPart(X)
+        >>> A([1 + 2j, 2, 3 - 1j])
         array([ 1.,  2.,  3.])
         """
         real_space = space.real_space
@@ -985,16 +960,14 @@ class RealPart(Operator):
         --------
         The inverse is its own inverse if its domain is real:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.RealPart(r3)
+        >>> A = op.RealPart(odl.rn(3))
         >>> A.inverse(A([1, 2, 3]))
         array([ 1.,  2.,  3.])
 
         This is not a true inverse, only a pseudoinverse, the complex part
         will by necessity be lost.
 
-        >>> c3 = odl.cn(3)
-        >>> A = op.RealPart(c3)
+        >>> A = op.RealPart(odl.cn(3))
         >>> A.inverse(A([1 + 2j, 2, 3 - 1j]))
         array([ 1.+0.j,  2.+0.j,  3.+0.j])
         """
@@ -1024,21 +997,21 @@ class RealPart(Operator):
         --------
         The adjoint satisfies the adjoint equation for real spaces:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.RealPart(r3)
-        >>> x = op.domain.element([1, 2, 3])
-        >>> y = op.range.element([3, 2, 1])
-        >>> r3.inner(x, A.adjoint(y)) == r3.inner(A(x), y)
+        >>> A = op.RealPart(odl.rn(3))
+        >>> X, Y = A.domain, A.range
+        >>> x = X.element([1, 2, 3])
+        >>> y = Y.element([3, 2, 1])
+        >>> Y.inner(A(x), y) == X.inner(x, A.adjoint(y))
         True
 
         If the domain is complex, it only satisfies the weaker definition:
 
-        >>> c3 = odl.cn(3)
-        >>> A = op.RealPart(c3)
-        >>> y = op.range.element([3, 2, 1])
-        >>> z = op.range.element([4, 3, 2])
-        >>> AAtyz = r3.inner(A(A.adjoint(y)), z)
-        >>> AtyAtz = c3.inner(op.adjoint(y), op.adjoint(z))
+        >>> A = op.RealPart(odl.cn(3))
+        >>> X, Y = A.domain, A.range
+        >>> y = Y.element([3, 2, 1])
+        >>> z = Y.element([4, 3, 2])
+        >>> AAtyz = Y.inner(A(A.adjoint(y)), z)
+        >>> AtyAtz = X.inner(A.adjoint(y), A.adjoint(z))
         >>> AAtyz == AtyAtz
         True
         """
@@ -1070,15 +1043,13 @@ class ImagPart(Operator):
         --------
         Take the imaginary part of complex vector:
 
-        >>> c3 = odl.cn(3)
-        >>> A = op.ImagPart(c3)
+        >>> A = op.ImagPart(odl.cn(3))
         >>> A([1 + 2j, 2, 3 - 1j])
         array([ 2.,  0., -1.])
 
         The operator is the zero operator on real spaces:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.ImagPart(r3)
+        >>> A = op.ImagPart(odl.rn(3))
         >>> A([1, 2, 3])
         array([ 0.,  0.,  0.])
         """
@@ -1113,16 +1084,14 @@ class ImagPart(Operator):
         --------
         The inverse is the zero operator if the domain is real:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.ImagPart(r3)
+        >>> A = op.ImagPart(odl.rn(3))
         >>> A.inverse(A([1, 2, 3]))
         array([ 0.,  0.,  0.])
 
         This is not a true inverse, only a pseudoinverse, the real part
         will by necessity be lost.
 
-        >>> c3 = odl.cn(3)
-        >>> A = op.ImagPart(c3)
+        >>> A = op.ImagPart(odl.cn(3))
         >>> A.inverse(A([1 + 2j, 2, 3 - 1j]))
         array([ 0.+2.j,  0.+0.j, -0.-1.j])
         """
@@ -1152,21 +1121,21 @@ class ImagPart(Operator):
         --------
         The adjoint satisfies the adjoint equation for real spaces:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.ImagPart(r3)
-        >>> x = op.domain.element([1, 2, 3])
-        >>> y = op.range.element([3, 2, 1])
-        >>> r3.inner(x, A.adjoint(y)) == r3.inner(A(x), y)
+        >>> A = op.ImagPart(odl.rn(3))
+        >>> X, Y = A.domain, A.range
+        >>> x = X.element([1, 2, 3])
+        >>> y = Y.element([3, 2, 1])
+        >>> Y.inner(A(x), y) == X.inner(x, A.adjoint(y))
         True
 
         If the domain is complex, it only satisfies the weaker definition:
 
-        >>> c3 = odl.cn(3)
-        >>> A = op.ImagPart(c3)
-        >>> y = op.range.element([1, 2, 3])
-        >>> z = op.range.element([3, 2, 1])
-        >>> AAtyz = r3.inner(A(A.adjoint(y)), z)
-        >>> AtyAtz = c3.inner(A.adjoint(y), A.adjoint(z))
+        >>> A = op.ImagPart(odl.cn(3))
+        >>> X, Y = A.domain, A.range
+        >>> y = Y.element([1, 2, 3])
+        >>> z = Y.element([3, 2, 1])
+        >>> AAtyz = Y.inner(A(A.adjoint(y)), z)
+        >>> AtyAtz = X.inner(A.adjoint(y), A.adjoint(z))
         >>> AAtyz == AtyAtz
         True
         """
@@ -1201,22 +1170,20 @@ class ComplexEmbedding(Operator):
         --------
         Embed real vector into complex space:
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.ComplexEmbedding(r3)
+        >>> A = op.ComplexEmbedding(odl.rn(3))
         >>> A([1, 2, 3])
         array([ 1.+0.j,  2.+0.j,  3.+0.j])
 
         Embed real vector as imaginary part into complex space:
 
-        >>> A = op.ComplexEmbedding(r3, scalar=1j)
+        >>> A = op.ComplexEmbedding(odl.rn(3), scalar=1j)
         >>> A([1, 2, 3])
         array([ 0.+1.j,  0.+2.j,  0.+3.j])
 
         On complex spaces the operator is the same as simple multiplication by
         scalar:
 
-        >>> c3 = odl.cn(3)
-        >>> A = op.ComplexEmbedding(c3, scalar=1 + 2j)
+        >>> A = op.ComplexEmbedding(odl.cn(3), scalar=1 + 2j)
         >>> A([1 + 1j, 2 + 2j, 3 + 3j])
         array([-1.+3.j, -2.+6.j, -3.+9.j])
         """
@@ -1227,6 +1194,7 @@ class ComplexEmbedding(Operator):
 
     def _call(self, x, out):
         """Return ``self(x)``."""
+        # TODO(kohr-h): Optimize cases 0 and 1
         if self.domain.is_real:
             # Real domain, multiply separately
             out.real = self.scalar.real * x
@@ -1244,8 +1212,7 @@ class ComplexEmbedding(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> A = op.ComplexEmbedding(r3, scalar=1)
+        >>> A = op.ComplexEmbedding(odl.rn(3), scalar=1)
         >>> A.inverse(A([1, 2, 4]))
         array([ 1.,  2.,  4.])
         """
@@ -1286,24 +1253,24 @@ class ComplexEmbedding(Operator):
         --------
         The adjoint satisfies the adjoint equation for complex spaces
 
-        >>> c3 = odl.cn(3)
-        >>> A = op.ComplexEmbedding(c3, scalar=1j)
-        >>> x = c3.element([1 + 1j, 2 + 2j, 3 + 3j])
-        >>> y = c3.element([3 + 1j, 2 + 2j, 3 + 1j])
-        >>> Axy = c3.inner(A(x), y)
-        >>> xAty = c3.inner(x, op.adjoint(y))
+        >>> A = op.ComplexEmbedding(odl.cn(3), scalar=1j)
+        >>> X, Y = A.domain, A.range
+        >>> x = X.element([1 + 1j, 2 + 2j, 3 + 3j])
+        >>> y = Y.element([3 + 1j, 2 + 2j, 3 + 1j])
+        >>> Axy = Y.inner(A(x), y)
+        >>> xAty = X.inner(x, A.adjoint(y))
         >>> Axy == xAty
         True
 
         For real domains, it only satisfies the (right) adjoint equation
 
-        >>> r3 = odl.rn(3)
-        >>> A = op.ComplexEmbedding(r3, scalar=1j)
-        >>> x = r3.element([1, 2, 3])
-        >>> y = r3.element([3, 2, 3])
-        >>> AtAxy = r3.inner(A.adjoint(A(x)), y)
-        >>> AxAy = c3.inner(A(x), A(y))
-        >>> AtAxy == AxAy
+        >>> A = op.ComplexEmbedding(odl.rn(3), scalar=1j)
+        >>> X, Y = A.domain, A.range
+        >>> u = X.element([1, 2, 3])
+        >>> v = X.element([3, 2, 3])
+        >>> AtAuv = X.inner(A.adjoint(A(u)), v)
+        >>> AuAv = Y.inner(A(u), A(v))
+        >>> AtAuv == AuAv
         True
         """
         if self.domain.is_real:
@@ -1339,23 +1306,21 @@ class ComplexModulus(Operator):
         --------
         Take the modulus of a complex vector:
 
-        >>> c2 = odl.cn(2)
-        >>> A = op.ComplexModulus(c2)
+        >>> A = op.ComplexModulus(odl.cn(2))
         >>> A([3 + 4j, 2])
         array([ 5.,  2.])
 
         The operator is the absolute value on real spaces:
 
-        >>> r2 = odl.rn(2)
-        >>> A = op.ComplexModulus(r2)
+        >>> A = op.ComplexModulus(odl.rn(2))
         >>> A([1, -2])
         array([ 1.,  2.])
 
         The operator also works on other `TensorSpace`'s such as
         `DiscreteLp`:
 
-        >>> space = odl.uniform_discr(0, 1, 2, dtype=complex)
-        >>> A = op.ComplexModulus(space)
+        >>> X = odl.uniform_discr(0, 1, 2, dtype=complex)
+        >>> A = op.ComplexModulus(X)
         >>> A([3 + 4j, 2])
         array([ 5.,  2.])
         """
@@ -1384,16 +1349,15 @@ class ComplexModulus(Operator):
 
         Examples
         --------
-        >>> c2 = odl.cn(2)
-        >>> A = op.ComplexModulus(c2)
+        >>> A = op.ComplexModulus(odl.cn(2))
         >>> A([3 + 4j, 2])
         array([ 5.,  2.])
-        >>> deriv = op.derivative([3 + 4j, 2])
-        >>> deriv.domain
+        >>> dA = A.derivative([3 + 4j, 2])
+        >>> dA.domain
         cn(2)
-        >>> deriv.range
+        >>> dA.range
         rn(2)
-        >>> deriv([2 + 1j, 4j])  # [(3*2 + 4*1) / 5, (2*0 + 0*4) / 2]
+        >>> dA([2 + 1j, 4j])  # [(3*2 + 4*1) / 5, (2*0 + 0*4) / 2]
         array([ 2.,  0.])
 
         Notes
@@ -1436,35 +1400,34 @@ class ComplexModulus(Operator):
                 --------
                 Adjoint of the derivative:
 
-                >>> c2 = odl.cn(2)
-                >>> A = op.ComplexModulus(c2)
+                >>> A = op.ComplexModulus(odl.cn(2))
                 >>> A([3 + 4j, 2])
                 array([ 5.,  2.])
-                >>> deriv = op.derivative([3 + 4j, 2])
-                >>> adj = deriv.adjoint
-                >>> adj.domain
+                >>> dA = A.derivative([3 + 4j, 2])
+                >>> dAt = dA.adjoint
+                >>> dAt.domain
                 rn(2)
-                >>> adj.range
+                >>> dAt.range
                 cn(2)
-                >>> adj([5, 5])  # [5*(3 + 4j)/5, 5*2/2]
+                >>> dAt([5, 5])  # [5*(3 + 4j)/5, 5*2/2]
                 array([ 3.+4.j,  5.+0.j])
 
                 Adjointness only holds in the weaker sense that inner products
                 are the same when testing with vectors from the real space, but
                 not when testing complex vectors:
 
-                >>> r2 = deriv.range
-                >>> y1 = r2.element([5, 5])
-                >>> y2 = r2.element([1, 2])
-                >>> c2.inner(adj(y1), adj(y2))  # <M^* y1, M^* y2>
+                >>> X, Y = dA.domain, dA.range
+                >>> y1 = Y.element([5, 5])
+                >>> y2 = Y.element([1, 2])
+                >>> X.inner(dAt(y1), dAt(y2))  # <M^* y1, M^* y2>
                 (15+0j)
-                >>> r2.inner(deriv(adj(y1)), y2)  # <M M^* y1, y2>
+                >>> Y.inner(dA(dAt(y1)), y2)  # <M M^* y1, y2>
                 15.0
-                >>> x1 = c2.element([6 + 3j, 2j])
-                >>> x2 = c2.element([5, 10 + 4j])
-                >>> r2.inner(deriv(x1), deriv(x2))  # <M x1, M x2>
+                >>> x1 = X.element([6 + 3j, 2j])
+                >>> x2 = X.element([5, 10 + 4j])
+                >>> Y.inner(dA(x1), dA(x2))  # <M x1, M x2>
                 18.0
-                >>> c2.inner(adj(deriv(x1)), x2)  # <M^* M x1, x2>
+                >>> X.inner(dAt(dA(x1)), x2)  # <M^* M x1, x2>
                 (18+24j)
 
                 Notes
@@ -1541,23 +1504,21 @@ class ComplexModulusSquared(Operator):
         --------
         Take the squared modulus of a complex vector:
 
-        >>> c2 = odl.cn(2)
-        >>> A = op.ComplexModulusSquared(c2)
+        >>> A = op.ComplexModulusSquared(odl.cn(2))
         >>> A([3 + 4j, 2])
         array([ 25.,   4.])
 
         On a real space, this is the same as squaring:
 
-        >>> r2 = odl.rn(2)
-        >>> A = op.ComplexModulusSquared(r2)
+        >>> A = op.ComplexModulusSquared(odl.rn(2))
         >>> A([1, -2])
         array([ 1.,  4.])
 
         The operator also works on other `TensorSpace`'s such as
         `DiscreteLp`:
 
-        >>> space = odl.uniform_discr(0, 1, 2, dtype=complex)
-        >>> A = op.ComplexModulusSquared(space)
+        >>> X = odl.uniform_discr(0, 1, 2, dtype=complex)
+        >>> A = op.ComplexModulusSquared(X)
         >>> A([3 + 4j, 2])
         array([ 25.,   4.])
         """
@@ -1583,16 +1544,15 @@ class ComplexModulusSquared(Operator):
 
         Examples
         --------
-        >>> c2 = odl.cn(2)
-        >>> A = op.ComplexModulusSquared(c2)
+        >>> A = op.ComplexModulusSquared(odl.cn(2))
         >>> A([3 + 4j, 2])
         array([ 25.,   4.])
-        >>> deriv = op.derivative([3 + 4j, 2])
-        >>> deriv.domain
+        >>> dA = A.derivative([3 + 4j, 2])
+        >>> dA.domain
         cn(2)
-        >>> deriv.range
+        >>> dA.range
         rn(2)
-        >>> deriv([2 + 1j, 4j])  # [(3*2 + 4*1) / 5, (2*0 + 0*4) / 2]
+        >>> dA([2 + 1j, 4j])  # [(3*2 + 4*1) / 5, (2*0 + 0*4) / 2]
         array([ 10.,   0.])
 
         Notes
@@ -1616,6 +1576,8 @@ class ComplexModulusSquared(Operator):
         op = self
         x = self.domain.element(x)
 
+        # TODO(kohr-h): Move all operators to top level
+
         class ComplexModulusSquaredDerivative(Operator):
 
             """Derivative of the squared complex modulus operator."""
@@ -1634,33 +1596,32 @@ class ComplexModulusSquared(Operator):
 
                 Examples
                 --------
-                >>> c2 = odl.cn(2)
-                >>> A = op.ComplexModulusSquared(c2)
-                >>> deriv = op.derivative([3 + 4j, 2])
-                >>> adj = deriv.adjoint
-                >>> adj.domain
+                >>> A = op.ComplexModulusSquared(odl.cn(2))
+                >>> dA = A.derivative([3 + 4j, 2])
+                >>> dAt = dA.adjoint
+                >>> dAt.domain
                 rn(2)
-                >>> adj.range
+                >>> dAt.range
                 cn(2)
-                >>> adj([2, 1])  # [2*(3 + 4j), 1*2]
+                >>> dAt([2, 1])  # [2*(3 + 4j), 1*2]
                 array([ 6.+8.j,  2.+0.j])
 
                 Adjointness only holds in the weaker sense that inner products
                 are the same when testing with vectors from the real space, but
                 not when testing complex vectors:
 
-                >>> r2 = deriv.range
-                >>> y1 = r2.element([1, 1])
-                >>> y2 = r2.element([1, -1])
-                >>> c2.inner(adj(y1), adj(y2))  # <M^* y1, M^* y2>
+                >>> X, Y = dA.domain, dA.range
+                >>> y1 = Y.element([1, 1])
+                >>> y2 = Y.element([1, -1])
+                >>> X.inner(dAt(y1), dAt(y2))  # <M^* y1, M^* y2>
                 (21+0j)
-                >>> r2.inner(deriv(adj(y1)), y2)  # <M M^* y1, y2>
+                >>> Y.inner(dA(dAt(y1)), y2)  # <M M^* y1, y2>
                 21.0
-                >>> x1 = c2.element([1j, 1j])
-                >>> x2 = c2.element([1 + 1j, 1j])
-                >>> r2.inner(deriv(x1), deriv(x2))  # <M x1, M x2>
+                >>> x1 = X.element([1j, 1j])
+                >>> x2 = X.element([1 + 1j, 1j])
+                >>> Y.inner(dA(x1), dA(x2))  # <M x1, M x2>
                 28.0
-                >>> c2.inner(adj(deriv(x1)), x2)  # <M^* M x1, x2>
+                >>> X.inner(dAt(dA(x1)), x2)  # <M^* M x1, x2>
                 (28+4j)
 
                 Notes

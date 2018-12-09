@@ -12,12 +12,12 @@ from __future__ import print_function, division, absolute_import
 from numbers import Integral
 import numpy as np
 
-from odl.set import LinearSpace
+from odl.set.space import LinearSpace
 from odl.util import is_real_dtype, signature_string, indent
 from odl.util.utility import protocol
 
 
-__all__ = ('ProductSpace',)
+__all__ = ()
 
 
 class ProductSpace(LinearSpace):

@@ -17,21 +17,16 @@ import numpy as np
 
 __version__ = '1.0.0.dev0'
 __all__ = (
-    'set',
-    'space',
     'operator',
     'op',
     'functional',
     'fn',
-    'discr',
     'contrib',
     'deform',
     'diagnostics',
     'phantom',
     'optim',
     'tomo',
-    'trafos',
-    'ufunc_ops',
     'util',
 )
 
@@ -59,20 +54,20 @@ __all__ += discr.__all__
 
 # More "advanced" subpackages keep their namespaces separate from top-level,
 # we only import the modules themselves
-from . import operator
-op = operator
-from . import functional
-fn = functional
-
 from . import contrib
 from . import deform
 from . import diagnostics
+from . import functional
+from . import operator
 from . import optim
 from . import phantom
 from . import tomo
-from . import ufunc_ops
 from . import util
 
 # Add `test` function to global namespace so users can run `odl.test()`
 from .util import test
 __all__ += ('test',)
+
+# Aliases for quick reference
+op = operator
+fn = functional

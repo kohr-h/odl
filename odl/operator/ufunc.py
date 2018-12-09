@@ -13,13 +13,14 @@ from __future__ import absolute_import, division, print_function
 import numpy as np
 
 import odl.functional as fn
-import odl.operator as op
 from odl.functional import Functional
-from odl.operator import Operator
+from odl.operator.operator import Operator
+from odl.operator.basic_ops import MultiplyOperator
 from odl.set import RealNumbers
 from odl.set.sets import Field
 from odl.set.space import LinearSpace
-from odl.space import ProductSpace, tensor_space
+from odl.space import tensor_space
+from odl.space.pspace import ProductSpace
 from odl.util.ufuncs import UFUNCS
 
 __all__ = ()
@@ -98,12 +99,12 @@ LINEAR_UFUNCS = ['negative', 'rad2deg', 'deg2rad', 'add', 'subtract']
 RAW_EXAMPLES_DOCSTRING = """
 Examples
 --------
->>> import odl
->>> space = odl.{space!r}
->>> op = odl.ufunc_ops.{name}(space)
->>> print(op({arg}))
+>>> X = odl.{space!r}
+>>> A = op.ufunc.{name}(X)
+>>> print(A({arg}))
 {result!s}
 """
+
 
 # TODO(kohr-h): there must be a better way!
 def gradient_factory(name):
@@ -160,54 +161,55 @@ def gradient_factory(name):
     return gradient
 
 
+# TODO(kohr-h): there must be a better way!
 def derivative_factory(name):
     """Create derivative function for some ufuncs."""
 
     if name == 'sin':
         def derivative(self, point):
             """Return the derivative operator."""
-            return op.MultiplyOperator(cos(self.domain)(point))
+            return MultiplyOperator(cos(self.domain)(point))
     elif name == 'cos':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return op.MultiplyOperator(-sin(self.domain)(point))
+            return MultiplyOperator(-sin(self.domain)(point))
     elif name == 'tan':
         def derivative(self, point):
             """Return the derivative operator."""
-            return op.MultiplyOperator(1 + self(point) ** 2)
+            return MultiplyOperator(1 + self(point) ** 2)
     elif name == 'sqrt':
         def derivative(self, point):
             """Return the derivative operator."""
-            return op.MultiplyOperator(0.5 / self(point))
+            return MultiplyOperator(0.5 / self(point))
     elif name == 'square':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return op.MultiplyOperator(2.0 * point)
+            return MultiplyOperator(2.0 * point)
     elif name == 'log':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return op.MultiplyOperator(1.0 / point)
+            return MultiplyOperator(1.0 / point)
     elif name == 'exp':
         def derivative(self, point):
             """Return the derivative operator."""
-            return op.MultiplyOperator(self(point))
+            return MultiplyOperator(self(point))
     elif name == 'reciprocal':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return op.MultiplyOperator(-self(point) ** 2)
+            return MultiplyOperator(-self(point) ** 2)
     elif name == 'sinh':
         def derivative(self, point):
             """Return the derivative operator."""
             point = self.domain.element(point)
-            return op.MultiplyOperator(cosh(self.domain)(point))
+            return MultiplyOperator(cosh(self.domain)(point))
     elif name == 'cosh':
         def derivative(self, point):
             """Return the derivative operator."""
-            return op.MultiplyOperator(sinh(self.domain)(point))
+            return MultiplyOperator(sinh(self.domain)(point))
     else:
         # Fallback to default
         derivative = Operator.derivative
@@ -248,26 +250,26 @@ def ufunc_class_factory(name, nargin, nargout, docstring):
         if nargout == 1:
             range = space0.astype(dts_out[0])
         else:
-            range = ProductSpace(space0.astype(dts_out[0]),
-                                 space0.astype(dts_out[1]))
+            range = ProductSpace(
+                space0.astype(dts_out[0]), space0.astype(dts_out[1])
+            )
 
         linear = name in LINEAR_UFUNCS
         Operator.__init__(self, domain=domain, range=range, linear=linear)
 
     def _call(self, x, out=None):
         """Return ``self(x)``."""
-        # TODO: use `__array_ufunc__` when implemented on `ProductSpace`,
-        # or try both
+        # TODO(kohr-h): generalize to non-numpy
         if out is None:
             if nargin == 1:
-                return getattr(x.ufuncs, name)()
+                return getattr(np, name)(x)
             else:
-                return getattr(x[0].ufuncs, name)(*x[1:])
+                return getattr(np, name)(*x)
         else:
             if nargin == 1:
-                return getattr(x.ufuncs, name)(out=out)
+                return getattr(np, name)(x, out=out)
             else:
-                return getattr(x[0].ufuncs, name)(*x[1:], out=out)
+                return getattr(np, name)(*x, out=out)
 
     def __repr__(self):
         """Return ``repr(self)``."""
@@ -298,15 +300,18 @@ def ufunc_class_factory(name, nargin, nargout, docstring):
         result_space = ProductSpace(res1_spc, res2_spc)
         result = repr(result_space.element(result))
 
-    examples_docstring = RAW_EXAMPLES_DOCSTRING.format(space=space, name=name,
-                                                       arg=arg, result=result)
+    examples_docstring = RAW_EXAMPLES_DOCSTRING.format(
+        space=space, name=name, arg=arg, result=result
+    )
     full_docstring = docstring + examples_docstring
 
-    attributes = {"__init__": __init__,
-                  "_call": _call,
-                  "derivative": derivative_factory(name),
-                  "__repr__": __repr__,
-                  "__doc__": full_docstring}
+    attributes = {
+        '__init__': __init__,
+        '_call': _call,
+        'derivative': derivative_factory(name),
+        '__repr__': __repr__,
+        '__doc__': full_docstring
+    }
 
     full_name = name + '_op'
 
@@ -361,15 +366,18 @@ def ufunc_functional_factory(name, nargin, nargout, docstring):
     with np.errstate(all='ignore'):
         result = np.float64(getattr(np, name)(val))
 
-    examples_docstring = RAW_EXAMPLES_DOCSTRING.format(space=space, name=name,
-                                                       arg=arg, result=result)
+    examples_docstring = RAW_EXAMPLES_DOCSTRING.format(
+        space=space, name=name, arg=arg, result=result
+    )
     full_docstring = docstring + examples_docstring
 
-    attributes = {"__init__": __init__,
-                  "_call": _call,
-                  "gradient": property(gradient_factory(name)),
-                  "__repr__": __repr__,
-                  "__doc__": full_docstring}
+    attributes = {
+        '__init__': __init__,
+        '_call': _call,
+        'gradient': property(gradient_factory(name)),
+        '__repr__': __repr__,
+        '__doc__': full_docstring
+    }
 
     full_name = name + '_op'
 
@@ -379,7 +387,7 @@ def ufunc_functional_factory(name, nargin, nargout, docstring):
 RAW_UFUNC_FACTORY_DOCSTRING = """{docstring}
 Notes
 -----
-This creates a `Operator`/`Functional` that applies a ufunc pointwise.
+This creates an `Operator` or `Functional` that applies a ufunc pointwise.
 
 Examples
 --------
@@ -388,16 +396,15 @@ Examples
 """
 
 RAW_UFUNC_FACTORY_FUNCTIONAL_DOCSTRING = """
-Create functional with domain/range as real numbers:
+Create functional with real numbers as domain/range:
 
->>> func = odl.ufunc_ops.{name}()
+>>> F = op.ufunc.{name}()
 """
 
 RAW_UFUNC_FACTORY_OPERATOR_DOCSTRING = """
 Create operator that acts pointwise on a `TensorSpace`
 
->>> space = odl.rn(3)
->>> op = odl.ufunc_ops.{name}(space)
+>>> A = op.ufunc.{name}(odl.rn(3))
 """
 
 
@@ -418,28 +425,34 @@ for name, nargin, nargout, docstring in UFUNCS:
                 raise ValueError('ufunc not available for {}'.format(domain))
         return ufunc_factory
 
-    globals()[name + '_op'] = ufunc_class_factory(name, nargin,
-                                                  nargout, docstring)
+    globals()[name + '_op'] = ufunc_class_factory(
+        name, nargin, nargout, docstring
+    )
     if not _is_integer_only_ufunc(name):
         operator_example = RAW_UFUNC_FACTORY_OPERATOR_DOCSTRING.format(
-            name=name)
+            name=name
+        )
     else:
-        operator_example = ""
+        operator_example = ''
 
     if not _is_integer_only_ufunc(name) and nargin == 1 and nargout == 1:
         globals()[name + '_func'] = ufunc_functional_factory(
-            name, nargin, nargout, docstring)
+            name, nargin, nargout, docstring
+        )
         functional_example = RAW_UFUNC_FACTORY_FUNCTIONAL_DOCSTRING.format(
-            name=name)
+            name=name
+        )
     else:
-        functional_example = ""
+        functional_example = ''
 
     ufunc_factory = indirection(name, docstring)
 
     ufunc_factory.__doc__ = RAW_UFUNC_FACTORY_DOCSTRING.format(
-        docstring=docstring, name=name,
+        docstring=docstring,
+        name=name,
         functional_example=functional_example,
-        operator_example=operator_example)
+        operator_example=operator_example,
+    )
 
     globals()[name] = ufunc_factory
     __all__ += (name,)
