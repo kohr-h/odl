@@ -1,4 +1,4 @@
-﻿# Copyright 2014-2018 The ODL contributors
+# Copyright 2014-2018 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -690,13 +690,18 @@ def run_doctests(skip_if=False, **kwargs):
     from doctest import testmod, NORMALIZE_WHITESPACE, SKIP
     from packaging.version import parse as parse_version
     import odl
+    import odl.operator as op
+    import odl.functional as fn
     import numpy as np
 
     optionflags = kwargs.pop('optionflags', NORMALIZE_WHITESPACE)
     if skip_if:
         optionflags |= SKIP
 
-    extraglobs = kwargs.pop('extraglobs', {'odl': odl, 'np': np})
+    extraglobs = kwargs.pop(
+        'extraglobs',
+        {'odl': odl, 'op': op, 'fn': fn, 'np': np},
+    )
 
     if run_from_ipython():
         try:

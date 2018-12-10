@@ -23,7 +23,7 @@ from odl.functional.prox_ops import (
     prox_huber, prox_l1, prox_l1_l2, prox_l2, prox_l2_squared, prox_linfty,
     prox_stack)
 from odl.operator import Operator
-from odl.space.pspace import ProductSpace
+from odl.space import ProductSpace
 from odl.util import conj_exponent, moveaxis
 
 __all__ = (
@@ -352,7 +352,9 @@ class ConstantFunctional(Functional):
             The constant value of the functional
         """
         super(ConstantFunctional, self).__init__(
-            space=space, linear=(constant == 0), grad_lipschitz=0)
+            space=space,
+            linear=(constant == 0)
+        )
         self.__constant = self.range.element(constant)
 
     @property
@@ -441,7 +443,7 @@ class ScalingFunctional(Functional, op.ScalingOperator):
         >>> func(5)
         15.0
         """
-        Functional.__init__(self, space=field, linear=True, grad_lipschitz=0)
+        Functional.__init__(self, space=field, linear=True)
         op.ScalingOperator.__init__(self, field, scale)
 
     @property
@@ -653,27 +655,30 @@ class LpNorm(Functional):
         exponent : float
             Exponent for the norm (``p``).
         """
-        super(LpNorm, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+        super(LpNorm, self).__init__(space=space, linear=False)
         self.exponent = float(exponent)
 
     # TODO: update when integration operator is in place: issue #440
+    # TODO(kohr-h): generalize to non-numpy
     def _call(self, x):
         """Return the Lp-norm of ``x``."""
         if self.exponent == 0:
-            return self.domain.one().inner(np.not_equal(x, 0))
+            return self.domain.inner(self.domain.one(), np.not_equal(x, 0))
         elif self.exponent == 1:
-            return x.ufuncs.absolute().inner(self.domain.one())
+            return self.domain.inner(self.domain.one(), np.abs(x))
         elif self.exponent == 2:
-            return np.sqrt(x.inner(x))
-        elif np.isfinite(self.exponent):
-            tmp = x.ufuncs.absolute()
-            tmp.ufuncs.power(self.exponent, out=tmp)
-            return np.power(tmp.inner(self.domain.one()), 1 / self.exponent)
+            return np.sqrt(self.domain.inner(x, x))
         elif self.exponent == np.inf:
-            return x.ufuncs.absolute().ufuncs.max()
+            return np.max(np.abs(x))
         elif self.exponent == -np.inf:
-            return x.ufuncs.absolute().ufuncs.min()
+            return np.min(np.abs(x))
+        elif np.isfinite(self.exponent):
+            tmp = np.abs(x)
+            np.power(tmp, self.exponent, out=tmp)
+            return np.power(
+                self.domain.inner(self.domain.one(), tmp),
+                1 / self.exponent,
+            )
         else:
             raise RuntimeError('unknown exponent')
 
@@ -687,11 +692,11 @@ class LpNorm(Functional):
     def prox(self):
         """Return the `proximal factory` of the functional."""
         if self.exponent == 1:
-            return prox_l1(space=self.domain)
+            return prox_l1(self.domain)
         elif self.exponent == 2:
-            return prox_l2(space=self.domain)
+            return prox_l2(self.domain)
         elif self.exponent == np.inf:
-            return prox_linfty(space=self.domain)
+            return prox_linfty(self.domain)
         else:
             raise NotImplementedError(
                 '`prox` only implemented for p=1, p=2, and p=inf'
@@ -984,13 +989,12 @@ class L2NormSquared(Functional):
         space : `DiscreteLp` or `TensorSpace`
             Domain of the functional.
         """
-        super(L2NormSquared, self).__init__(
-            space=space, linear=False, grad_lipschitz=2)
+        super(L2NormSquared, self).__init__(space=space, linear=False)
 
     # TODO: update when integration operator is in place: issue #440
     def _call(self, x):
         """Return the squared L2-norm of ``x``."""
-        return x.inner(x)
+        return self.domain.inner(x, x)
 
     @property
     def grad(self):
@@ -1086,8 +1090,7 @@ class GroupL1Norm(Functional):
         if not vfspace.is_power_space:
             raise TypeError('`space.is_power_space` must be `True`')
 
-        super(GroupL1Norm, self).__init__(
-            space=vfspace, linear=False, grad_lipschitz=np.nan)
+        super(GroupL1Norm, self).__init__(space=vfspace, linear=False)
         self.pointwise_norm = op.PointwiseNorm(vfspace, exponent)
 
     def _call(self, x):
@@ -1216,7 +1219,8 @@ class IndicatorGroupL1UnitBall(Functional):
             raise TypeError('`space.is_power_space` must be `True`')
 
         super(IndicatorGroupL1UnitBall, self).__init__(
-            space=vfspace, linear=False, grad_lipschitz=np.nan)
+            space=vfspace, linear=False
+        )
         self.pointwise_norm = op.PointwiseNorm(vfspace, exponent)
 
     def _call(self, x):
@@ -1339,13 +1343,7 @@ class Huber(Functional):
         """
         self.__gamma = float(gamma)
 
-        if self.gamma > 0:
-            grad_lipschitz = 1 / self.gamma
-        else:
-            grad_lipschitz = np.inf
-
-        super(Huber, self).__init__(
-            space=space, linear=False, grad_lipschitz=grad_lipschitz)
+        super(Huber, self).__init__(space=space, linear=False)
 
     @property
     def gamma(self):
@@ -1520,8 +1518,7 @@ class NuclearNorm(Functional):
         if (not space.is_power_space or not space[0].is_power_space):
             raise TypeError('`space` must be of the form `TensorSpace^(nxm)`')
 
-        super(NuclearNorm, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+        super(NuclearNorm, self).__init__(space=space, linear=False)
 
         self.outernorm = LpNorm(self.domain[0, 0], exponent=outer_exp)
         self.pwisenorm = op.PointwiseNorm(
@@ -1728,7 +1725,8 @@ class IndicatorNuclearNormUnitBall(Functional):
         inf
         """
         super(IndicatorNuclearNormUnitBall, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+            space=space, linear=False
+        )
         self.__norm = NuclearNorm(space, outer_exp, singular_vector_exp)
 
     def _call(self, x):
@@ -1841,7 +1839,8 @@ class KullbackLeibler(Functional):
         3.0
         """
         super(KullbackLeibler, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+            space=space, linear=False
+        )
 
         if prior is not None and prior not in self.domain:
             raise ValueError('`prior` not in `domain`'
@@ -1967,7 +1966,8 @@ class KullbackLeiblerConvexConj(Functional):
             Default: if None it is take as the one-element.
         """
         super(KullbackLeiblerConvexConj, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+            space=space, linear=False
+        )
 
         if prior is not None and prior not in self.domain:
             raise ValueError('`prior` not in `domain`'
@@ -2105,7 +2105,8 @@ class KullbackLeiblerCrossEntropy(Functional):
             Default: if None it is take as the one-element.
         """
         super(KullbackLeiblerCrossEntropy, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+            space=space, linear=False
+        )
 
         if prior is not None and prior not in self.domain:
             raise ValueError('`prior` not in `domain`'
@@ -2226,7 +2227,8 @@ class KullbackLeiblerCrossEntropyConvexConj(Functional):
             Default: if None it is take as the one-element.
         """
         super(KullbackLeiblerCrossEntropyConvexConj, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+            space=space, linear=False
+        )
 
         if prior is not None and prior not in self.domain:
             raise ValueError('`prior` not in `domain`'
@@ -2527,8 +2529,7 @@ class IndicatorSimplex(Functional):
         >>> ind_simplex(x)
         0
         """
-        super(IndicatorSimplex, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+        super(IndicatorSimplex, self).__init__(space=space, linear=False)
         self.diameter = float(diameter)
 
         if sum_rtol is None:
@@ -2645,8 +2646,7 @@ class IndicatorSumConstraint(Functional):
         >>> ind_sum(x)
         0
         """
-        super(IndicatorSumConstraint, self).__init__(
-            space=space, linear=False, grad_lipschitz=np.nan)
+        super(IndicatorSumConstraint, self).__init__(space=space, linear=False)
 
         if sum_rtol is None:
             if space.dtype == 'float64':

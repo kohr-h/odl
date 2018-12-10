@@ -54,20 +54,18 @@ __all__ += discr.__all__
 
 # More "advanced" subpackages keep their namespaces separate from top-level,
 # we only import the modules themselves
-from . import contrib
+from . import util
+from . import operator
+from . import functional
+
 from . import deform
 from . import diagnostics
-from . import functional
-from . import operator
 from . import optim
 from . import phantom
 from . import tomo
-from . import util
+
+from . import contrib
 
 # Add `test` function to global namespace so users can run `odl.test()`
 from .util import test
 __all__ += ('test',)
-
-# Aliases for quick reference
-op = operator
-fn = functional
