@@ -18,9 +18,14 @@ from odl.operator.basic_ops import ZeroOperator
 from odl.operator.operator import Operator
 from odl.space.pspace import ProductSpace
 
-__all__ = ('ProductSpaceOperator',
-           'ComponentProjection', 'ComponentProjectionAdjoint',
-           'BroadcastOperator', 'ReductionOperator', 'DiagonalOperator')
+__all__ = (
+    'ProductSpaceOperator',
+    'ComponentProjection',
+    'ComponentProjectionAdjoint',
+    'BroadcastOperator',
+    'ReductionOperator',
+    'DiagonalOperator',
+)
 
 
 class ProductSpaceOperator(Operator):
@@ -704,27 +709,24 @@ class BroadcastOperator(Operator):
         --------
         Initialize an operator:
 
-        >>> I = odl.IdentityOperator(odl.rn(3))
-        >>> op = BroadcastOperator(I, 2 * I)
-        >>> op.domain
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> B = op.BroadcastOperator(I, 2 * I)
+        >>> B.domain
         rn(3)
-        >>> op.range
+        >>> B.range
         ProductSpace(rn(3), 2)
 
         Evaluate the operator:
 
-        >>> x = [1, 2, 3]
-        >>> op(x)
-        ProductSpace(rn(3), 2).element([
-            [ 1.,  2.,  3.],
-            [ 2.,  4.,  6.]
-        ])
+        >>> B([1, 2, 3])
+        array([[ 1.,  2.,  3.],
+               [ 2.,  4.,  6.]])
 
         Can also initialize by calling an operator repeatedly:
 
-        >>> I = odl.IdentityOperator(odl.rn(3))
-        >>> op = BroadcastOperator(I, 2)
-        >>> op.operators
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> B = op.BroadcastOperator(I, 2)
+        >>> B.operators
         (IdentityOperator(rn(3)), IdentityOperator(rn(3)))
         """
         if (len(operators) == 2 and
@@ -735,8 +737,10 @@ class BroadcastOperator(Operator):
         self.__operators = operators
         self.__prod_op = ProductSpaceOperator([[op] for op in operators])
         super(BroadcastOperator, self).__init__(
-            self.prod_op.domain[0], self.prod_op.range,
-            linear=self.prod_op.is_linear)
+            self.prod_op.domain[0],
+            self.prod_op.range,
+            linear=self.prod_op.is_linear
+        )
 
     @property
     def prod_op(self):
@@ -763,7 +767,8 @@ class BroadcastOperator(Operator):
 
     def _call(self, x, out=None):
         """Evaluate all operators in ``x`` and broadcast."""
-        wrapped_x = self.prod_op.domain.element([x], cast=False)
+        wrapped_x = np.empty(1, dtype=object)
+        wrapped_x[0] = x
         return self.prod_op(wrapped_x, out=out)
 
     def derivative(self, x):
@@ -783,26 +788,22 @@ class BroadcastOperator(Operator):
         --------
         Example with an affine operator:
 
-        >>> I = odl.IdentityOperator(odl.rn(3))
-        >>> residual_op = I - I.domain.element([1, 1, 1])
-        >>> op = BroadcastOperator(residual_op, 2 * residual_op)
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> A = I - I.domain.element([1, 1, 1])
+        >>> B = op.BroadcastOperator(A, 2 * A)
 
         Calling operator offsets by ``[1, 1, 1]``:
 
-        >>> x = [1, 2, 3]
-        >>> op(x)
-        ProductSpace(rn(3), 2).element([
-            [ 0.,  1.,  2.],
-            [ 0.,  2.,  4.]
-        ])
+        >>> x = B.domain.element([1, 2, 3])
+        >>> B(x)
+        array([[ 0.,  1.,  2.],
+               [ 0.,  2.,  4.]])
 
         The derivative of this affine operator does not have an offset:
 
-        >>> op.derivative(x)(x)
-        ProductSpace(rn(3), 2).element([
-            [ 1.,  2.,  3.],
-            [ 2.,  4.,  6.]
-        ])
+        >>> B.derivative(x)(x)
+        array([[ 1.,  2.,  3.],
+               [ 2.,  4.,  6.]])
         """
         return BroadcastOperator(*[op.derivative(x) for op in
                                    self.operators])
@@ -817,10 +818,11 @@ class BroadcastOperator(Operator):
 
         Examples
         --------
-        >>> I = odl.IdentityOperator(odl.rn(3))
-        >>> op = BroadcastOperator(I, 2 * I)
-        >>> op.adjoint([[1, 2, 3], [2, 3, 4]])
-        rn(3).element([  5.,   8.,  11.])
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> B = op.BroadcastOperator(I, 2 * I)
+        >>> B.adjoint([[1, 2, 3],
+        ...            [2, 3, 4]])
+        array([  5.,   8.,  11.])
         """
         return ReductionOperator(*[op.adjoint for op in self.operators])
 
@@ -829,12 +831,11 @@ class BroadcastOperator(Operator):
 
         Examples
         --------
-        >>> spc = odl.rn(3)
-        >>> id = odl.IdentityOperator(spc)
-        >>> odl.BroadcastOperator(id, 3)
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> op.BroadcastOperator(I, 3)
         BroadcastOperator(IdentityOperator(rn(3)), 3)
-        >>> scale = odl.ScalingOperator(spc, 3)
-        >>> odl.BroadcastOperator(id, scale)
+        >>> S = op.ScalingOperator(odl.rn(3), 3)
+        >>> op.BroadcastOperator(I, S)
         BroadcastOperator(IdentityOperator(rn(3)), ScalingOperator(rn(3), 3.0))
         """
         if all(op == self[0] for op in self):
@@ -871,35 +872,35 @@ class ReductionOperator(Operator):
 
         Examples
         --------
-        >>> I = odl.IdentityOperator(odl.rn(3))
-        >>> op = ReductionOperator(I, 2 * I)
-        >>> op.domain
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> R = op.ReductionOperator(I, 2 * I)
+        >>> R.domain
         ProductSpace(rn(3), 2)
-        >>> op.range
+        >>> R.range
         rn(3)
 
         Evaluating in a point gives the sum of the evaluation results of
         the individual operators:
 
-        >>> op([[1, 2, 3],
-        ...     [4, 6, 8]])
-        rn(3).element([  9.,  14.,  19.])
+        >>> R([[1, 2, 3],
+        ...    [4, 6, 8]])
+        array([  9.,  14.,  19.])
 
         An ``out`` argument can be given for in-place evaluation:
 
-        >>> out = op.range.element()
-        >>> result = op([[1, 2, 3],
-        ...              [4, 6, 8]], out=out)
+        >>> out = R.range.element()
+        >>> res = R([[1, 2, 3],
+        ...          [4, 6, 8]], out=out)
         >>> out
-        rn(3).element([  9.,  14.,  19.])
-        >>> result is out
+        array([  9.,  14.,  19.])
+        >>> res is out
         True
 
         There is a simplified syntax for the case that all operators are
         the same:
 
-        >>> op = ReductionOperator(I, 2)
-        >>> op.operators
+        >>> R = op.ReductionOperator(I, 2)
+        >>> R.operators
         (IdentityOperator(rn(3)), IdentityOperator(rn(3)))
         """
         if (len(operators) == 2 and
@@ -942,7 +943,8 @@ class ReductionOperator(Operator):
         if out is None:
             return self.prod_op(x)[0]
         else:
-            wrapped_out = self.prod_op.range.element([out], cast=False)
+            wrapped_out = np.empty(1, dtype=object)
+            wrapped_out[0] = out
             pspace_result = self.prod_op(x, out=wrapped_out)
             return pspace_result[0]
 
@@ -960,33 +962,32 @@ class ReductionOperator(Operator):
 
         Examples
         --------
-        >>> r3 = odl.rn(3)
-        >>> I = odl.IdentityOperator(r3)
-        >>> x = [1.0, 2.0, 3.0]
-        >>> y = [4.0, 6.0, 8.0]
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> x = [1, 2, 3]
+        >>> y = [4, 6, 8]
 
         Example with linear operator (derivative is itself)
 
-        >>> op = ReductionOperator(I, 2 * I)
-        >>> op([x, y])
-        rn(3).element([  9.,  14.,  19.])
-        >>> op.derivative([x, y])([x, y])
-        rn(3).element([  9.,  14.,  19.])
+        >>> R = op.ReductionOperator(I, 2 * I)
+        >>> R([x, y])
+        array([  9.,  14.,  19.])
+        >>> R.derivative([x, y])([x, y])
+        array([  9.,  14.,  19.])
 
         Example with affine operator
 
-        >>> residual_op = I - r3.element([1, 1, 1])
-        >>> op = ReductionOperator(residual_op, 2 * residual_op)
+        >>> A = I - I.range.element([1, 1, 1])
+        >>> R = op.ReductionOperator(A, 2 * A)
 
         Calling operator gives offset by [3, 3, 3]
 
-        >>> op([x, y])
-        rn(3).element([  6.,  11.,  16.])
+        >>> R([x, y])
+        array([  6.,  11.,  16.])
 
         Derivative of affine operator does not have this offset
 
-        >>> op.derivative([x, y])([x, y])
-        rn(3).element([  9.,  14.,  19.])
+        >>> R.derivative([x, y])([x, y])
+        array([  9.,  14.,  19.])
         """
         return ReductionOperator(*[op.derivative(xi)
                                    for op, xi in zip(self.operators, x)])
@@ -1001,13 +1002,11 @@ class ReductionOperator(Operator):
 
         Examples
         --------
-        >>> I = odl.IdentityOperator(odl.rn(3))
-        >>> op = ReductionOperator(I, 2 * I)
-        >>> op.adjoint([1, 2, 3])
-        ProductSpace(rn(3), 2).element([
-            [ 1.,  2.,  3.],
-            [ 2.,  4.,  6.]
-        ])
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> R = op.ReductionOperator(I, 2 * I)
+        >>> R.adjoint([1, 2, 3])
+        array([[ 1.,  2.,  3.],
+               [ 2.,  4.,  6.]])
         """
         return BroadcastOperator(*[op.adjoint for op in self.operators])
 
@@ -1016,12 +1015,11 @@ class ReductionOperator(Operator):
 
         Examples
         --------
-        >>> spc = odl.rn(3)
-        >>> id = odl.IdentityOperator(spc)
-        >>> odl.ReductionOperator(id, 3)
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> op.ReductionOperator(I, 3)
         ReductionOperator(IdentityOperator(rn(3)), 3)
-        >>> scale = odl.ScalingOperator(spc, 3)
-        >>> odl.ReductionOperator(id, scale)
+        >>> S = op.ScalingOperator(odl.rn(3), 3)
+        >>> op.ReductionOperator(I, S)
         ReductionOperator(IdentityOperator(rn(3)), ScalingOperator(rn(3), 3.0))
         """
         if all(op == self[0] for op in self):
@@ -1067,27 +1065,25 @@ class DiagonalOperator(ProductSpaceOperator):
 
         Examples
         --------
-        >>> I = odl.IdentityOperator(odl.rn(3))
-        >>> op = DiagonalOperator(I, 2 * I)
-        >>> op.domain
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> D = op.DiagonalOperator(I, 2 * I)
+        >>> D.domain
         ProductSpace(rn(3), 2)
-        >>> op.range
+        >>> D.range
         ProductSpace(rn(3), 2)
 
         Evaluation is distributed so each argument is given to one operator.
         The argument order is the same as the order of the operators:
 
-        >>> op([[1, 2, 3],
-        ...     [4, 5, 6]])
-        ProductSpace(rn(3), 2).element([
-            [ 1.,  2.,  3.],
-            [  8.,  10.,  12.]
-        ])
+        >>> D([[1, 2, 3],
+        ...    [4, 5, 6]])
+        array([[  1.,   2.,   3.],
+               [  8.,  10.,  12.]])
 
         Can also be created using a multiple of a single operator
 
-        >>> op = DiagonalOperator(I, 2)
-        >>> op.operators
+        >>> D = op.DiagonalOperator(I, 2)
+        >>> D.operators
         (IdentityOperator(rn(3)), IdentityOperator(rn(3)))
         """
         # Lazy import to improve `import odl` time
@@ -1224,12 +1220,11 @@ class DiagonalOperator(ProductSpaceOperator):
 
         Examples
         --------
-        >>> spc = odl.rn(3)
-        >>> id = odl.IdentityOperator(spc)
-        >>> odl.DiagonalOperator(id, 3)
+        >>> I = op.IdentityOperator(odl.rn(3))
+        >>> op.DiagonalOperator(I, 3)
         DiagonalOperator(IdentityOperator(rn(3)), 3)
-        >>> scale = odl.ScalingOperator(spc, 3)
-        >>> odl.DiagonalOperator(id, scale)
+        >>> S = op.ScalingOperator(odl.rn(3), 3)
+        >>> op.DiagonalOperator(I, S)
         DiagonalOperator(IdentityOperator(rn(3)), ScalingOperator(rn(3), 3.0))
         """
         if all(op == self[0] for op in self):
