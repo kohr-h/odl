@@ -12,10 +12,8 @@ from __future__ import absolute_import, division, print_function
 
 import numpy as np
 
-import odl.functional as fn
-from odl.functional import Functional
-from odl.operator.operator import Operator
 from odl.operator.basic_ops import MultiplyOperator
+from odl.operator.operator import Operator
 from odl.set import RealNumbers
 from odl.set.sets import Field
 from odl.set.space import LinearSpace
@@ -109,6 +107,8 @@ Examples
 # TODO(kohr-h): there must be a better way!
 def gradient_factory(name):
     """Create gradient `Functional` for some ufuncs."""
+    import odl.functional as fn
+    from odl.functional import Functional
 
     if name == 'sin':
         def gradient(self):

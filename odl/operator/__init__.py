@@ -41,4 +41,5 @@ __all__ += fourier.__all__
 from .wavelet import *
 __all__ += wavelet.__all__
 
-from . import ufunc
+# TODO(kohr-h): Circular import, find solution (make module static!)
+#from . import ufunc
