@@ -54,6 +54,12 @@ __all__ = (
 )
 
 
+# TODOs(kohr-h):
+# - Move docstrings from low-level functions to prox properties
+# - Rename proximal to prox
+# - Rename gradient to grad
+
+
 class SeparableSum(Functional):
 
     r"""The functional corresponding to separable sum of functionals.
@@ -119,23 +125,15 @@ class SeparableSum(Functional):
         --------
         Create functional ``f([x1, x2]) = ||x1||_1 + ||x2||_2``:
 
-        >>> space = odl.rn(3)
-        >>> l1 = fn.L1Norm(space)
-        >>> l2 = fn.L2Norm(space)
-        >>> f_sum = fn.SeparableSum(l1, l2)
+        >>> X = odl.rn(3)
+        >>> l1 = fn.L1Norm(X)
+        >>> l2 = fn.L2Norm(X)
+        >>> sum = fn.SeparableSum(l1, l2)
 
-        The `proximal` factory allows using vector-valued stepsizes:
+        If the same functional is used for each part, a number can be given
+        for the second argument to specify the multiplicity:
 
-        >>> x = f_sum.domain.one()
-        >>> f_sum.proximal([0.5, 2.0])(x)
-        ProductSpace(rn(3), 2).element([
-            [ 0.5,  0.5,  0.5],
-            [ 0.,  0.,  0.]
-        ])
-
-        Create functional ``f([x1, ... ,xn]) = \sum_i ||xi||_1``:
-
-        >>> f_sum = fn.SeparableSum(l1, 5)
+        >>> sum = fn.SeparableSum(l1, 5)
         """
         # Make a power space if the second argument is an integer
         if (len(functionals) == 2 and
@@ -173,19 +171,19 @@ class SeparableSum(Functional):
 
         Examples
         --------
-        >>> space = odl.rn(3)
-        >>> l1 = fn.L1Norm(space)
-        >>> l2 = fn.L2Norm(space)
-        >>> f_sum = fn.SeparableSum(l1, l2, 2*l2)
+        >>> X = odl.rn(3)
+        >>> l1 = fn.L1Norm(X)
+        >>> l2 = fn.L2Norm(X)
+        >>> sum = fn.SeparableSum(l1, l2, 2 * l2)
 
         Extract single sub-functional via integer index:
 
-        >>> f_sum[0]
+        >>> sum[0]
         L1Norm(rn(3))
 
         Extract subset of functionals:
 
-        >>> f_sum[:2]
+        >>> sum[:2]
         SeparableSum(L1Norm(rn(3)), L2Norm(rn(3)))
         """
         result = self.functionals[indices]
@@ -195,22 +193,38 @@ class SeparableSum(Functional):
             return result
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional."""
-        gradients = [func.gradient for func in self.functionals]
-        return op.DiagonalOperator(*gradients)
+        grads = [func.grad for func in self.functionals]
+        return op.DiagonalOperator(*grads)
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the `proximal factory` of the functional.
 
         The proximal operator separates over separable sums.
 
-        Returns
-        -------
-        proximal : prox_stack
+        Examples
+        --------
+        Proximal of the functional ``f([x1, x2]) = ||x1||_1 + ||x2||_2``:
+
+        >>> X = odl.rn(3)
+        >>> l1 = fn.L1Norm(X)
+        >>> l2 = fn.L2Norm(X)
+        >>> sum = fn.SeparableSum(l1, l2)
+        >>> x = sum.domain.one()
+        >>> sum.prox(2)(x)
+
+
+        Vector stepsizes are also supported:
+
+        >>> sum.prox([0.5, 2.0])(x)
+        ProductSpace(rn(3), 2).element([
+            [ 0.5,  0.5,  0.5],
+            [ 0.,  0.,  0.]
+        ])
         """
-        prox_facs = [func.proximal for func in self.functionals]
+        prox_facs = [func.prox for func in self.functionals]
         return prox_stack(*prox_facs)
 
     @property
@@ -234,7 +248,7 @@ class MoreauEnvelope(Functional):
     r"""Moreau envelope of a convex functional.
 
     The Moreau envelope is a way to smooth an arbitrary convex functional
-    such that its gradient can be computed given the proximal of the original
+    such that its gradient can be computed given the prox of the original
     functional.
     The new functional has the same critical points as the original.
     It is also called the Moreau-Yosida regularization.
@@ -314,10 +328,10 @@ https://web.stanford.edu/~boyd/papers/pdf/prox_algs.pdf
         return self.__sigma
 
     @property
-    def gradient(self):
+    def grad(self):
         """The gradient operator."""
         return (op.ScalingOperator(self.domain, 1 / self.sigma) -
-                (1 / self.sigma) * self.functional.proximal(self.sigma))
+                (1 / self.sigma) * self.functional.prox(self.sigma))
 
 
 class ConstantFunctional(Functional):
@@ -351,12 +365,12 @@ class ConstantFunctional(Functional):
         return self.constant
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional."""
         return op.ZeroOperator(self.domain)
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the `proximal factory` of the functional."""
         return prox_const_func(self.domain)
 
@@ -431,7 +445,7 @@ class ScalingFunctional(Functional, op.ScalingOperator):
         op.ScalingOperator.__init__(self, field, scale)
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional."""
         return ConstantFunctional(self.domain, self.scalar)
 
@@ -532,7 +546,7 @@ class QuadraticForm(Functional):
             return x.inner(tmp) + self.constant
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional."""
         if self.operator is None:
             return op.ConstantOperator(self.vector, self.domain)
@@ -544,15 +558,15 @@ class QuadraticForm(Functional):
             # Figure out if operator is symmetric
             opadjoint = self.operator.adjoint
             if opadjoint == self.operator:
-                gradient = 2 * self.operator
+                grad = 2 * self.operator
             else:
-                gradient = self.operator + opadjoint
+                grad = self.operator + opadjoint
 
             # Return gradient
             if self.vector is None:
-                return gradient
+                return grad
             else:
-                return gradient + self.vector
+                return grad + self.vector
 
     @property
     def convex_conj(self):
@@ -670,16 +684,8 @@ class LpNorm(Functional):
                                    exponent=conj_exponent(self.exponent))
 
     @property
-    def proximal(self):
-        """Return the proximal factory of the functional.
-
-        See Also
-        --------
-        odl.functional.prox_ops.prox_l1 :
-            proximal factory for the L1-norm.
-        odl.functional.prox_ops.prox_l2 :
-            proximal factory for the L2-norm.
-        """
+    def prox(self):
+        """Return the `proximal factory` of the functional."""
         if self.exponent == 1:
             return prox_l1(space=self.domain)
         elif self.exponent == 2:
@@ -687,11 +693,12 @@ class LpNorm(Functional):
         elif self.exponent == np.inf:
             return prox_linfty(space=self.domain)
         else:
-            raise NotImplementedError('`proximal` only implemented for p=1, '
-                                      'p=2, and p=inf')
+            raise NotImplementedError(
+                '`prox` only implemented for p=1, p=2, and p=inf'
+            )
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional.
 
         The functional is not differentiable in ``x=0``. However, when
@@ -700,13 +707,13 @@ class LpNorm(Functional):
         functional = self
 
         if self.exponent == 1:
-            class L1Gradient(Operator):
+            class L1Grad(Operator):
 
                 """The gradient operator of this functional."""
 
                 def __init__(self):
                     """Initialize a new instance."""
-                    super(L1Gradient, self).__init__(
+                    super(L1Grad, self).__init__(
                         functional.domain, functional.domain, linear=False)
 
                 def _call(self, x):
@@ -717,16 +724,16 @@ class LpNorm(Functional):
                     """Derivative is a.e. zero."""
                     return op.ZeroOperator(self.domain)
 
-            return L1Gradient()
+            return L1Grad()
 
         elif self.exponent == 2:
-            class L2Gradient(Operator):
+            class L2Grad(Operator):
 
                 """The gradient operator of this functional."""
 
                 def __init__(self):
                     """Initialize a new instance."""
-                    super(L2Gradient, self).__init__(
+                    super(L2Grad, self).__init__(
                         functional.domain, functional.domain, linear=False)
 
                 def _call(self, x):
@@ -740,11 +747,10 @@ class LpNorm(Functional):
                     else:
                         return x / norm_of_x
 
-            return L2Gradient()
+            return L2Grad()
 
         else:
-            raise NotImplementedError('`gradient` only implemented for p=1 '
-                                      'and p=2')
+            raise NotImplementedError('`grad` only implemented for p = 1 or 2')
 
     def __repr__(self):
         """Return ``repr(self)``."""
@@ -757,7 +763,7 @@ class IndicatorLpUnitBall(Functional):
 
     r"""The indicator function on the unit ball in given the ``Lp`` norm.
 
-    It does not implement `gradient` since it is not differentiable everywhere.
+    It does not implement `grad` since it is not differentiable everywhere.
 
     Notes
     -----
@@ -840,23 +846,16 @@ class IndicatorLpUnitBall(Functional):
             return LpNorm(self.domain, exponent=conj_exponent(self.exponent))
 
     @property
-    def proximal(self):
-        """Return the `proximal factory` of the functional.
-
-        See Also
-        --------
-        odl.functional.prox_ops.prox_convex_conj_l1 :
-            `proximal factory` for convex conjuagte of L1-norm.
-        odl.functional.prox_ops.prox_convex_conj_l2 :
-            `proximal factory` for convex conjuagte of L2-norm.
-        """
+    def prox(self):
+        """Return the `proximal factory` of the functional."""
         if self.exponent == np.inf:
             return prox_convex_conj_l1(space=self.domain)
         elif self.exponent == 2:
             return prox_convex_conj_l2(space=self.domain)
         else:
-            raise NotImplementedError('`gradient` only implemented for p=2 or '
-                                      'p=inf')
+            raise NotImplementedError(
+                '`grad` only implemented for p = 2 or inf'
+            )
 
     def __repr__(self):
         """Return ``repr(self)``."""
@@ -889,7 +888,7 @@ class L1Norm(LpNorm):
     >>> space = odl.rn(3)
     >>> f = fn.L1Norm(space)
     >>> x = space.one()
-    >>> f.proximal([0.5, 1.0, 1.5])(x)
+    >>> f.prox([0.5, 1.0, 1.5])(x)
     rn(3).element([ 0.5,  0. ,  0. ])
     """
 
@@ -973,7 +972,7 @@ class L2NormSquared(Functional):
     >>> space = odl.rn(3)
     >>> f = fn.L2NormSquared(space)
     >>> x = space.one()
-    >>> f.proximal([0.5, 1.5, 2.0])(x)
+    >>> f.prox([0.5, 1.5, 2.0])(x)
     rn(3).element([ 0.5 ,  0.25,  0.2 ])
     """
 
@@ -994,12 +993,12 @@ class L2NormSquared(Functional):
         return x.inner(x)
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional."""
         return op.ScalingOperator(self.domain, 2.0)
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the `proximal factory` of the functional.
 
         See Also
@@ -1098,7 +1097,7 @@ class GroupL1Norm(Functional):
         return pointwise_norm.inner(pointwise_norm.space.one())
 
     @property
-    def gradient(self):
+    def grad(self):
         r"""Gradient operator of the functional.
 
         The functional is not differentiable in ``x=0``. However, when
@@ -1124,13 +1123,13 @@ class GroupL1Norm(Functional):
         """
         functional = self
 
-        class GroupL1Gradient(Operator):
+        class GroupL1Grad(Operator):
 
             """The gradient operator of the `GroupL1Norm` functional."""
 
             def __init__(self):
                 """Initialize a new instance."""
-                super(GroupL1Gradient, self).__init__(
+                super(GroupL1Grad, self).__init__(
                     functional.domain, functional.domain, linear=False)
 
             def _call(self, x, out):
@@ -1142,10 +1141,10 @@ class GroupL1Norm(Functional):
 
                 return out
 
-        return GroupL1Gradient()
+        return GroupL1Grad()
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the ``proximal factory`` of the functional.
 
         See Also
@@ -1158,8 +1157,7 @@ class GroupL1Norm(Functional):
         elif self.pointwise_norm.exponent == 2:
             return prox_l1_l2(space=self.domain)
         else:
-            raise NotImplementedError('`proximal` only implemented for p = 1 '
-                                      'or 2')
+            raise NotImplementedError('`prox` only implemented for p = 1 or 2')
 
     @property
     def convex_conj(self):
@@ -1231,21 +1229,14 @@ class IndicatorGroupL1UnitBall(Functional):
             return 0
 
     @property
-    def proximal(self):
-        """Return the `proximal factory` of the functional.
-
-        See Also
-        --------
-        odl.functional.prox_ops.prox_convex_conj_l1 :
-            `proximal factory` for the L1-norms convex conjugate.
-        """
+    def prox(self):
+        """Return the `proximal factory` of the functional."""
         if self.pointwise_norm.exponent == np.inf:
             return prox_convex_conj_l1(space=self.domain)
         elif self.pointwise_norm.exponent == 2:
             return prox_convex_conj_l1_l2(space=self.domain)
         else:
-            raise NotImplementedError('`proximal` only implemented for p = 1 '
-                                      'or 2')
+            raise NotImplementedError('`prox` only implemented for p = 1 or 2')
 
     @property
     def convex_conj(self):
@@ -1391,18 +1382,12 @@ class Huber(Functional):
                                           quadratic_coeff=self.gamma / 2)
 
     @property
-    def proximal(self):
-        """Return the ``proximal factory`` of the functional.
-
-        See Also
-        --------
-        odl.functional.prox_ops.prox_huber :
-            `proximal factory` for the Huber norm.
-        """
+    def prox(self):
+        """Return the ``proximal factory`` of the functional."""
         return prox_huber(space=self.domain, gamma=self.gamma)
 
     @property
-    def gradient(self):
+    def grad(self):
         r"""Gradient operator of the functional.
 
         The gradient of the Huber functional is given by
@@ -1422,7 +1407,7 @@ class Huber(Functional):
         >>> norm_one = space.one().norm()
         >>> x = odl.phantom.white_noise(space)
         >>> huber_norm = fn.Huber(space, gamma=0.1)
-        >>> grad = huber_norm.gradient(x)
+        >>> grad = huber_norm.grad(x)
         >>> tol = 1e-5
         >>> grad.norm() <=  norm_one + tol
         True
@@ -1434,7 +1419,7 @@ class Huber(Functional):
         >>> norm_one = space.one().norm()
         >>> x = odl.phantom.white_noise(space)
         >>> huber_norm = fn.Huber(space, gamma=0.2)
-        >>> grad = huber_norm.gradient(x)
+        >>> grad = huber_norm.grad(x)
         >>> tol = 1e-5
         >>> grad.norm() <=  norm_one + tol
         True
@@ -1442,13 +1427,13 @@ class Huber(Functional):
 
         functional = self
 
-        class HuberGradient(Operator):
+        class HuberGrad(Operator):
 
             """The gradient operator of this functional."""
 
             def __init__(self):
                 """Initialize a new instance."""
-                super(HuberGradient, self).__init__(
+                super(HuberGrad, self).__init__(
                     functional.domain, functional.domain, linear=False)
 
             def _call(self, x):
@@ -1469,7 +1454,7 @@ class Huber(Functional):
 
                 return grad
 
-        return HuberGradient()
+        return HuberGrad()
 
     def __repr__(self):
         '''Return ``repr(self)``.'''
@@ -1556,7 +1541,7 @@ class NuclearNorm(Functional):
         arr = np.empty(shape, dtype=self.domain.dtype)
         for i, xi in enumerate(vec):
             for j, xij in enumerate(xi):
-                arr[..., i, j] = xij.asarray()
+                arr[..., i, j] = xij
 
         return arr
 
@@ -1582,7 +1567,7 @@ class NuclearNorm(Functional):
         return self.outernorm(self.pwisenorm(s_reordered))
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the proximal operator.
 
         Raises
@@ -1592,11 +1577,13 @@ class NuclearNorm(Functional):
             infinity
         """
         if self.outernorm.exponent != 1:
-            raise NotImplementedError('`proximal` only implemented for '
-                                      '`outer_exp==1`')
+            raise NotImplementedError(
+                '`prox` only implemented for `outer_exp = 1`'
+            )
         if self.pwisenorm.exponent not in [1, 2, np.inf]:
-            raise NotImplementedError('`proximal` only implemented for '
-                                      '`singular_vector_exp` in [1, 2, inf]')
+            raise NotImplementedError(
+                '`prox` only implemented for `singular_vector_exp` 1, 2 or inf'
+            )
 
         def nddot(a, b):
             """Compute pointwise matrix product in the last indices."""
@@ -1639,7 +1626,7 @@ class NuclearNorm(Functional):
                     sprox = np.sign(s) * np.maximum(abss, 0)
                 elif func.pwisenorm.exponent == 2:
                     s_reordered = moveaxis(s, -1, 0)
-                    snorm = func.pwisenorm(s_reordered).asarray()
+                    snorm = func.pwisenorm(s_reordered)
                     snorm = np.maximum(self.sigma, snorm, out=snorm)
                     sprox = ((1 - eps) - self.sigma / snorm)[..., None] * s
                 elif func.pwisenorm.exponent == np.inf:
@@ -1661,7 +1648,7 @@ class NuclearNorm(Functional):
 
             def __repr__(self):
                 """Return ``repr(self)``."""
-                return '{!r}.proximal({})'.format(func, self.sigma)
+                return '{!r}.prox({})'.format(func, self.sigma)
 
         return NuclearNormProximal
 
@@ -1754,10 +1741,10 @@ class IndicatorNuclearNormUnitBall(Functional):
             return 0
 
     @property
-    def proximal(self):
+    def prox(self):
         """The proximal operator."""
-        # Implement proximal via duality
-        return prox_convex_conj(self.convex_conj.proximal)
+        # Implement prox via duality
+        return prox_convex_conj(self.convex_conj.prox)
 
     @property
     def convex_conj(self):
@@ -1890,7 +1877,7 @@ class KullbackLeibler(Functional):
             return tmp
 
     @property
-    def gradient(self):
+    def grad(self):
         r"""Gradient of the KL functional.
 
         The gradient of `KullbackLeibler` with ``prior`` :math:`g` is given
@@ -1904,13 +1891,13 @@ class KullbackLeibler(Functional):
         """
         functional = self
 
-        class KLGradient(Operator):
+        class KLGrad(Operator):
 
             """The gradient operator of this functional."""
 
             def __init__(self):
                 """Initialize a new instance."""
-                super(KLGradient, self).__init__(
+                super(KLGrad, self).__init__(
                     functional.domain, functional.domain, linear=False)
 
             def _call(self, x):
@@ -1924,19 +1911,11 @@ class KullbackLeibler(Functional):
                 else:
                     return (-functional.prior) / x + 1
 
-        return KLGradient()
+        return KLGrad()
 
     @property
-    def proximal(self):
-        """Return the `proximal factory` of the functional.
-
-        See Also
-        --------
-        odl.functional.prox_ops.prox_convex_conj_kl :
-            `proximal factory` for convex conjugate of KL.
-        odl.functional.prox_ops.prox_convex_conj :
-            Proximal of the convex conjugate of a functional.
-        """
+    def prox(self):
+        """Return the `proximal factory` of the functional."""
         return prox_convex_conj(
             prox_convex_conj_kl(space=self.domain, g=self.prior)
         )
@@ -2024,7 +2003,7 @@ class KullbackLeiblerConvexConj(Functional):
             return tmp
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional.
 
         The gradient is not defined in points where one or more components
@@ -2032,13 +2011,13 @@ class KullbackLeiblerConvexConj(Functional):
         """
         functional = self
 
-        class KLCCGradient(Operator):
+        class KLCCGrad(Operator):
 
             """The gradient operator of this functional."""
 
             def __init__(self):
                 """Initialize a new instance."""
-                super(KLCCGradient, self).__init__(
+                super(KLCCGrad, self).__init__(
                     functional.domain, functional.domain, linear=False)
 
             def _call(self, x):
@@ -2052,19 +2031,11 @@ class KullbackLeiblerConvexConj(Functional):
                 else:
                     return functional.prior / (1 - x)
 
-        return KLCCGradient()
+        return KLCCGrad()
 
     @property
-    def proximal(self):
-        """Return the `proximal factory` of the functional.
-
-        See Also
-        --------
-        odl.functional.prox_ops.prox_convex_conj_kl :
-            `proximal factory` for convex conjugate of KL.
-        odl.functional.prox_ops.prox_convex_conj :
-            Proximal of the convex conjugate of a functional.
-        """
+    def prox(self):
+        """Return the `proximal factory` of the functional."""
         return prox_convex_conj_kl(space=self.domain, g=self.prior)
 
     @property
@@ -2169,7 +2140,7 @@ class KullbackLeiblerCrossEntropy(Functional):
             return tmp
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional.
 
         The gradient is not defined in points where one or more components
@@ -2177,13 +2148,13 @@ class KullbackLeiblerCrossEntropy(Functional):
         """
         functional = self
 
-        class KLCrossEntropyGradient(Operator):
+        class KLCrossEntropyGrad(Operator):
 
             """The gradient operator of this functional."""
 
             def __init__(self):
                 """Initialize a new instance."""
-                super(KLCrossEntropyGradient, self).__init__(
+                super(KLCrossEntropyGrad, self).__init__(
                     functional.domain, functional.domain, linear=False)
 
             def _call(self, x):
@@ -2201,26 +2172,20 @@ class KullbackLeiblerCrossEntropy(Functional):
                     return tmp
                 else:
                     # The derivative is not defined.
-                    raise ValueError('The gradient of the Kullback-Leibler '
-                                     'Cross Entropy functional is not defined '
-                                     'for `x` with one or more components '
-                                     'less than or equal to zero.'.format(x))
+                    raise ValueError(
+                        'the gradient of the KL Cross Entropy functional is '
+                        'not defined if any component is less than or equal '
+                        'to zero'
+                    )
 
-        return KLCrossEntropyGradient()
+        return KLCrossEntropyGrad()
 
     @property
-    def proximal(self):
-        """Return the `proximal factory` of the functional.
-
-        See Also
-        --------
-        odl.functional.prox_ops.prox_convex_conj_kl_cross_entropy :
-            `proximal factory` for convex conjugate of the KL cross entropy.
-        odl.functional.prox_ops.prox_convex_conj :
-            Proximal of the convex conjugate of a functional.
-        """
-        return prox_convex_conj(prox_convex_conj_kl_cross_entropy(
-            space=self.domain, g=self.prior))
+    def prox(self):
+        """Return the `proximal factory` of the functional."""
+        return prox_convex_conj(
+            prox_convex_conj_kl_cross_entropy(space=self.domain, g=self.prior)
+        )
 
     @property
     def convex_conj(self):
@@ -2285,17 +2250,17 @@ class KullbackLeiblerCrossEntropyConvexConj(Functional):
 
     # TODO: replace this when UFuncOperators is in place: PL #576
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional."""
         functional = self
 
-        class KLCrossEntCCGradient(Operator):
+        class KLCrossEntCCGrad(Operator):
 
             """The gradient operator of this functional."""
 
             def __init__(self):
                 """Initialize a new instance."""
-                super(KLCrossEntCCGradient, self).__init__(
+                super(KLCrossEntCCGrad, self).__init__(
                     functional.domain, functional.domain, linear=False)
 
             def _call(self, x):
@@ -2305,17 +2270,11 @@ class KullbackLeiblerCrossEntropyConvexConj(Functional):
                 else:
                     return functional.prior * np.exp(x)
 
-        return KLCrossEntCCGradient()
+        return KLCrossEntCCGrad()
 
     @property
-    def proximal(self):
-        r"""Return the `proximal factory` of the functional.
-
-        See Also
-        --------
-        odl.functional.prox_ops.prox_convex_conj_kl_cross_entropy :
-            `proximal factory` for convex conjugate of the KL cross entropy.
-        """
+    def prox(self):
+        """Return the `proximal factory` of the functional."""
         return prox_convex_conj_kl_cross_entropy(
             space=self.domain, g=self.prior
         )
@@ -2378,11 +2337,11 @@ class IndicatorBox(Functional):
         """Apply the functional to the given point."""
         # Since the proximal projects onto our feasible set we can simply
         # check if it changes anything
-        proj = self.proximal(1)(x)
+        proj = self.prox(1)(x)
         return np.inf if x.dist(proj) > 0 else 0
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the `proximal factory` of the functional."""
         return prox_box_constraint(self.domain, self.lower, self.upper)
 
@@ -2496,12 +2455,12 @@ class IndicatorZero(Functional):
         return ConstantFunctional(self.domain, -self.constant)
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the proximal factory of the functional.
 
         This is the zero operator.
         """
-        def zero_proximal(sigma=1.0):
+        def zero_prox(sigma=1.0):
             """Proximal factory for zero operator.
 
             Parameters
@@ -2511,7 +2470,7 @@ class IndicatorZero(Functional):
             """
             return op.ZeroOperator(self.domain)
 
-        return zero_proximal
+        return zero_prox
 
     def __repr__(self):
         """Return ``repr(self)``."""
@@ -2584,7 +2543,7 @@ class IndicatorSimplex(Functional):
 
         sum_constr = abs(x.ufuncs.sum() / self.diameter - 1) <= self.sum_rtol
 
-        nonneq_constr = x.ufuncs.greater_equal(0).asarray().all()
+        nonneq_constr = x.ufuncs.greater_equal(0).all()
 
         if sum_constr and nonneq_constr:
             return 0
@@ -2592,7 +2551,7 @@ class IndicatorSimplex(Functional):
             return np.inf
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional.
 
         The indicator functional is not differentiable over the entire domain.
@@ -2601,7 +2560,7 @@ class IndicatorSimplex(Functional):
         raise NotImplementedError('Not implemented')
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the `proximal factory` of the functional."""
 
         domain = self.domain
@@ -2706,7 +2665,7 @@ class IndicatorSumConstraint(Functional):
             return np.inf
 
     @property
-    def gradient(self):
+    def grad(self):
         """Gradient operator of the functional.
 
         The indicator functional is not differentiable over the entire domain.
@@ -2715,7 +2674,7 @@ class IndicatorSumConstraint(Functional):
         raise NotImplementedError('Not implemented')
 
     @property
-    def proximal(self):
+    def prox(self):
         """Return the `proximal factory` of the functional."""
 
         domain = self.domain
