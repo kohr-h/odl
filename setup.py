@@ -153,7 +153,6 @@ setup(
         'fftw': 'pyfftw',
         'pywavelets': 'pywavelets>=1.0.1',
         'skimage': 'scikit-image',
-        'proximal': 'proximal',
     },
 
     cmdclass={'test': PyTest},

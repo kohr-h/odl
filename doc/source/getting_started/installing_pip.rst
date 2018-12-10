@@ -24,7 +24,7 @@ Instructions for the impatient:
 
   .. code-block:: bash
 
-    $ pip install odl[show,pywavelets,scikit,proximal,testing]
+    $ pip install odl[show,pywavelets,scikit,testing]
 
 
 .. _installing_odl_pip__python:
@@ -81,7 +81,6 @@ Possible choices:
   Note also that even without this dependency, FFTs can be computed with Numpy's FFT library.
 - ``pywavelets`` : Install `PyWavelets`_ for wavelet transforms.
 - ``scikit`` : Install `scikit-image`_ as a simple backend for ray transforms.
-- ``proximal``: Install the `ProxImaL`_ convex optimization package.
 - ``testing``: Pull in the dependencies for unit tests (see :ref:`installing_odl_pip__running_the_tests`)
 
 These dependencies are optional and may not be easy to install on your system (especially on Windows).
@@ -123,4 +122,3 @@ Now you can check that everything was installed properly by running
 .. _pyFFTW: https://pypi.python.org/pypi/pyFFTW
 .. _PyWavelets: https://pypi.python.org/pypi/PyWavelets
 .. _scikit-image: http://scikit-image.org/
-.. _ProxImaL: http://www.proximal-lang.org/en/latest/

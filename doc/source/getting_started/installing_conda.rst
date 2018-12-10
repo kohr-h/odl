@@ -139,12 +139,6 @@ further instructions.
 
   If this doesn't work, or if you want a more recent version, see `the ASTRA GitHub page <https://github.com/astra-toolbox/astra-toolbox>`_.
 
-- Bindings to the `ProxImaL`_ convex optimization package, an extension of `CVXPY`_:
-
-  .. code-block:: bash
-
-    $ pip install proximal
-
 More information can be found in :ref:`installing_odl_extensions`.
 
 
