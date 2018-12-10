@@ -12,7 +12,7 @@ from __future__ import absolute_import, division, print_function
 
 import numpy as np
 
-from odl.discr.lp_discr import DiscreteLp
+from odl.discr.lp_discr import DiscreteLp, uniform_discr
 from odl.operator import Operator
 from odl.operator.backends.pyfftw_bindings import (
     PYFFTW_AVAILABLE, _pyfftw_to_local, pyfftw_call)
@@ -37,6 +37,15 @@ _DEFAULT_FOURIER_IMPL = 'numpy'
 if PYFFTW_AVAILABLE:
     _SUPPORTED_FOURIER_IMPLS += ('pyfftw',)
     _DEFAULT_FOURIER_IMPL = 'pyfftw'
+
+
+# TODOs(kohr-h):
+# - make `halfcomplex` option `False` by default
+# - simplify operators
+#   * no temporaries
+#   * use protocols for impl
+#   * DFT on Rn/Cn spaces
+#   * remove interpolation stuff, assume delta
 
 
 class DiscreteFourierTransformBase(Operator):
@@ -127,9 +136,15 @@ class DiscreteFourierTransformBase(Operator):
         if range is None:
             impl = domain.tspace.impl
 
-            range = discr_sequence_space(
-                ran_shape, ran_dtype, impl,
-                exponent=conj_exponent(domain.exponent))
+            range = uniform_discr(
+                min_pt=[0] * len(ran_shape),
+                max_pt=ran_shape,
+                shape=ran_shape,
+                nodes_on_bdry=True,
+                dtype=ran_dtype,
+                impl=impl,
+                exponent=conj_exponent(domain.exponent)
+            )
         else:
             if range.shape != ran_shape:
                 raise ValueError('expected range shape {}, got {}.'
@@ -170,9 +185,9 @@ class DiscreteFourierTransformBase(Operator):
         """
         # TODO: Implement zero padding
         if self.impl == 'numpy':
-            out[:] = self._call_numpy(x.asarray())
+            out[:] = self._call_numpy(x)
         else:
-            out[:] = self._call_pyfftw(x.asarray(), out.asarray(), **kwargs)
+            out[:] = self._call_pyfftw(x, out, **kwargs)
 
     @property
     def impl(self):
@@ -333,7 +348,7 @@ class DiscreteFourierTransformBase(Operator):
 
         direction = 'forward' if self.sign == '-' else 'backward'
         self._fftw_plan = pyfftw_call(
-            x.asarray(), y.asarray(), direction=direction,
+            x, y, direction=direction,
             halfcomplex=self.halfcomplex, axes=self.axes,
             planning_effort=planning_effort, **kwargs)
 
@@ -421,8 +436,8 @@ class DiscreteFourierTransform(DiscreteFourierTransformBase):
         Complex-to-complex (default) transforms have the same grids
         in domain and range:
 
-        >>> domain = discr_sequence_space((2, 4))
-        >>> fft = DiscreteFourierTransform(domain)
+        >>> X = odl.uniform_discr([0, 0], [2, 4], shape=(2, 4))
+        >>> fft = op.DiscreteFourierTransform(X)
         >>> fft.domain.shape
         (2, 4)
         >>> fft.range.shape
@@ -431,18 +446,22 @@ class DiscreteFourierTransform(DiscreteFourierTransformBase):
         Real-to-complex transforms have a range grid with shape
         ``n // 2 + 1`` in the last tranform axis:
 
-        >>> domain = discr_sequence_space((2, 3, 4), dtype='float')
-        >>> axes = (0, 1)
-        >>> fft = DiscreteFourierTransform(
-        ...     domain, halfcomplex=True, axes=axes)
+        >>> X = odl.uniform_discr([0, 0, 0], [2, 3, 4], shape=(2, 3, 4))
+        >>> fft = op.DiscreteFourierTransform(X, halfcomplex=True, axes=(0, 1))
         >>> fft.range.shape   # shortened in the second axis
         (2, 2, 4)
         >>> fft.domain.shape
         (2, 3, 4)
         """
         super(DiscreteFourierTransform, self).__init__(
-            inverse=False, domain=domain, range=range, axes=axes,
-            sign=sign, halfcomplex=halfcomplex, impl=impl)
+            inverse=False,
+            domain=domain,
+            range=range,
+            axes=axes,
+            sign=sign,
+            halfcomplex=halfcomplex,
+            impl=impl
+        )
 
     def _call_numpy(self, x):
         """Return ``self(x)`` using numpy.
@@ -566,30 +585,6 @@ class DiscreteFourierTransformInverse(DiscreteFourierTransformBase):
             Backend for the FFT implementation. The 'pyfftw' backend
             is faster but requires the ``pyfftw`` package.
             ``None`` selects the fastest available backend.
-
-        Examples
-        --------
-        Complex-to-complex (default) transforms have the same grids
-        in domain and range:
-
-        >>> range_ = discr_sequence_space((2, 4))
-        >>> ifft = DiscreteFourierTransformInverse(range_)
-        >>> ifft.domain.shape
-        (2, 4)
-        >>> ifft.range.shape
-        (2, 4)
-
-        Complex-to-real transforms have a domain grid with shape
-        ``n // 2 + 1`` in the last tranform axis:
-
-        >>> range_ = discr_sequence_space((2, 3, 4), dtype='float')
-        >>> axes = (0, 1)
-        >>> ifft = DiscreteFourierTransformInverse(
-        ...     range_, halfcomplex=True, axes=axes)
-        >>> ifft.domain.shape   # shortened in the second axis
-        (2, 2, 4)
-        >>> ifft.range.shape
-        (2, 3, 4)
         """
         super(DiscreteFourierTransformInverse, self).__init__(
             inverse=True, domain=range, range=domain, axes=axes,
@@ -869,9 +864,9 @@ class FourierTransformBase(Operator):
         self._fftw_plan = None
 
         if tmp_r is not None:
-            tmp_r = domain.element(tmp_r).asarray()
+            tmp_r = domain.element(tmp_r)
         if tmp_f is not None:
-            tmp_f = range.element(tmp_f).asarray()
+            tmp_f = range.element(tmp_f)
 
         self._tmp_r = tmp_r
         self._tmp_f = tmp_f
@@ -899,10 +894,10 @@ class FourierTransformBase(Operator):
         """
         # TODO: Implement zero padding
         if self.impl == 'numpy':
-            out[:] = self._call_numpy(x.asarray())
+            out[:] = self._call_numpy(x)
         else:
             # 0-overhead assignment if asarray() does not copy
-            out[:] = self._call_pyfftw(x.asarray(), out.asarray(), **kwargs)
+            out[:] = self._call_pyfftw(x, out, **kwargs)
 
     def _call_numpy(self, x):
         """Return ``self(x)`` for numpy back-end.
@@ -1032,9 +1027,9 @@ class FourierTransformBase(Operator):
             fspace = self.range
 
         if r:
-            self._tmp_r = rspace.element().asarray()
+            self._tmp_r = rspace.element()
         if f:
-            self._tmp_f = fspace.element().asarray()
+            self._tmp_f = fspace.element()
 
     def clear_temporaries(self):
         """Set the temporaries to ``None``."""
@@ -1094,18 +1089,18 @@ class FourierTransformBase(Operator):
             elif self._tmp_f is not None:
                 arr_in = arr_out = self._tmp_f
             else:
-                arr_in = arr_out = rspace.element().asarray()
+                arr_in = arr_out = rspace.element()
 
         elif self.halfcomplex:
             # R2HC / HC2R: Use 'r' and 'f' temporary distinctly if initialized
             if self._tmp_r is not None:
                 arr_r = self._tmp_r
             else:
-                arr_r = rspace.element().asarray()
+                arr_r = rspace.element()
             if self._tmp_f is not None:
                 arr_f = self._tmp_f
             else:
-                arr_f = fspace.element().asarray()
+                arr_f = fspace.element()
 
             if inverse:
                 arr_in, arr_out = arr_f, arr_r
@@ -1117,7 +1112,7 @@ class FourierTransformBase(Operator):
             if self._tmp_f is not None:
                 arr_in = arr_out = self._tmp_f
             else:
-                arr_in = arr_out = fspace.element().asarray()
+                arr_in = arr_out = fspace.element()
 
         kwargs.pop('planning_timelimit', None)
 

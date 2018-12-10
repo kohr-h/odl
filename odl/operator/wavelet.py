@@ -371,16 +371,15 @@ class WaveletTransform(WaveletTransformBase):
         Compute a very simple wavelet transform in a discrete 2D space with
         4 sampling points per axis:
 
-        >>> space = odl.uniform_discr([0, 0], [1, 1], (4, 4))
-        >>> wavelet_trafo = odl.trafos.WaveletTransform(
-        ...     domain=space, nlevels=1, wavelet='haar')
-        >>> wavelet_trafo.is_biorthogonal
+        >>> X = odl.uniform_discr([0, 0], [1, 1], (4, 4))
+        >>> W = op.WaveletTransform(X, nlevels=1, wavelet='haar')
+        >>> W.is_biorthogonal
         True
         >>> data = [[1, 1, 1, 1],
         ...         [0, 0, 0, 0],
         ...         [0, 0, 1, 1],
         ...         [1, 0, 1, 0]]
-        >>> decomp = wavelet_trafo(data)
+        >>> decomp = W(data)
         >>> decomp.shape
         (16,)
 
@@ -388,9 +387,10 @@ class WaveletTransform(WaveletTransformBase):
         axes. Here, we apply a 1D wavelet transfrom along axis 0 for each
         index along axis 1:
 
-        >>> wavelet_trafo = odl.trafos.WaveletTransform(
-        ...     domain=space, nlevels=1, wavelet='haar', axes=(0,))
-        >>> decomp = wavelet_trafo(data)
+        >>> W = op.WaveletTransform(
+        ...     domain=X, nlevels=1, wavelet='haar', axes=(0,)
+        ... )
+        >>> decomp = W(data)
         >>> decomp.shape
         (16,)
 
@@ -401,18 +401,19 @@ class WaveletTransform(WaveletTransformBase):
         ``"pywt_periodic"`` and the size along each transformed axis is a
         multiple of ``2**nlevels``.
 
-        >>> space = odl.uniform_discr([0, 0], [1, 1], (16, 16))
-        >>> space.size
+        >>> X = odl.uniform_discr([0, 0], [1, 1], (16, 16))
+        >>> X.size
         256
-        >>> wavelet_trafo = odl.trafos.WaveletTransform(
-        ...     domain=space, nlevels=2, wavelet='db2',
-        ...     pad_mode='pywt_periodic')
-        >>> decomp = wavelet_trafo(np.ones(space.shape))
+        >>> W = op.WaveletTransform(
+        ...     domain=X, nlevels=2, wavelet='db2', pad_mode='pywt_periodic'
+        ... )
+        >>> decomp = W(X.one())
         >>> decomp.shape
         (256,)
-        >>> wavelet_trafo = odl.trafos.WaveletTransform(
-        ...     domain=space, nlevels=2, wavelet='db2', pad_mode='symmetric')
-        >>> decomp = wavelet_trafo(np.ones(space.shape))
+        >>> W = op.WaveletTransform(
+        ...     domain=X, nlevels=2, wavelet='db2', pad_mode='symmetric'
+        ... )
+        >>> decomp = W(X.one())
         >>> decomp.shape
         (387,)
 
@@ -585,15 +586,16 @@ class WaveletTransformInverse(WaveletTransformBase):
         Check that the inverse is the actual inverse on a simple example on
         a discrete 2D space with 4 sampling points per axis:
 
-        >>> space = odl.uniform_discr([0, 0], [1, 1], (4, 4))
-        >>> wavelet_trafo = odl.trafos.WaveletTransform(
-        ...     domain=space, nlevels=1, wavelet='haar')
+        >>> X = odl.uniform_discr([0, 0], [1, 1], (4, 4))
+        >>> W = op.WaveletTransform(
+        ...     domain=X, nlevels=1, wavelet='haar'
+        ... )
         >>> orig_array = np.array([[1, 1, 1, 1],
         ...                        [0, 0, 0, 0],
         ...                        [0, 0, 1, 1],
         ...                        [1, 0, 1, 0]])
-        >>> decomp = wavelet_trafo(orig_array)
-        >>> recon = wavelet_trafo.inverse(decomp)
+        >>> decomp = W(orig_array)
+        >>> recon = W.inverse(decomp)
         >>> np.allclose(recon, orig_array)
         True
 
