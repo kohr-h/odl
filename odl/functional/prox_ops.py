@@ -28,7 +28,7 @@ import numpy as np
 from odl.operator import (
     ConstantOperator, DiagonalOperator, IdentityOperator, MultiplyOperator,
     Operator, PointwiseNorm)
-from odl.space.pspace import ProductSpace
+#from odl.space.pspace import ProductSpace
 
 __all__ = (
     'prox_stack',
@@ -759,15 +759,15 @@ def prox_l1(space, lam=1, g=None):
 
             # We write the operator as
             # x - (x - g) / max(|x - g| / sig*lam, 1)
-            denom = diff.ufuncs.absolute()
+            denom = np.abs(diff)
             denom /= self.sigma * lam
-            denom.ufuncs.maximum(1, out=denom)
+            np.maximum(denom, 1, out=denom)
 
             # out = (x - g) / denom
-            diff.ufuncs.divide(denom, out=out)
+            np.divide(diff, denom, out=out)
 
             # out = x - ...
-            out.lincomb(1, x, -1, out)
+            space.lincomb(1, x, -1, out, out)
 
     return ProximalL1
 
@@ -975,18 +975,19 @@ def prox_l2(space, lam=1, g=None):
             """Apply the operator to ``x`` and stores the result in ``out``."""
             dtype = getattr(self.domain, 'dtype', float)
             eps = np.finfo(dtype).resolution * 10
+            X = self.domain
 
             if g is None:
-                x_norm = x.norm() * (1 + eps)
+                x_norm = X.norm(x) * (1 + eps)
                 if x_norm > 0:
                     step = self.sigma * lam / x_norm
                 else:
                     step = np.infty
 
                 if step < 1.0:
-                    out.lincomb(1.0 - step, x)
+                    X.lincomb(1 - step, x, out=out)
                 else:
-                    out.set_zero()
+                    out[:] = 0
 
             else:
                 x_norm = (x - g).norm() * (1 + eps)
@@ -996,9 +997,9 @@ def prox_l2(space, lam=1, g=None):
                     step = np.infty
 
                 if step < 1.0:
-                    out.lincomb(1.0 - step, x, step, g)
+                    X.lincomb(1 - step, x, step, g, out)
                 else:
-                    out.assign(g)
+                    out[:] = g
 
     return ProximalL2
 
@@ -1136,19 +1137,26 @@ def prox_l2_squared(space, lam=1, g=None):
             """Apply the operator to ``x`` and store the result in ``out``"""
             # (x + 2*sig*lam*g) / (1 + 2*sig*lam))
             sig = self.sigma
+            X = self.domain
+
             if np.isscalar(sig):
                 if g is None:
-                    out.lincomb(1.0 / (1 + 2 * sig * lam), x)
+                    X.lincomb(1 / (1 + 2 * sig * lam), x, out=out)
                 else:
-                    out.lincomb(1.0 / (1 + 2 * sig * lam), x,
-                                2 * sig * lam / (1 + 2 * sig * lam), g)
+                    X.lincomb(
+                        1 / (1 + 2 * sig * lam),
+                        x,
+                        2 * sig * lam / (1 + 2 * sig * lam),
+                        g,
+                        out=out
+                    )
             else:   # sig in space
                 if g is None:
-                    x.divide(1.0 + 2.0 * sig * lam, out=out)
+                    np.divide(x, 1 + 2 * sig * lam, out=out)
                 else:
-                    sig.multiply(2.0 * lam * g, out=out)
-                    out.lincomb(1.0, x, 1.0, out=out)
-                    out.divide(1.0 + 2 * sig * lam, out=out)
+                    np.multiply(sig, 2 * lam * g, out=out)
+                    out += x
+                    np.divide(out, 1 + 2 * sig * lam, out=out)
 
     return ProximalL2Squared
 

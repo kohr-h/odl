@@ -10,10 +10,8 @@
 
 from __future__ import absolute_import, division, print_function
 
-from odl.operator import ConstantOperator, IdentityOperator, Operator
-from odl.operator.operator import (
-    OperatorComp, OperatorLeftScalarMult, OperatorPointwiseProduct,
-    OperatorRightScalarMult, OperatorRightVectorMult, OperatorSum)
+from odl.operator.basic_ops import ConstantOperator, IdentityOperator
+from odl.operator.operator import Operator, OpTypeError, OperatorSum, OperatorComp, OperatorRightVectorMult
 from odl.util import indent, signature_string
 
 __all__ = (
@@ -22,7 +20,7 @@ __all__ = (
     'FunctionalQuadraticPerturb',
     'InfimalConvolution',
     'BregmanDistance',
-    'simple_functional'
+    'simple_functional',
 )
 
 # TODO(kohr-h): Fix circular imports
@@ -306,7 +304,7 @@ class Functional(Operator):
         elif other in self.range:
             if other == 0:
                 # Optimization: constant functional F(0)
-                from odl.functional.default_funcs import ConstantFunctional
+                from odl.functional.basic_funcs import ConstantFunctional
                 return ConstantFunctional(
                     self.domain, self(self.domain.zero())
                 )
@@ -376,7 +374,7 @@ class Functional(Operator):
         if other in self.range:
             if other == 0:
                 # Optimization: always 0
-                from odl.functional.default_funcs import ZeroFunctional
+                from odl.functional.basic_funcs import ZeroFunctional
                 return ZeroFunctional(self.domain)
             else:
                 return FunctionalLeftScalarMult(self, other)
@@ -432,7 +430,7 @@ class Functional(Operator):
         return self + (-1) * other
 
 
-class FunctionalLeftScalarMult(Functional, OperatorLeftScalarMult):
+class FunctionalLeftScalarMult(Functional):
 
     """Scalar multiplication of functional from the left.
 
@@ -458,13 +456,21 @@ class FunctionalLeftScalarMult(Functional, OperatorLeftScalarMult):
             raise TypeError('`func` {!r} is not a `Functional` instance'
                             ''.format(func))
 
-        Functional.__init__(self, space=func.domain, linear=func.is_linear)
-        OperatorLeftScalarMult.__init__(self, operator=func, scalar=scalar)
+        super(FunctionalLeftScalarMult, self).__init__(
+            space=func.domain, linear=func.is_linear
+        )
+        self.__scalar = func.range.field.element(scalar)
+        self.__functional = func
 
     @property
     def functional(self):
         """The original functional."""
-        return self.operator
+        return self.__functional
+
+    @property
+    def scalar(self):
+        """The scalar part of this multiplication."""
+        return self.__scalar
 
     @property
     def grad(self):
@@ -516,7 +522,7 @@ class FunctionalLeftScalarMult(Functional, OperatorLeftScalarMult):
             return prox_left_scalar_mult
 
 
-class FunctionalRightScalarMult(Functional, OperatorRightScalarMult):
+class FunctionalRightScalarMult(Functional):
 
     """Scalar multiplication of the argument of functional.
 
@@ -543,15 +549,26 @@ class FunctionalRightScalarMult(Functional, OperatorRightScalarMult):
             raise TypeError('`func` {!r} is not a `Functional` instance'
                             ''.format(func))
 
-        scalar = func.domain.field.element(scalar)
+        if isinstance(func, FunctionalRightScalarMult):
+            # Shortcut to save performance in case of repeated multiplications
+            scalar = scalar * func.scalar
+            func = func.functional
 
-        Functional.__init__(self, space=func.domain, linear=func.is_linear)
-        OperatorRightScalarMult.__init__(self, operator=func, scalar=scalar)
+        super(FunctionalRightScalarMult, self).__init__(
+            space=func.domain, linear=func.is_linear
+        )
+        self.__scalar = func.domain.field.element(scalar)
+        self.__functional = func
 
     @property
     def functional(self):
         """The original functional."""
-        return self.operator
+        return self.__functional
+
+    @property
+    def scalar(self):
+        """The scalar part of this multiplication."""
+        return self.__scalar
 
     @property
     def grad(self):
@@ -740,7 +757,7 @@ class FunctionalScalarSum(FunctionalSum):
             The scalar to be added to the functional. The `field` of the
             ``domain`` is the range of the functional.
         """
-        from odl.functional.default_funcs import ConstantFunctional
+        from odl.functional.basic_funcs import ConstantFunctional
 
         if not isinstance(func, Functional):
             raise TypeError('`fun` {!r} is not a `Functional` instance'
@@ -1109,7 +1126,7 @@ class FunctionalQuadraticPerturb(Functional):
                                            self.constant)
 
 
-class FunctionalProd(Functional, OperatorPointwiseProduct):
+class FunctionalProd(Functional):
 
     """Product ``p(x) = f(x) * g(x)`` of two functionals ``f`` and ``g``."""
 
@@ -1138,9 +1155,27 @@ class FunctionalProd(Functional, OperatorPointwiseProduct):
         if not isinstance(right, Functional):
             raise TypeError('`right` {} is not a `Functional` instance'
                             ''.format(right))
+        if left.domain != right.domain:
+            raise OpTypeError('operator domains {!r} and {!r} do not match'
+                              ''.format(left.domain, right.domain))
 
-        OperatorPointwiseProduct.__init__(self, left, right)
-        Functional.__init__(self, left.domain, linear=False)
+        super(FunctionalProd, self).__init__(left.domain, linear=False)
+        self.__left = left
+        self.__right = right
+
+    @property
+    def left(self):
+        """The left/first part of this composition."""
+        return self.__left
+
+    @property
+    def right(self):
+        """The left/second part of this composition."""
+        return self.__right
+
+    def _call(self, x):
+        """Implement ``self(x)``."""
+        return self.left(x) * self.right(x)
 
     @property
     def grad(self):
@@ -1191,6 +1226,7 @@ class FunctionalQuotient(Functional):
         1.0
         """
         if not isinstance(dividend, Functional):
+            raise TypeError(str(type(dividend)))
             raise TypeError('`dividend` {} is not a `Functional` instance'
                             ''.format(dividend))
         if not isinstance(divisor, Functional):

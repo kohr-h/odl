@@ -22,7 +22,8 @@ from odl.functional.prox_ops import (
     prox_convex_conj_l1, prox_convex_conj_l1_l2, prox_convex_conj_l2,
     prox_huber, prox_l1, prox_l1_l2, prox_l2, prox_l2_squared, prox_linfty,
     prox_stack)
-from odl.operator import Operator
+from odl.operator.operator import Operator
+from odl.operator.basic_ops import ScalingOperator
 from odl.space import ProductSpace
 from odl.util import conj_exponent, moveaxis
 
@@ -210,19 +211,18 @@ class SeparableSum(Functional):
 
         >>> X = odl.rn(3)
         >>> l1 = fn.L1Norm(X)
-        >>> l2 = fn.L2Norm(X)
-        >>> sum = fn.SeparableSum(l1, l2)
+        >>> l2_sq = fn.L2NormSquared(X)
+        >>> sum = fn.SeparableSum(l1, l2_sq)
         >>> x = sum.domain.one()
         >>> sum.prox(2)(x)
-
+        array([[ 0. ,  0. ,  0. ],
+               [ 0.2,  0.2,  0.2]])
 
         Vector stepsizes are also supported:
 
-        >>> sum.prox([0.5, 2.0])(x)
-        ProductSpace(rn(3), 2).element([
-            [ 0.5,  0.5,  0.5],
-            [ 0.,  0.,  0.]
-        ])
+        >>> sum.prox([0.5, 2])(x)
+        array([[ 0.5,  0.5,  0.5],
+               [ 0.2,  0.2,  0.2]])
         """
         prox_facs = [func.prox for func in self.functionals]
         return prox_stack(*prox_facs)
@@ -309,8 +309,8 @@ https://web.stanford.edu/~boyd/papers/pdf/prox_algs.pdf
         Create smoothed l1 norm:
 
         >>> space = odl.rn(3)
-        >>> l1_norm = fn.L1Norm(space)
-        >>> smoothed_l1 = MoreauEnvelope(l1_norm)
+        >>> l1 = fn.L1Norm(space)
+        >>> l1_smoothed = fn.MoreauEnvelope(l1)
         """
         super(MoreauEnvelope, self).__init__(
             space=functional.domain, linear=False)
@@ -330,8 +330,10 @@ https://web.stanford.edu/~boyd/papers/pdf/prox_algs.pdf
     @property
     def grad(self):
         """The gradient operator."""
-        return (op.ScalingOperator(self.domain, 1 / self.sigma) -
-                (1 / self.sigma) * self.functional.prox(self.sigma))
+        return (
+            op.ScalingOperator(self.domain, 1 / self.sigma) -
+            (1 / self.sigma) * self.functional.prox(self.sigma)
+        )
 
 
 class ConstantFunctional(Functional):
@@ -418,7 +420,7 @@ class ZeroFunctional(ConstantFunctional):
 
 
 # TODO: change this!
-class ScalingFunctional(Functional, op.ScalingOperator):
+class ScalingFunctional(Functional, ScalingOperator):
 
     """Functional that scales the input argument by a value.
 
@@ -439,7 +441,7 @@ class ScalingFunctional(Functional, op.ScalingOperator):
         Examples
         --------
         >>> field = odl.RealNumbers()
-        >>> func = ScalingFunctional(field, 3)
+        >>> func = fn.ScalingFunctional(field, 3)
         >>> func(5)
         15.0
         """
@@ -709,50 +711,37 @@ class LpNorm(Functional):
         The functional is not differentiable in ``x=0``. However, when
         evaluating the gradient operator in this point it will return 0.
         """
-        functional = self
+        F = self
 
         if self.exponent == 1:
+
             class L1Grad(Operator):
-
-                """The gradient operator of this functional."""
-
-                def __init__(self):
-                    """Initialize a new instance."""
-                    super(L1Grad, self).__init__(
-                        functional.domain, functional.domain, linear=False)
 
                 def _call(self, x):
                     """Apply the gradient operator to the given point."""
-                    return x.ufuncs.sign()
+                    return np.sign(x)
 
                 def derivative(self, x):
                     """Derivative is a.e. zero."""
                     return op.ZeroOperator(self.domain)
 
-            return L1Grad()
+            return L1Grad(F.domain, F.domain, linear=False)
 
         elif self.exponent == 2:
             class L2Grad(Operator):
-
-                """The gradient operator of this functional."""
-
-                def __init__(self):
-                    """Initialize a new instance."""
-                    super(L2Grad, self).__init__(
-                        functional.domain, functional.domain, linear=False)
 
                 def _call(self, x):
                     """Apply the gradient operator to the given point.
 
                     The gradient is not defined in 0.
                     """
-                    norm_of_x = x.norm()
-                    if norm_of_x == 0:
+                    x_norm = self.domain.norm(x)
+                    if x_norm == 0:
                         return self.domain.zero()
                     else:
-                        return x / norm_of_x
+                        return x / x_norm
 
-            return L2Grad()
+            return L2Grad(F.domain, F.domain, linear=False)
 
         else:
             raise NotImplementedError('`grad` only implemented for p = 1 or 2')
@@ -890,11 +879,11 @@ class L1Norm(LpNorm):
 
     The `proximal` factory allows using vector-valued stepsizes:
 
-    >>> space = odl.rn(3)
-    >>> f = fn.L1Norm(space)
-    >>> x = space.one()
-    >>> f.prox([0.5, 1.0, 1.5])(x)
-    rn(3).element([ 0.5,  0. ,  0. ])
+    >>> X = odl.rn(3)
+    >>> l1 = fn.L1Norm(X)
+    >>> x = X.one()
+    >>> l1.prox([0.5, 1.0, 1.5])(x)
+    array([ 0.5,  0. ,  0. ])
     """
 
     def __init__(self, space):
@@ -974,11 +963,11 @@ class L2NormSquared(Functional):
 
     The `proximal` factory allows using vector-valued stepsizes:
 
-    >>> space = odl.rn(3)
-    >>> f = fn.L2NormSquared(space)
-    >>> x = space.one()
-    >>> f.prox([0.5, 1.5, 2.0])(x)
-    rn(3).element([ 0.5 ,  0.25,  0.2 ])
+    >>> X = odl.rn(3)
+    >>> l2_sq = fn.L2NormSquared(X)
+    >>> x = X.one()
+    >>> l2_sq.prox([0.5, 1.5, 2.0])(x)
+    array([ 0.5 ,  0.25,  0.2 ])
     """
 
     def __init__(self, space):
@@ -1056,7 +1045,7 @@ class GroupL1Norm(Functional):
         \mathrm{d}x.
     """
 
-    def __init__(self, vfspace, exponent=None):
+    def __init__(self, vfspace, exponent=2.0):
         """Initialize a new instance.
 
         Parameters
@@ -1069,20 +1058,18 @@ class GroupL1Norm(Functional):
             Exponent of the norm in each point. Values between
             0 and 1 are currently not supported due to numerical
             instability. Infinity gives the supremum norm.
-            Default: ``vfspace.exponent``, usually 2.
 
         Examples
         --------
-        >>> space = odl.rn(2)
-        >>> pspace = odl.ProductSpace(space, 2)
-        >>> op = GroupL1Norm(pspace)
-        >>> op([[3, 3], [4, 4]])
+        >>> X = odl.rn(2)
+        >>> l1l2 = fn.GroupL1Norm(X ** 2)
+        >>> l1l2([[3, 3], [4, 4]])
         10.0
 
         Set exponent of inner (p) norm:
 
-        >>> op2 = GroupL1Norm(pspace, exponent=1)
-        >>> op2([[3, 3], [4, 4]])
+        >>> l1l1 = fn.GroupL1Norm(X ** 2, exponent=1)
+        >>> l1l1([[3, 3], [4, 4]])
         14.0
         """
         if not isinstance(vfspace, ProductSpace):
@@ -1097,7 +1084,8 @@ class GroupL1Norm(Functional):
         """Return the group L1-norm of ``x``."""
         # TODO: update when integration operator is in place: issue #440
         pointwise_norm = self.pointwise_norm(x)
-        return pointwise_norm.inner(pointwise_norm.space.one())
+        X = self.pointwise_norm.range
+        return X.inner(pointwise_norm, X.one())
 
     @property
     def grad(self):

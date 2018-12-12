@@ -58,13 +58,13 @@ from . import util
 from . import operator
 from . import functional
 
-from . import deform
-from . import diagnostics
-from . import optim
-from . import phantom
-from . import tomo
+#from . import deform
+#from . import diagnostics
+#from . import optim
+#from . import phantom
+#from . import tomo
 
-from . import contrib
+#from . import contrib
 
 # Add `test` function to global namespace so users can run `odl.test()`
 from .util import test
