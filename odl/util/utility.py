@@ -1544,10 +1544,10 @@ def protocol(dispatcher, registry=None):
 
     Examples
     --------
-    First, one defines a protocol by decorating a function with
-    the dispatch decorator. This function is the one intended for later use,
+    First, one defines a protocol by decorating a function with the
+    ``@protocol`` decorator. That function is the one intended for later use,
     but since it delegates execution entirely to dedicated handlers, its body
-    should be empty.
+    can (or should) be empty.
 
     In the following example, we write a function that creates a list from
     its inputs, and the different handlers are invoked based on the type
@@ -1559,14 +1559,13 @@ def protocol(dispatcher, registry=None):
 
     Next, we register handlers with the protocol by decorating functions
     that implement the intended functionality for a specific return value
-    of the dispatcher. The decorator to be used for that is the function that
-    was decorated with ``@protocol`` in the first step. The argument to
-    this decorator is the dispatched value that should be handled by the
-    decorated function, given by keyword ``dispatch_value_`` (the trailing
-    underscore is to prevent name clashes).
+    of the dispatcher. The decorator to be used for that is the ``.register``
+    attribute of the function that was decorated with ``@protocol`` in the
+    first step. The argument to this decorator is the dispatched value that
+    should be handled by the decorated function.
 
     In our case, we dispatch on type, i.e., we register handlers for
-    different by decorating with ``@make_list(dispatch_value_=<some_val>)``:
+    different by decorating with ``@make_list(<some_val>)``:
 
     >>> @make_list.register(list)
     ... def _from_list(lst):
@@ -1593,11 +1592,11 @@ def protocol(dispatcher, registry=None):
     [4.0]
 
     If no handler is registered for a certain dispatch value, and input is
-    given that triggers an unhandled case, a ``RuntimeError`` is raised:
+    given that triggers an unhandled case, a ``ValueError`` is raised:
 
     >>> try:
     ...     make_list(1j)  # no handler defined for `complex`
-    ... except RuntimeError as err:
+    ... except ValueError as err:
     ...     print(err)
     no implementation of make_list registered for <class 'complex'>
 
@@ -1644,7 +1643,7 @@ def protocol(dispatcher, registry=None):
                     'no implementation {} registered for {{!r}}'
                     ''.format(pfun_txt)
                 )
-                raise RuntimeError(err_fmt.format(dispval))
+                raise ValueError(err_fmt.format(dispval))
             else:
                 return handler(*args, **kwargs)
 
@@ -1662,13 +1661,16 @@ def protocol(dispatcher, registry=None):
 
                 return reg_default
 
-            def reg_specific(handler):
-                for dispval in args:
-                    _proto_handlers[dispval] = handler
-                return handler
+            else:
 
-            return reg_specific
+                def reg_specific(handler):
+                    for dispval in args:
+                        _proto_handlers[dispval] = handler
+                    return handler
 
+                return reg_specific
+
+        # We simply add `register` as an attribute of the wrapper function
         proto_fun.register = register
 
         return proto_fun
