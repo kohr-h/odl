@@ -148,11 +148,14 @@ class RayTransformBase(Operator):
             else:
                 raise RuntimeError('no backend')
 
-        impl, impl_in = str(impl).lower(), impl
-        if impl not in _SUPPORTED_IMPL:
-            raise ValueError('`impl` {!r} not understood'.format(impl_in))
-        if impl not in _AVAILABLE_IMPLS:
-            raise ValueError('{!r} back-end not available'.format(impl))
+            impl_in = None
+
+        else:
+            impl, impl_in = str(impl).lower(), impl
+            if impl not in _SUPPORTED_IMPL:
+                raise ValueError('`impl` {!r} not understood'.format(impl_in))
+            if impl not in _AVAILABLE_IMPLS:
+                raise ValueError('{!r} back-end not available'.format(impl))
 
         # Cache for input/output arrays of transforms
         self.use_cache = kwargs.pop('use_cache', True)
@@ -160,8 +163,15 @@ class RayTransformBase(Operator):
         # Sanity checks
         if impl.startswith('astra'):
             if geometry.ndim > 2 and impl.endswith('cpu'):
-                raise ValueError('`impl` {!r} only works for 2d'
-                                 ''.format(impl_in))
+                if impl_in is None:
+                    raise ValueError(
+                        'fastest available `impl` {!r} only supports 2D'
+                        ''.format(impl)
+                    )
+                else:
+                    raise ValueError(
+                        '`impl` {!r} only supports 2D'.format(impl_in)
+                    )
 
             # Print a warning if the detector midpoint normal vector at any
             # angle is perpendicular to the geometry axis in parallel 3d
