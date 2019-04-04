@@ -2066,7 +2066,7 @@ class NuclearNorm(Functional):
 
                 # Take pseudoinverse of s
                 sinv = s.copy()
-                sinv[sinv != 0] = 1 / sinv[sinv != 0]
+                sinv[np.abs(sinv) > 1e-6] = 1 / sinv[np.abs(sinv) > 1e-6]
 
                 # Take pointwise proximal operator of s w.r.t. the norm
                 # on the singular vectors
