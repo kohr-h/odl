@@ -98,7 +98,7 @@ def normalize_samples(samples, grid_spacing, out=None):
 
     grid_spacing = np.array(grid_spacing, dtype=samples.dtype)
     norm_samples = np.multiply(
-        samples, (grid_spacing[None, :] / 2 * np.pi), out=out
+        samples, (grid_spacing[None, :] / (2 * np.pi)), out=out
     )
     norm_samples[norm_samples == 0.5] = -0.5
     return norm_samples

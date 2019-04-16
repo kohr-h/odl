@@ -14,13 +14,14 @@ import numpy as np
 
 from odl.discr import DiscreteLp
 from odl.operator import Operator
-from odl.space import TensorSpace, cn
+from odl.space import cn
+from odl.space.base_tensors import TensorSpace
 from odl.trafos.backends.pynfft_bindings import (
     PYNFFT_AVAILABLE, normalize_samples)
 from odl.util import complex_dtype
 
 if PYNFFT_AVAILABLE:
-    from pynfft.nfft import NFFT
+    import pynfft
 
 
 class NonUniformFourierTransformBase(Operator):
@@ -115,7 +116,7 @@ class NonUniformFourierTransformBase(Operator):
         skip_normalization = bool(kwargs.pop('skip_normalization', False))
         nfft = kwargs.pop('nfft', None)
         if nfft is None:
-            nfft = NFFT(N=domain.shape, M=M, **kwargs)
+            nfft = pynfft.NFFT(N=domain.shape, M=M, **kwargs)
 
         if not isinstance(nfft, pynfft.NFFT):
             raise TypeError(
@@ -135,8 +136,8 @@ class NonUniformFourierTransformBase(Operator):
         )
 
         self.__samples = samples
-        self.__skip_normalization = skip_normalization
-        self.__has_run = False
+        self._skip_normalization = skip_normalization
+        self._has_run = False
         self.__nfft = nfft
 
     @property
@@ -147,7 +148,7 @@ class NonUniformFourierTransformBase(Operator):
     @property
     def nfft(self):
         """Instance of the class implementing this NFFT."""
-        return self.nfft
+        return self.__nfft
 
 
 class NonUniformFourierTransform(NonUniformFourierTransformBase):
@@ -208,13 +209,13 @@ class NonUniformFourierTransform(NonUniformFourierTransformBase):
 
     def _call(self, x):
         """Return ``self(x)``."""
-        if not self.__has_run:
-            if not self.__skip_normalization:
+        if not self._has_run:
+            if not self._skip_normalization:
                 normalize_samples(
                     self.samples, self.domain.cell_sides, out=self.samples
                 )
             self.nfft.precompute()
-            self.__has_run = True
+            self._has_run = True
 
         self.nfft.f_hat = np.asarray(x)
         out = self.nfft.trafo()
@@ -223,7 +224,7 @@ class NonUniformFourierTransform(NonUniformFourierTransformBase):
 
     @property
     def adjoint(self):
-        """Adjoint operator.
+        r"""Adjoint operator.
 
         The adjoint is given by
 
@@ -238,9 +239,8 @@ class NonUniformFourierTransform(NonUniformFourierTransformBase):
             domain=self.range,
             samples=self.samples,
             range=self.domain,
-            samples=self.samples,
             nfft=self.nfft,
-            skip_normalization=self.__has_run,
+            skip_normalization=self._has_run,
         )
 
 
@@ -278,9 +278,8 @@ class NonUniformFourierTransformAdjoint(NonUniformFourierTransformBase):
             domain=self.range,
             samples=self.samples,
             range=self.domain,
-            samples=self.samples,
             nfft=self.nfft,
-            skip_normalization=self.__has_run,
+            skip_normalization=self._has_run,
         )
 
     def _call(self, x):
@@ -297,12 +296,12 @@ class NonUniformFourierTransformAdjoint(NonUniformFourierTransformBase):
             Result of the adjoint transform
         """
         if not self.__has_run:
-            if not self.__skip_normalization:
+            if not self._skip_normalization:
                 normalize_samples(
                     self.samples, self.domain.cell_sides, out=self.samples
                 )
             self.nfft.precompute()
-            self.__has_run = True
+            self._has_run = True
 
         self.nfft.f = np.asarray(x)
         out = self.nfft.adjoint()
