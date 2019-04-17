@@ -215,11 +215,13 @@ class NonUniformFourierTransform(NonUniformFourierTransformBase):
                     self.samples, self.domain.cell_sides, out=self.samples
                 )
             self.nfft.precompute()
+            self.nfft.x = self.samples
             self._has_run = True
 
         self.nfft.f_hat = np.asarray(x)
         out = self.nfft.trafo()
-        # TODO(kohr-h): normalize to match uniform FT
+        out *= self.domain.cell_volume / (2 * np.pi)
+        # TODO(kohr-h): phase factor needed
         return out
 
     @property
@@ -301,11 +303,13 @@ class NonUniformFourierTransformAdjoint(NonUniformFourierTransformBase):
                     self.samples, self.domain.cell_sides, out=self.samples
                 )
             self.nfft.precompute()
+            self.nfft.x = self.samples
             self._has_run = True
 
         self.nfft.f = np.asarray(x)
         out = self.nfft.adjoint()
-        # TODO(kohr-h): normalize to match uniform FT
+        out *= self.range.cell_volume / (2 * np.pi)
+        # TODO(kohr-h): phase factor needed
         return out
 
 
