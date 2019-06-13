@@ -19,6 +19,12 @@ from setuptools import setup
 from setuptools.command.test import test as TestCommand
 import sys
 
+try:
+    import pytest
+    HAVE_PYTEST = True
+except ImportError:
+    HAVE_PYTEST = False
+
 
 class PyTest(TestCommand):
     user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
@@ -39,4 +45,8 @@ class PyTest(TestCommand):
         sys.exit(errno)
 
 
-setup(cmdclass={'test': PyTest})
+cmdclass = {}
+if HAVE_PYTEST:
+    cmdclass["test"] = PyTest
+
+setup(cmdclass=cmdclass)
