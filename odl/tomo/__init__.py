@@ -8,27 +8,29 @@
 
 """Tomography related operators and geometries."""
 
-
 from __future__ import absolute_import
 
-__all__ = ()
-
-from .geometry import *
-__all__ += geometry.__all__
-
-from .operators import *
-__all__ += operators.__all__
-
 from .analytic import *
-__all__ += analytic.__all__
-
 from .backends import (
     ASTRA_AVAILABLE, ASTRA_CUDA_AVAILABLE, SKIMAGE_AVAILABLE,
-    astra_conebeam_2d_geom_to_vec, astra_conebeam_3d_geom_to_vec)
+    cone_2d_geom_to_astra_vecs, cone_3d_geom_to_astra_vecs,
+    parallel_2d_geom_to_astra_vecs, parallel_3d_geom_to_astra_vecs,
+    vecs_astra_to_odl_coords, vecs_odl_to_astra_coords)
+from .geometry import *
+from .operators import *
+
+__all__ = ()
+__all__ += geometry.__all__
+__all__ += operators.__all__
+__all__ += analytic.__all__
 __all__ += (
     'ASTRA_AVAILABLE',
     'ASTRA_CUDA_AVAILABLE',
     'SKIMAGE_AVAILABLE',
-    'astra_conebeam_2d_geom_to_vec',
-    'astra_conebeam_3d_geom_to_vec',
+    'vecs_astra_to_odl_coords',
+    'vecs_odl_to_astra_coords',
+    'parallel_2d_geom_to_astra_vecs',
+    'parallel_3d_geom_to_astra_vecs',
+    'cone_2d_geom_to_astra_vecs',
+    'cone_3d_geom_to_astra_vecs',
 )
